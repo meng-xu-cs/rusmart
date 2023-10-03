@@ -1,3 +1,4 @@
+use proc_macro::token_stream::IntoIter;
 use proc_macro::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
 
 use syn::{parse_macro_input, Item};
@@ -57,22 +58,52 @@ pub fn smt_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
 
+/// Very limited set of tokens we care at this stage
+enum Token {
+    None,
+    Comma,
+    Ident,
+}
+
+impl Token {
+    fn next(iter: &mut IntoIter) -> Option<Self> {
+        let token = match iter.next() {
+            None => Token::None,
+            Some(TokenTree::Ident(_)) => Token::Ident,
+            Some(TokenTree::Punct(p)) if p.as_char() == ',' => Token::Comma,
+            _ => return None,
+        };
+        Some(token)
+    }
+
+    /// Count number of identifiers in the stream
+    fn count(stream: TokenStream) -> Option<usize> {
+        let mut iter = stream.into_iter();
+        let mut expect_ident = true;
+        let mut count = 0;
+        loop {
+            match Self::next(&mut iter)? {
+                Self::None => break,
+                Self::Ident if expect_ident => {
+                    count += 1;
+                    expect_ident = false;
+                }
+                Self::Comma if !expect_ident => {
+                    expect_ident = true;
+                }
+                _ => return None,
+            }
+        }
+        Some(count)
+    }
+}
+
 /// Annotated over a Rust function to mark it as a specification
 #[proc_macro_attribute]
 pub fn smt_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
-    // extract the impl target
-    let mut iter = attr.into_iter();
-    match iter.next() {
-        None => {
-            return fatal("unable to find impl target");
-        }
-        Some(TokenTree::Ident(_)) => (),
-        Some(_) => {
-            return fatal("impl target is not an ident");
-        }
-    }
-    if iter.next().is_some() {
-        return fatal("extra tokens in the impl target");
+    // extract the impl targets
+    if Token::count(attr).unwrap_or(0) == 0 {
+        return fatal("invalid impl targets");
     }
 
     // ensure the following stream is on a function
