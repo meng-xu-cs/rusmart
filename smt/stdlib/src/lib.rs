@@ -1,2 +1,2 @@
-/// SMT-related datatypes
+/// SMT-related data types
 pub mod dt;
