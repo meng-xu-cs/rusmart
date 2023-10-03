@@ -5,24 +5,22 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::cast::ToPrimitive;
 
-/// Derive the arbitrary values as long as the type implements default
-macro_rules! smt_arbitrary {
-    () => {
-        /// variable: any
-        pub fn any() -> Self {
-            Self::default()
-        }
+/// Marks that variables of this type can be quantified
+pub trait Quantified: Default {
+    /// variable: any
+    fn any() -> Self {
+        Self::default()
+    }
 
-        /// variable: forall
-        pub fn forall() -> Self {
-            Self::default()
-        }
+    /// variable: forall
+    fn forall() -> Self {
+        Self::any()
+    }
 
-        /// variable: exists
-        pub fn exists() -> Self {
-            Self::default()
-        }
-    };
+    /// variable: exists
+    fn exists() -> Self {
+        Self::any()
+    }
 }
 
 /// SMT boolean
@@ -32,8 +30,6 @@ pub struct Boolean {
 }
 
 impl Boolean {
-    smt_arbitrary!();
-
     /// create a boolean constant, requires `inner` to be a literal
     pub fn new(c: bool) -> Self {
         Self { inner: c }
@@ -71,6 +67,8 @@ impl Boolean {
     }
 }
 
+impl Quantified for Boolean {}
+
 /// Arbitrary precision integer
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Integer {
@@ -78,8 +76,6 @@ pub struct Integer {
 }
 
 impl Integer {
-    smt_arbitrary!();
-
     /// create a integer constant, requires `inner` to be a literal
     pub fn new(c: i128) -> Self {
         Self {
@@ -165,6 +161,8 @@ impl Integer {
     }
 }
 
+impl Quantified for Integer {}
+
 /// Arbitrary precision rational number
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Rational {
@@ -172,8 +170,6 @@ pub struct Rational {
 }
 
 impl Rational {
-    smt_arbitrary!();
-
     /// create a rational constant, requires `inner` to be a **integer** literal
     pub fn new(c: i128) -> Self {
         Self {
@@ -252,6 +248,8 @@ impl Rational {
     }
 }
 
+impl Quantified for Rational {}
+
 /// SMT string
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Text {
@@ -259,8 +257,6 @@ pub struct Text {
 }
 
 impl Text {
-    smt_arbitrary!();
-
     /// create a string constant, requires `inner` to be a literal
     pub fn new(c: String) -> Self {
         Self { inner: c }
@@ -295,6 +291,8 @@ impl Text {
     }
 }
 
+impl Quantified for Text {}
+
 /// SMT sequence
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Seq<T: Clone + Ord + Default> {
@@ -302,8 +300,6 @@ pub struct Seq<T: Clone + Ord + Default> {
 }
 
 impl<T: Clone + Ord + Default> Seq<T> {
-    smt_arbitrary!();
-
     /// create an empty sequence
     pub fn empty() -> Self {
         Self { inner: Vec::new() }
@@ -339,6 +335,8 @@ impl<T: Clone + Ord + Default> Seq<T> {
     }
 }
 
+impl<T: Clone + Ord + Default> Quantified for Seq<T> {}
+
 /// SMT set
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Set<T: Clone + Ord + Default> {
@@ -346,8 +344,6 @@ pub struct Set<T: Clone + Ord + Default> {
 }
 
 impl<T: Clone + Ord + Default> Set<T> {
-    smt_arbitrary!();
-
     /// create an empty set
     pub fn empty() -> Self {
         Self {
@@ -377,6 +373,8 @@ impl<T: Clone + Ord + Default> Set<T> {
     }
 }
 
+impl<T: Clone + Ord + Default> Quantified for Set<T> {}
+
 /// SMT array
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Map<K: Clone + Ord + Default, V: Clone + Ord + Default> {
@@ -384,8 +382,6 @@ pub struct Map<K: Clone + Ord + Default, V: Clone + Ord + Default> {
 }
 
 impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Map<K, V> {
-    smt_arbitrary!();
-
     /// create an empty map
     pub fn empty() -> Self {
         Self {
@@ -425,6 +421,8 @@ impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Map<K, V> {
     }
 }
 
+impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Quantified for Map<K, V> {}
+
 /// Dynamically assigned error
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Error {
@@ -432,8 +430,6 @@ pub struct Error {
 }
 
 impl Error {
-    smt_arbitrary!();
-
     /// Create a fresh error
     pub fn fresh() -> Self {
         Self {
@@ -448,3 +444,5 @@ impl Error {
         }
     }
 }
+
+impl Quantified for Error {}

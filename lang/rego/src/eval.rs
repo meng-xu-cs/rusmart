@@ -1,5 +1,5 @@
 use rusmart_smt_remark::smt_type;
-use rusmart_smt_stdlib::dt::{Boolean, Error, Map, Rational, Seq, Set, Text};
+use rusmart_smt_stdlib::dt::{Boolean, Error, Map, Quantified, Rational, Seq, Set, Text};
 
 /// A term *in its valid state* is defined by the following ADT
 #[smt_type]
@@ -15,6 +15,8 @@ pub enum Value {
     Set(Set<Value>),
 }
 
+impl Quantified for Value {}
+
 /// A term *in any state* is defined by the following ADT
 #[smt_type]
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
@@ -24,3 +26,5 @@ pub enum State {
     Value(Value),
     Error(Error),
 }
+
+impl Quantified for State {}
