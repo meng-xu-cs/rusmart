@@ -1,0 +1,12 @@
+[package]
+name = "rusmart-utils"
+description = "Utilities shared amonst various crates in Rusmart"
+version = "0.1.0"
+authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
+license = "GPL-3.0"
+edition = "2021"
+
+[dependencies]
+lazy_static = "1.4.0"
+log = "0.4.20"
+simplelog = "0.12.1"

@@ -1,7 +1,10 @@
 [workspace]
 members = [
+    # ordered and grouped loosely by dependency relation
+    "utils",
     "smt/stdlib",
     "smt/remark",
+    "smt/derive",
     "lang/rego",
 ]
 resolver = "2"
