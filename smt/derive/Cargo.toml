@@ -7,7 +7,9 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.75"
 log = "0.4.20"
-syn = "2.0.37"
+proc-macro2 = "1.0.67"
+syn = {version = "2.0.37", features = ["full"]}
+walkdir = "2.4.0"
+
 rusmart-utils = { path = "../../utils" }
