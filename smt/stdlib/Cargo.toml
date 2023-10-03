@@ -1,0 +1,13 @@
+[package]
+name = "rusmart-smt-stdlib"
+description = "Standard Rust library for SMT elements in semantics modeling"
+version = "0.1.0"
+authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
+license = "GPL-3.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.75"
+num-bigint = "0.4.4"
+num-rational = "0.4.1"
+num-traits = "0.2.16"

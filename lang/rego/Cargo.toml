@@ -1,0 +1,12 @@
+[package]
+name = "rusmart-lang-rego"
+description = "Declarative semantics for the Rego language"
+version = "0.1.0"
+authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
+license = "GPL-3.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.75"
+rusmart-smt-stdlib = { path = "../../smt/stdlib" }
+rusmart-smt-remark = { path = "../../smt/remark" }

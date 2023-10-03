@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "smt/stdlib",
+    "smt/remark",
+    "lang/rego",
+]
+resolver = "2"
