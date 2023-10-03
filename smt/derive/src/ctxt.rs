@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
+use log::trace;
 use proc_macro2::Span;
 use syn::spanned::Spanned;
 use syn::{Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
@@ -98,6 +99,7 @@ impl Context {
             error.combine(Error::new(existing.span(), "previously defined here"));
             return Err(error);
         }
+        trace!("type added to context: {}", name);
         self.types.insert(name.clone(), item);
         Ok(())
     }
@@ -110,6 +112,7 @@ impl Context {
             error.combine(Error::new(existing.span(), "previously defined here"));
             return Err(error);
         }
+        trace!("impl added to context: {}", name);
         self.impls.insert(name.clone(), item);
         Ok(())
     }
@@ -122,6 +125,7 @@ impl Context {
             error.combine(Error::new(existing.span(), "previously defined here"));
             return Err(error);
         }
+        trace!("spec added to context: {}", name);
         self.specs.insert(name.clone(), item);
         Ok(())
     }
