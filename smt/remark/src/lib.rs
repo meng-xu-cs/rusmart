@@ -1,5 +1,6 @@
 use proc_macro::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
 
+/// Return a compile error to the user marking the error
 fn fatal<S: AsRef<str>>(msg: S) -> TokenStream {
     [
         TokenTree::Ident(Ident::new("compile_error", Span::mixed_site())),
@@ -23,6 +24,40 @@ pub fn smt_type(attr: TokenStream, item: TokenStream) -> TokenStream {
         return fatal("attribute does not take arguments");
     }
 
-    // return the extended stream to continue compilation
+    // return the original stream
+    item
+}
+
+/// Annotated over a Rust function to mark it as an implementation
+#[proc_macro_attribute]
+pub fn smt_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // sanity check
+    if !attr.is_empty() {
+        return fatal("attribute does not take arguments");
+    }
+
+    // return the original stream
+    item
+}
+
+/// Annotated over a Rust function to mark it as a specification
+#[proc_macro_attribute]
+pub fn smt_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // extract the impl target
+    let mut iter = attr.into_iter();
+    match iter.next() {
+        None => {
+            return fatal("unable to find impl target");
+        }
+        Some(TokenTree::Ident(_)) => (),
+        Some(_) => {
+            return fatal("impl target is not an ident");
+        }
+    }
+    if iter.next().is_some() {
+        return fatal("extra tokens in the impl target");
+    }
+
+    // return the original stream
     item
 }
