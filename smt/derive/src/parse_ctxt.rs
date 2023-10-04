@@ -4,7 +4,9 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use syn::{Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
+use syn::{
+    Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Pat, PatIdent, Result,
+};
 use walkdir::WalkDir;
 
 use crate::parse_type::TypeDef;
@@ -44,7 +46,7 @@ macro_rules! bail_if_exists {
     ($item:expr) => {
         match $item {
             None => (),
-            Some(__v) => bail_on!(__v, "not expected"),
+            Some(__v) => $crate::parse_ctxt::bail_on!(__v, "not expected"),
         }
     };
 }
@@ -54,7 +56,7 @@ pub(crate) use bail_if_exists;
 macro_rules! bail_if_missing {
     ($item:expr, $par:expr, $note:literal) => {
         match $item {
-            None => bail_on!($par, "expect {}", $note),
+            None => $crate::parse_ctxt::bail_on!($par, "expect {}", $note),
             Some(__v) => __v,
         }
     };
@@ -132,6 +134,31 @@ impl TryFrom<&Ident> for VarName {
 
     fn try_from(value: &Ident) -> Result<Self> {
         validate_identifier(value).map(|ident| Self { ident })
+    }
+}
+
+impl VarName {
+    pub fn from_pat(pat: &Pat) -> Result<Self> {
+        match pat {
+            Pat::Ident(decl) => {
+                let PatIdent {
+                    attrs: _,
+                    by_ref,
+                    mutability,
+                    ident,
+                    subpat,
+                } = decl;
+
+                // plain name only
+                bail_if_exists!(by_ref);
+                bail_if_exists!(mutability);
+                bail_if_exists!(subpat);
+
+                // just convert the ident
+                ident.try_into()
+            }
+            _ => bail_on!(pat, "not an ident"),
+        }
     }
 }
 
