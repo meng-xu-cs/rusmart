@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use syn::{
-    AngleBracketedGenericArguments, Field, Fields, GenericArgument, ItemStruct, Path,
-    PathArguments, PathSegment, Result, Type, TypePath,
+    AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
+    ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
 };
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, Context, MarkedType, TypeName};
@@ -156,16 +156,12 @@ pub struct TypeTuple {
     slots: Vec<TypeTag>,
 }
 
-/// Represents a record definition
-pub struct TypeRecord {
-    fields: BTreeMap<String, TypeTag>,
-}
+impl TypeTuple {
+    /// Convert from a list of fields
+    fn from_fields<'a, I: Iterator<Item = &'a Field>>(ctxt: &Context, items: I) -> Result<Self> {
+        let mut slots = vec![];
 
-impl TypeRecord {
-    /// Convert from an iterator of fields
-    pub fn from_fields(ctxt: &Context, fields: &Fields) -> Result<Self> {
-        let mut decls = BTreeMap::new();
-        for field in fields {
+        for field in items {
             let Field {
                 attrs: _,
                 vis: _,
@@ -175,16 +171,48 @@ impl TypeRecord {
                 ty,
             } = field;
 
-            bail_if_missing!(colon_token, field, "colon");
-            let name = bail_if_missing!(ident, field, "name");
-            let tag = TypeTag::from_type(ctxt, ty)?;
+            bail_if_exists!(ident);
+            bail_if_exists!(colon_token);
 
-            match decls.insert(name.to_string(), tag) {
+            let tag = TypeTag::from_type(ctxt, ty)?;
+            slots.push(tag);
+        }
+
+        Ok(Self { slots })
+    }
+}
+
+/// Represents a record definition
+pub struct TypeRecord {
+    fields: BTreeMap<String, TypeTag>,
+}
+
+impl TypeRecord {
+    /// Convert from a fields token
+    fn from_fields<'a, I: Iterator<Item = &'a Field>>(ctxt: &Context, items: I) -> Result<Self> {
+        let mut fields = BTreeMap::new();
+
+        for field in items {
+            let Field {
+                attrs: _,
+                vis: _,
+                mutability: _,
+                ident,
+                colon_token,
+                ty,
+            } = field;
+
+            let name = bail_if_missing!(ident, field, "name");
+            bail_if_missing!(colon_token, field, "colon");
+
+            let tag = TypeTag::from_type(ctxt, ty)?;
+            match fields.insert(name.to_string(), tag) {
                 None => (),
                 Some(_) => bail_on!(ident, "duplicated field name"),
             }
         }
-        Ok(Self { fields: decls })
+
+        Ok(Self { fields })
     }
 }
 
@@ -195,9 +223,55 @@ pub enum ADTVariant {
     Record(TypeRecord),
 }
 
+impl ADTVariant {
+    /// Convert from a fields token
+    fn from_fields(ctxt: &Context, fields: &Fields) -> Result<Self> {
+        let variant = match fields {
+            Fields::Unit => Self::Unit,
+            Fields::Named(FieldsNamed {
+                brace_token: _,
+                named,
+            }) => Self::Record(TypeRecord::from_fields(ctxt, named.iter())?),
+            Fields::Unnamed(FieldsUnnamed {
+                paren_token: _,
+                unnamed,
+            }) => Self::Tuple(TypeTuple::from_fields(ctxt, unnamed.iter())?),
+        };
+        Ok(variant)
+    }
+}
+
 /// Represents an ADT definition
 pub struct TypeADT {
     variants: BTreeMap<String, ADTVariant>,
+}
+
+impl TypeADT {
+    /// Convert from a list of variants
+    fn from_variants<'a, I: Iterator<Item = &'a Variant>>(
+        ctxt: &Context,
+        items: I,
+    ) -> Result<Self> {
+        let mut variants = BTreeMap::new();
+
+        for variant in items {
+            let Variant {
+                attrs: _,
+                ident,
+                fields,
+                discriminant,
+            } = variant;
+
+            bail_if_exists!(discriminant.as_ref().map(|(_, e)| e));
+            let branch = ADTVariant::from_fields(ctxt, fields)?;
+            match variants.insert(ident.to_string(), branch) {
+                None => (),
+                Some(_) => bail_on!(ident, "duplicated variant name"),
+            }
+        }
+
+        Ok(Self { variants })
+    }
 }
 
 /// A complete definition of type
@@ -206,4 +280,22 @@ pub enum TypeBody {
     Algebraic(TypeADT),
 }
 
-pub fn parse_type(ctxt: &Context, item: &MarkedType) {}
+pub fn parse_type(ctxt: &Context, item: &MarkedType) {
+    fn from_enum(ctxt: &Context, item: &ItemEnum) -> Result<Self> {
+        let ItemEnum {
+            attrs: _,
+            vis: _,
+            enum_token: _,
+            ident,
+            generics,
+            brace_token: _,
+            variants,
+        } = item;
+
+        // user-defined enum should not have generics
+        bail_if_exists!(&generics.lt_token);
+        bail_if_exists!(&generics.gt_token);
+
+        //
+    }
+}
