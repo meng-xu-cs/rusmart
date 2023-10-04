@@ -61,6 +61,20 @@ macro_rules! bail_if_missing {
 }
 pub(crate) use bail_if_missing;
 
+/// Test whether an identifier is a reserved keyword
+fn validate_identifier(ident: &Ident) -> Result<String> {
+    let name = ident.to_string();
+    match name.as_str() {
+        "Boolean" | "Integer" | "Rational" | "Text" | "Box" | "Seq" | "Set" | "Map" | "Error" => {
+            bail_on!(ident, "reserved type name")
+        }
+        "_" => {
+            bail_on!(ident, "underscore not allowed")
+        }
+        _ => Ok(name),
+    }
+}
+
 /// Identifier for a user-defined type (i.e., non-reserved)
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct TypeName {
@@ -71,12 +85,7 @@ impl TryFrom<&Ident> for TypeName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        let name = value.to_string();
-        match name.as_str() {
-            "Boolean" | "Integer" | "Rational" | "Text" | "Box" | "Seq" | "Set" | "Map"
-            | "Error" => bail_on!(value, "reserved type name"),
-            _ => Ok(Self { ident: name }),
-        }
+        validate_identifier(value).map(|ident| Self { ident })
     }
 }
 
@@ -102,12 +111,27 @@ impl TryFrom<&Ident> for FuncName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        let name = value.to_string();
-        match name.as_str() {
-            // TODO: any reserved names?
-            "_" => bail_on!(value, "reserved function name"),
-            _ => Ok(Self { ident: name }),
-        }
+        validate_identifier(value).map(|ident| Self { ident })
+    }
+}
+
+/// Identifier for a user-defined variable (i.e., non-reserved)
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
+pub struct VarName {
+    ident: String,
+}
+
+impl Display for VarName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.ident)
+    }
+}
+
+impl TryFrom<&Ident> for VarName {
+    type Error = Error;
+
+    fn try_from(value: &Ident) -> Result<Self> {
+        validate_identifier(value).map(|ident| Self { ident })
     }
 }
 

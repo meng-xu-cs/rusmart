@@ -1,6 +1,8 @@
 use std::path::Path;
 
 mod parse_ctxt;
+mod parse_expr;
+mod parse_func;
 mod parse_type;
 
 /// Entrypoint to the SMT model derivation process
