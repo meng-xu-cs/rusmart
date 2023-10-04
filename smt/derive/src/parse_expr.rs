@@ -1,4 +1,4 @@
-use syn::{Local, LocalInit, Stmt};
+use syn::{Local, LocalInit, Result, Stmt};
 
 use std::collections::BTreeMap;
 
@@ -226,7 +226,7 @@ impl<'a, 'b> ExprParseCtxt<'a, 'b> {
                         expr,
                         diverge,
                     } = body;
-                    bail_if_exists!(diverge);
+                    bail_if_exists!(diverge.as_ref().map(|(_, div)| div));
                 }
                 Stmt::Expr(expr, semi_token) => {
                     // expecting a unit expression
