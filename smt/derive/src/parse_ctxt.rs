@@ -62,6 +62,7 @@ macro_rules! bail_if_missing {
         }
     };
 }
+use crate::parse_expr::CtxtForExpr;
 pub(crate) use bail_if_missing;
 
 /// Test whether an identifier is a reserved keyword
@@ -447,5 +448,19 @@ pub struct ContextWithTypeAndSig {
 impl CtxtForType for ContextWithTypeAndSig {
     fn has_type(&self, name: &TypeName) -> bool {
         self.types.contains_key(name)
+    }
+}
+
+impl CtxtForExpr for ContextWithTypeAndSig {
+    fn get_type(&self, name: &TypeName) -> Option<&TypeDef> {
+        self.types.get(name)
+    }
+
+    fn get_impl_sig(&self, name: &FuncName) -> Option<&FuncSig> {
+        self.impls.get(name).map(|(sig, _)| sig)
+    }
+
+    fn get_spec_sig(&self, name: &FuncName) -> Option<&FuncSig> {
+        self.specs.get(name).map(|(sig, _)| sig)
     }
 }

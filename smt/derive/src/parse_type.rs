@@ -6,7 +6,7 @@ use syn::{
     Variant,
 };
 
-use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, Context, MarkedType, TypeName};
+use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, MarkedType, TypeName};
 
 /// A context suitable for type analysis
 pub trait CtxtForType {
@@ -301,7 +301,7 @@ pub enum TypeDef {
 
 impl TypeDef {
     /// Convert from a marked type
-    pub fn from_marked(ctxt: &Context, item: &MarkedType) -> Result<Self> {
+    pub fn from_marked<T: CtxtForType>(ctxt: &T, item: &MarkedType) -> Result<Self> {
         let parsed = match item {
             MarkedType::Enum(item) => {
                 let ItemEnum {
