@@ -417,7 +417,7 @@ impl ContextWithType {
         let unpacked_specs = specs
             .into_iter()
             .map(|(name, marked)| {
-                let sig = sig_impls.remove(&name).unwrap();
+                let sig = sig_specs.remove(&name).unwrap();
                 let stmts = marked.0.block.stmts;
                 (name, (sig, stmts))
             })
