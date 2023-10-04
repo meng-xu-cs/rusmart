@@ -1,6 +1,7 @@
 use std::path::Path;
 
-mod ctxt;
+mod parse_ctxt;
+mod parse_type;
 
 /// Entrypoint to the SMT model derivation process
 pub fn derive<P: AsRef<Path>>(input: P) {
@@ -12,6 +13,6 @@ pub fn derive<P: AsRef<Path>>(input: P) {
 
 /// Internal entrypoint for ergonomic error propagation
 fn derive_internal(path_crate: &Path) -> syn::Result<()> {
-    ctxt::Context::new(path_crate)?;
+    parse_ctxt::Context::new(path_crate)?;
     Ok(())
 }
