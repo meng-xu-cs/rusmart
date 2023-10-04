@@ -1,14 +1,14 @@
 use std::collections::BTreeSet;
 
-use syn::{FnArg, Pat, PatIdent, PatType, Signature};
+use syn::{FnArg, PatType, Result, ReturnType, Signature};
 
 use crate::parse_ctxt::{bail_if_exists, bail_on, ContextWithType, VarName};
-use crate::parse_type::TypeTag;
+use crate::parse_type::TypeUse;
 
 /// Function signature
 pub struct FuncSig {
-    params: Vec<(VarName, TypeTag)>,
-    ret_ty: TypeTag,
+    params: Vec<(VarName, TypeUse)>,
+    ret_ty: TypeUse,
 }
 
 impl FuncSig {
@@ -37,7 +37,7 @@ impl FuncSig {
         bail_if_exists!(&generics.gt_token);
         bail_if_exists!(variadic);
 
-        // parse parameters
+        // parameters
         let mut param_decls = vec![];
         let mut param_names = BTreeSet::new();
         for param in inputs {
@@ -52,14 +52,26 @@ impl FuncSig {
                     } = typed;
 
                     let name = VarName::from_pat(pat)?;
-                    let tag = TypeTag::from_type(ctxt, ty)?;
-                    param_decls.push((name, tag));
+                    if !param_names.insert(name.clone()) {
+                        bail_on!(pat, "duplicated parameter name");
+                    }
+
+                    let ty = TypeUse::from_type(ctxt, ty)?;
+                    param_decls.push((name, ty));
                 }
             }
         }
 
+        // return type
+        let ret_ty = match output {
+            ReturnType::Default => bail_on!(sig, "no return type"),
+            ReturnType::Type(_, rty) => TypeUse::from_type(ctxt, rty)?,
+        };
+
+        // done
         Ok(Self {
             params: param_decls,
+            ret_ty,
         })
     }
 }

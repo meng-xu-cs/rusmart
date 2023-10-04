@@ -9,7 +9,7 @@ use syn::{
 };
 use walkdir::WalkDir;
 
-use crate::parse_type::TypeDef;
+use crate::parse_type::{CtxtForType, TypeDef};
 
 /// Exit the parsing early with an error
 macro_rules! bail_on {
@@ -152,7 +152,7 @@ impl VarName {
                 // plain name only
                 bail_if_exists!(by_ref);
                 bail_if_exists!(mutability);
-                bail_if_exists!(subpat);
+                bail_if_exists!(subpat.as_ref().map(|(_, sub)| sub));
 
                 // just convert the ident
                 ident.try_into()
@@ -331,11 +331,6 @@ impl Context {
         Ok(())
     }
 
-    /// Retrieve type if exists
-    pub fn get_type(&self, name: &TypeName) -> Option<&MarkedType> {
-        self.types.get(name)
-    }
-
     /// Parse types
     pub fn analyze(self) -> Result<ContextWithType> {
         let mut parsed_types = BTreeMap::new();
@@ -358,11 +353,23 @@ impl Context {
     }
 }
 
+impl CtxtForType for Context {
+    fn has_type(&self, name: &TypeName) -> bool {
+        self.types.contains_key(name)
+    }
+}
+
 /// Context manager of the entire derivation process
 pub struct ContextWithType {
     types: BTreeMap<TypeName, TypeDef>,
     impls: BTreeMap<FuncName, MarkedImpl>,
     specs: BTreeMap<FuncName, MarkedSpec>,
+}
+
+impl CtxtForType for ContextWithType {
+    fn has_type(&self, name: &TypeName) -> bool {
+        self.types.contains_key(name)
+    }
 }
 
 impl ContextWithType {

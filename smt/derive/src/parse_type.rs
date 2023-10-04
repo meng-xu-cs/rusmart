@@ -2,10 +2,16 @@ use std::collections::BTreeMap;
 
 use syn::{
     AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
-    ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
+    ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, TypeReference,
+    Variant,
 };
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, Context, MarkedType, TypeName};
+
+/// A context suitable for type analysis
+pub trait CtxtForType {
+    fn has_type(&self, name: &TypeName) -> bool;
+}
 
 /// A unique and complete reference to an SMT-related type
 pub enum TypeTag {
@@ -33,7 +39,10 @@ pub enum TypeTag {
 
 impl TypeTag {
     /// Convert from a type argument pack
-    fn from_args(ctxt: &Context, pack: &AngleBracketedGenericArguments) -> Result<Vec<Self>> {
+    fn from_args<T: CtxtForType>(
+        ctxt: &T,
+        pack: &AngleBracketedGenericArguments,
+    ) -> Result<Vec<Self>> {
         let AngleBracketedGenericArguments {
             colon2_token,
             args,
@@ -55,7 +64,10 @@ impl TypeTag {
     }
 
     /// Convert from a type argument pack, expecting 1 argument
-    fn from_args_expect_1(ctxt: &Context, pack: &AngleBracketedGenericArguments) -> Result<Self> {
+    fn from_args_expect_1<T: CtxtForType>(
+        ctxt: &T,
+        pack: &AngleBracketedGenericArguments,
+    ) -> Result<Self> {
         let mut iter = Self::from_args(ctxt, pack)?.into_iter();
         let a1 = match iter.next() {
             None => bail_on!(pack, "expect 1 argument, found 0"),
@@ -68,8 +80,8 @@ impl TypeTag {
     }
 
     /// Convert from a type argument pack, expecting 2 arguments
-    fn from_args_expect_2(
-        ctxt: &Context,
+    fn from_args_expect_2<T: CtxtForType>(
+        ctxt: &T,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<(Self, Self)> {
         let mut iter = Self::from_args(ctxt, pack)?.into_iter();
@@ -88,7 +100,7 @@ impl TypeTag {
     }
 
     /// Convert from a path
-    fn from_path(ctxt: &Context, path: &Path) -> Result<Self> {
+    fn from_path<T: CtxtForType>(ctxt: &T, path: &Path) -> Result<Self> {
         let Path {
             leading_colon,
             segments,
@@ -125,7 +137,7 @@ impl TypeTag {
                     ("Error", PathArguments::None) => Self::Error,
                     (_, _) => {
                         let name = ident.try_into()?;
-                        if ctxt.get_type(&name).is_none() {
+                        if !ctxt.has_type(&name) {
                             bail_on!(ident, "no such type");
                         }
                         if !matches!(arguments, PathArguments::None) {
@@ -140,7 +152,7 @@ impl TypeTag {
     }
 
     /// Convert from a type
-    pub fn from_type(ctxt: &Context, ty: &Type) -> Result<Self> {
+    pub fn from_type<T: CtxtForType>(ctxt: &T, ty: &Type) -> Result<Self> {
         match ty {
             Type::Path(TypePath { qself, path }) => {
                 bail_if_exists!(qself);
@@ -158,7 +170,10 @@ pub struct TypeTuple {
 
 impl TypeTuple {
     /// Convert from a list of fields
-    fn from_fields<'a, I: Iterator<Item = &'a Field>>(ctxt: &Context, items: I) -> Result<Self> {
+    fn from_fields<'a, I: Iterator<Item = &'a Field>, T: CtxtForType>(
+        ctxt: &T,
+        items: I,
+    ) -> Result<Self> {
         let mut slots = vec![];
 
         for field in items {
@@ -189,7 +204,10 @@ pub struct TypeRecord {
 
 impl TypeRecord {
     /// Convert from a fields token
-    fn from_fields<'a, I: Iterator<Item = &'a Field>>(ctxt: &Context, items: I) -> Result<Self> {
+    fn from_fields<'a, I: Iterator<Item = &'a Field>, T: CtxtForType>(
+        ctxt: &T,
+        items: I,
+    ) -> Result<Self> {
         let mut fields = BTreeMap::new();
 
         for field in items {
@@ -225,7 +243,7 @@ pub enum ADTVariant {
 
 impl ADTVariant {
     /// Convert from a fields token
-    fn from_fields(ctxt: &Context, fields: &Fields) -> Result<Self> {
+    fn from_fields<T: CtxtForType>(ctxt: &T, fields: &Fields) -> Result<Self> {
         let variant = match fields {
             Fields::Unit => Self::Unit,
             Fields::Named(FieldsNamed {
@@ -248,8 +266,8 @@ pub struct TypeADT {
 
 impl TypeADT {
     /// Convert from a list of variants
-    fn from_variants<'a, I: Iterator<Item = &'a Variant>>(
-        ctxt: &Context,
+    fn from_variants<'a, I: Iterator<Item = &'a Variant>, T: CtxtForType>(
+        ctxt: &T,
         items: I,
     ) -> Result<Self> {
         let mut variants = BTreeMap::new();
@@ -333,5 +351,37 @@ impl TypeDef {
             }
         };
         Ok(parsed)
+    }
+}
+
+/// Represents all types that can appear in expressions
+pub enum TypeUse {
+    /// boolean
+    Base(TypeTag),
+    /// reference
+    Ref(TypeTag),
+}
+
+impl TypeUse {
+    /// Convert from a type
+    pub fn from_type<T: CtxtForType>(ctxt: &T, ty: &Type) -> Result<Self> {
+        let converted = match ty {
+            Type::Reference(TypeReference {
+                and_token: _,
+                lifetime,
+                mutability,
+                elem,
+            }) => {
+                bail_if_exists!(lifetime);
+                bail_if_exists!(mutability);
+                Self::Ref(TypeTag::from_type(ctxt, elem)?)
+            }
+            Type::Path(TypePath { qself, path }) => {
+                bail_if_exists!(qself);
+                Self::Base(TypeTag::from_path(ctxt, path)?)
+            }
+            _ => bail_on!(ty, "expect type path"),
+        };
+        Ok(converted)
     }
 }
