@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use syn::{FnArg, PatType, Result, ReturnType, Signature};
 
-use crate::parse_ctxt::{bail_if_exists, bail_on, ContextWithType, VarName};
-use crate::parse_type::TypeUse;
+use crate::parse_ctxt::{bail_if_exists, bail_on, VarName};
+use crate::parse_type::{CtxtForType, TypeUse};
 
 /// Function signature
 pub struct FuncSig {
@@ -13,7 +13,7 @@ pub struct FuncSig {
 
 impl FuncSig {
     /// Convert from a function signature
-    fn from_sig(ctxt: &ContextWithType, sig: &Signature) -> Result<Self> {
+    fn from_sig<T: CtxtForType>(ctxt: &T, sig: &Signature) -> Result<Self> {
         let Signature {
             constness,
             asyncness,
