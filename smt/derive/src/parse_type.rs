@@ -275,27 +275,63 @@ impl TypeADT {
 }
 
 /// A complete definition of type
-pub enum TypeBody {
+pub enum TypeDef {
+    Tuple(TypeTuple),
     Record(TypeRecord),
     Algebraic(TypeADT),
 }
 
-pub fn parse_type(ctxt: &Context, item: &MarkedType) {
-    fn from_enum(ctxt: &Context, item: &ItemEnum) -> Result<Self> {
-        let ItemEnum {
-            attrs: _,
-            vis: _,
-            enum_token: _,
-            ident,
-            generics,
-            brace_token: _,
-            variants,
-        } = item;
+impl TypeDef {
+    /// Convert from a marked type
+    fn from_marked(ctxt: &Context, item: &MarkedType) -> Result<Self> {
+        let parsed = match item {
+            MarkedType::Enum(item) => {
+                let ItemEnum {
+                    attrs: _,
+                    vis: _,
+                    enum_token: _,
+                    ident: _, // handled in context
+                    generics,
+                    brace_token: _,
+                    variants,
+                } = item;
 
-        // user-defined enum should not have generics
-        bail_if_exists!(&generics.lt_token);
-        bail_if_exists!(&generics.gt_token);
+                // marked type should not have generics
+                bail_if_exists!(&generics.lt_token);
+                bail_if_exists!(&generics.gt_token);
 
-        //
+                // build from variants
+                Self::Algebraic(TypeADT::from_variants(ctxt, variants.iter())?)
+            }
+            MarkedType::Struct(item) => {
+                let ItemStruct {
+                    attrs: _,
+                    vis: _,
+                    struct_token: _,
+                    ident: _, // handled in context
+                    generics,
+                    fields,
+                    semi_token,
+                } = item;
+
+                // marked type should not have generics
+                bail_if_exists!(&generics.lt_token);
+                bail_if_exists!(&generics.gt_token);
+
+                // exploit the similarity with ADT variant
+                match ADTVariant::from_fields(ctxt, fields)? {
+                    ADTVariant::Unit => bail_on!(fields, "unexpected unit type"),
+                    ADTVariant::Tuple(tuple) => {
+                        bail_if_missing!(semi_token, item, "expect ; at the end");
+                        Self::Tuple(tuple)
+                    }
+                    ADTVariant::Record(record) => {
+                        bail_if_exists!(semi_token);
+                        Self::Record(record)
+                    }
+                }
+            }
+        };
+        Ok(parsed)
     }
 }
