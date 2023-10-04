@@ -4,10 +4,10 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use proc_macro2::Span;
-use syn::spanned::Spanned;
 use syn::{Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
 use walkdir::WalkDir;
+
+use crate::parse_type::TypeDef;
 
 /// Exit the parsing early with an error
 macro_rules! bail_on {
@@ -132,14 +132,6 @@ impl MarkedType {
             Self::Struct(item) => &item.ident,
         }
     }
-
-    /// Retrieve the span of this item
-    fn span(&self) -> Span {
-        match self {
-            Self::Enum(item) => item.span(),
-            Self::Struct(item) => item.span(),
-        }
-    }
 }
 
 /// SMT-marked function as impl
@@ -156,11 +148,6 @@ impl MarkedImpl {
     /// Retrieve the name of this item
     fn name(&self) -> &Ident {
         &self.0.sig.ident
-    }
-
-    /// Retrieve the span of this item
-    fn span(&self) -> Span {
-        self.0.span()
     }
 }
 
@@ -179,11 +166,6 @@ impl MarkedSpec {
     fn name(&self) -> &Ident {
         &self.0.sig.ident
     }
-
-    /// Retrieve the span of this item
-    fn span(&self) -> Span {
-        self.0.span()
-    }
 }
 
 /// Context manager of the entire derivation process
@@ -194,54 +176,6 @@ pub struct Context {
 }
 
 impl Context {
-    /// Add a type to the context
-    fn add_type(&mut self, item: MarkedType) -> Result<()> {
-        let name = item.name().try_into()?;
-        if let Some(prev) = self.types.get(&name) {
-            bail_on_with_note!(
-                prev.name(),
-                "previously defined here",
-                item.name(),
-                "duplicated type name"
-            );
-        }
-        trace!("type added to context: {}", name);
-        self.types.insert(name, item);
-        Ok(())
-    }
-
-    /// Add a impl function to the context
-    fn add_impl(&mut self, item: MarkedImpl) -> Result<()> {
-        let name = item.name().try_into()?;
-        if let Some(prev) = self.impls.get(&name) {
-            bail_on_with_note!(
-                prev.name(),
-                "previously defined here",
-                item.name(),
-                "duplicated impl name"
-            );
-        }
-        trace!("impl added to context: {}", name);
-        self.impls.insert(name, item);
-        Ok(())
-    }
-
-    /// Add a spec function to the context
-    fn add_spec(&mut self, item: MarkedSpec) -> Result<()> {
-        let name = item.name().try_into()?;
-        if let Some(prev) = self.specs.get(&name) {
-            bail_on_with_note!(
-                prev.name(),
-                "previously defined here",
-                item.name(),
-                "duplicated impl name"
-            );
-        }
-        trace!("spec added to context: {}", name);
-        self.specs.insert(name, item);
-        Ok(())
-    }
-
     /// Build a context for crate
     pub fn new(path_crate: &Path) -> Result<Self> {
         let mut ctxt = Self {
@@ -298,8 +232,91 @@ impl Context {
         Ok(ctxt)
     }
 
+    /// Add a type to the context
+    fn add_type(&mut self, item: MarkedType) -> Result<()> {
+        let name = item.name().try_into()?;
+        if let Some(prev) = self.types.get(&name) {
+            bail_on_with_note!(
+                prev.name(),
+                "previously defined here",
+                item.name(),
+                "duplicated type name"
+            );
+        }
+        trace!("type added to context: {}", name);
+        self.types.insert(name, item);
+        Ok(())
+    }
+
+    /// Add a impl function to the context
+    fn add_impl(&mut self, item: MarkedImpl) -> Result<()> {
+        let name = item.name().try_into()?;
+        if let Some(prev) = self.impls.get(&name) {
+            bail_on_with_note!(
+                prev.name(),
+                "previously defined here",
+                item.name(),
+                "duplicated impl name"
+            );
+        }
+        trace!("impl added to context: {}", name);
+        self.impls.insert(name, item);
+        Ok(())
+    }
+
+    /// Add a spec function to the context
+    fn add_spec(&mut self, item: MarkedSpec) -> Result<()> {
+        let name = item.name().try_into()?;
+        if let Some(prev) = self.specs.get(&name) {
+            bail_on_with_note!(
+                prev.name(),
+                "previously defined here",
+                item.name(),
+                "duplicated impl name"
+            );
+        }
+        trace!("spec added to context: {}", name);
+        self.specs.insert(name, item);
+        Ok(())
+    }
+
     /// Retrieve type if exists
     pub fn get_type(&self, name: &TypeName) -> Option<&MarkedType> {
+        self.types.get(name)
+    }
+
+    /// Parse types
+    pub fn analyze(self) -> Result<ContextWithType> {
+        let mut parsed_types = BTreeMap::new();
+        for (name, marked) in &self.types {
+            let parsed = TypeDef::from_marked(&self, marked)?;
+            trace!("type analyzed: {}", name);
+            parsed_types.insert(name.clone(), parsed);
+        }
+
+        let Self {
+            types: _,
+            impls,
+            specs,
+        } = self;
+        Ok(ContextWithType {
+            types: parsed_types,
+            impls,
+            specs,
+        })
+    }
+}
+
+/// Context manager of the entire derivation process
+pub struct ContextWithType {
+    types: BTreeMap<TypeName, TypeDef>,
+    impls: BTreeMap<FuncName, MarkedImpl>,
+    specs: BTreeMap<FuncName, MarkedSpec>,
+}
+
+impl ContextWithType {
+    /// Retrieve type if exists
+    pub fn get_type(&self, name: &TypeName) -> Option<&TypeDef> {
         self.types.get(name)
     }
 

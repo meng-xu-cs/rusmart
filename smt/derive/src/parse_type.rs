@@ -283,7 +283,7 @@ pub enum TypeDef {
 
 impl TypeDef {
     /// Convert from a marked type
-    fn from_marked(ctxt: &Context, item: &MarkedType) -> Result<Self> {
+    pub fn from_marked(ctxt: &Context, item: &MarkedType) -> Result<Self> {
         let parsed = match item {
             MarkedType::Enum(item) => {
                 let ItemEnum {
