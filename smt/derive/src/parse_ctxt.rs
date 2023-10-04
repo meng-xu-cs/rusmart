@@ -5,10 +5,11 @@ use std::path::Path;
 
 use log::trace;
 use syn::{
-    Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Pat, PatIdent, Result,
+    Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Pat, PatIdent, Result, Stmt,
 };
 use walkdir::WalkDir;
 
+use crate::parse_func::FuncSig;
 use crate::parse_type::{CtxtForType, TypeDef};
 
 /// Exit the parsing early with an error
@@ -219,7 +220,7 @@ impl MarkedSpec {
     }
 }
 
-/// Context manager of the entire derivation process
+/// Context manager for holding marked items
 pub struct Context {
     types: BTreeMap<TypeName, MarkedType>,
     impls: BTreeMap<FuncName, MarkedImpl>,
@@ -332,7 +333,7 @@ impl Context {
     }
 
     /// Parse types
-    pub fn analyze(self) -> Result<ContextWithType> {
+    pub fn next(self) -> Result<ContextWithType> {
         let mut parsed_types = BTreeMap::new();
         for (name, marked) in &self.types {
             let parsed = TypeDef::from_marked(&self, marked)?;
@@ -359,11 +360,75 @@ impl CtxtForType for Context {
     }
 }
 
-/// Context manager of the entire derivation process
+/// Context manager after type analysis is done
 pub struct ContextWithType {
     types: BTreeMap<TypeName, TypeDef>,
     impls: BTreeMap<FuncName, MarkedImpl>,
     specs: BTreeMap<FuncName, MarkedSpec>,
+}
+
+impl ContextWithType {
+    /// Parse signatures
+    pub fn next(self) -> Result<ContextWithTypeAndSig> {
+        // impl
+        let mut sig_impls = BTreeMap::new();
+        for (name, marked) in &self.impls {
+            let ItemFn {
+                attrs: _,
+                vis: _,
+                sig,
+                block: _, // handled later
+            } = &marked.0;
+
+            let sig = FuncSig::from_sig(&self, sig)?;
+            trace!("impl sig analyzed: {}", name);
+            sig_impls.insert(name.clone(), sig);
+        }
+
+        // spec
+        let mut sig_specs = BTreeMap::new();
+        for (name, marked) in &self.specs {
+            let ItemFn {
+                attrs: _,
+                vis: _,
+                sig,
+                block: _, // handled later
+            } = &marked.0;
+
+            let sig = FuncSig::from_sig(&self, sig)?;
+            trace!("spec sig analyzed: {}", name);
+            sig_specs.insert(name.clone(), sig);
+        }
+
+        let Self {
+            types,
+            impls,
+            specs,
+        } = self;
+
+        let unpacked_impls = impls
+            .into_iter()
+            .map(|(name, marked)| {
+                let sig = sig_impls.remove(&name).unwrap();
+                let stmts = marked.0.block.stmts;
+                (name, (sig, stmts))
+            })
+            .collect();
+        let unpacked_specs = specs
+            .into_iter()
+            .map(|(name, marked)| {
+                let sig = sig_impls.remove(&name).unwrap();
+                let stmts = marked.0.block.stmts;
+                (name, (sig, stmts))
+            })
+            .collect();
+
+        Ok(ContextWithTypeAndSig {
+            types,
+            impls: unpacked_impls,
+            specs: unpacked_specs,
+        })
+    }
 }
 
 impl CtxtForType for ContextWithType {
@@ -372,19 +437,15 @@ impl CtxtForType for ContextWithType {
     }
 }
 
-impl ContextWithType {
-    /// Retrieve type if exists
-    pub fn get_type(&self, name: &TypeName) -> Option<&TypeDef> {
-        self.types.get(name)
-    }
+/// Context manager after type and signature analysis is done
+pub struct ContextWithTypeAndSig {
+    types: BTreeMap<TypeName, TypeDef>,
+    impls: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
+    specs: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
+}
 
-    /// Retrieve impl function if exists
-    pub fn get_impl(&self, name: &FuncName) -> Option<&MarkedImpl> {
-        self.impls.get(name)
-    }
-
-    /// Retrieve spec function if exists
-    pub fn get_spec(&self, name: &FuncName) -> Option<&MarkedSpec> {
-        self.specs.get(name)
+impl CtxtForType for ContextWithTypeAndSig {
+    fn has_type(&self, name: &TypeName) -> bool {
+        self.types.contains_key(name)
     }
 }

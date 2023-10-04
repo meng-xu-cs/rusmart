@@ -13,7 +13,7 @@ pub struct FuncSig {
 
 impl FuncSig {
     /// Convert from a function signature
-    fn from_sig<T: CtxtForType>(ctxt: &T, sig: &Signature) -> Result<Self> {
+    pub fn from_sig<T: CtxtForType>(ctxt: &T, sig: &Signature) -> Result<Self> {
         let Signature {
             constness,
             asyncness,
