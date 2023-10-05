@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Deref, Div, Mul, Not, Rem, Sub};
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -24,7 +24,7 @@ pub trait Quantified: Default {
 }
 
 /// SMT boolean
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Boolean {
     inner: bool,
 }
@@ -34,40 +34,50 @@ impl Boolean {
     pub fn new(c: bool) -> Self {
         Self { inner: c }
     }
-
-    /// operation: !
-    pub fn not(v: &Self) -> Self {
-        Self { inner: !v.inner }
-    }
-
-    /// operation: &
-    pub fn and(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner & r.inner,
-        }
-    }
-
-    /// operation: |
-    pub fn or(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner | r.inner,
-        }
-    }
-
-    /// operation: ^
-    pub fn xor(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner ^ r.inner,
-        }
-    }
-
-    /// Unpack to primitive type
-    pub fn unpack(v: &Self) -> bool {
-        v.inner
-    }
 }
 
 impl Quantified for Boolean {}
+
+impl Not for Boolean {
+    type Output = Self;
+    fn not(self) -> Self {
+        Self { inner: !self.inner }
+    }
+}
+
+impl BitAnd for Boolean {
+    type Output = Boolean;
+    fn bitand(self, rhs: Self) -> Self {
+        Self {
+            inner: self.inner & rhs.inner,
+        }
+    }
+}
+
+impl BitOr for Boolean {
+    type Output = Boolean;
+    fn bitor(self, rhs: Self) -> Self {
+        Self {
+            inner: self.inner | rhs.inner,
+        }
+    }
+}
+
+impl BitXor for Boolean {
+    type Output = Boolean;
+    fn bitxor(self, rhs: Self) -> Self {
+        Self {
+            inner: self.inner ^ rhs.inner,
+        }
+    }
+}
+
+impl Deref for Boolean {
+    type Target = bool;
+    fn deref(&self) -> &bool {
+        &self.inner
+    }
+}
 
 /// Arbitrary precision integer
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
