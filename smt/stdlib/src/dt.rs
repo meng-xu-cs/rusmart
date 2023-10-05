@@ -1,12 +1,14 @@
+use internment::Intern;
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::Hash;
 use std::ops::{Add, BitAnd, BitOr, BitXor, Deref, Div, Mul, Not, Rem, Sub};
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::cast::ToPrimitive;
 
-/// Marks that variables of this type can be quantified
-pub trait Quantified: Default {
+/// Marks that this type is an SMT-enabled type
+pub trait SMT: Copy + Ord + Hash + Default {
     /// variable: any
     fn any() -> Self {
         Self::default()
@@ -29,14 +31,11 @@ pub struct Boolean {
     inner: bool,
 }
 
-impl Boolean {
-    /// create a boolean constant, requires `inner` to be a literal
-    pub fn new(c: bool) -> Self {
+impl From<bool> for Boolean {
+    fn from(c: bool) -> Self {
         Self { inner: c }
     }
 }
-
-impl Quantified for Boolean {}
 
 impl Not for Boolean {
     type Output = Self;
@@ -46,7 +45,7 @@ impl Not for Boolean {
 }
 
 impl BitAnd for Boolean {
-    type Output = Boolean;
+    type Output = Self;
     fn bitand(self, rhs: Self) -> Self {
         Self {
             inner: self.inner & rhs.inner,
@@ -55,7 +54,7 @@ impl BitAnd for Boolean {
 }
 
 impl BitOr for Boolean {
-    type Output = Boolean;
+    type Output = Self;
     fn bitor(self, rhs: Self) -> Self {
         Self {
             inner: self.inner | rhs.inner,
@@ -64,7 +63,7 @@ impl BitOr for Boolean {
 }
 
 impl BitXor for Boolean {
-    type Output = Boolean;
+    type Output = Self;
     fn bitxor(self, rhs: Self) -> Self {
         Self {
             inner: self.inner ^ rhs.inner,
@@ -79,244 +78,182 @@ impl Deref for Boolean {
     }
 }
 
+impl SMT for Boolean {}
+
 /// Arbitrary precision integer
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Integer {
-    inner: BigInt,
+    inner: Intern<BigInt>,
 }
 
-impl Integer {
-    /// create a integer constant, requires `inner` to be a literal
-    pub fn new(c: i128) -> Self {
+/// Convert to integer from literals
+macro_rules! integer_from_literal {
+    ($l:ty $(,$e:ty)* $(,)?) => {
+        impl From<$l> for Integer {
+            fn from(c: $l) -> Self {
+                Self {
+                    inner: Intern::new(BigInt::from(c)),
+                }
+            }
+        }
+        $(impl From<$e> for Integer {
+            fn from(c: $e) -> Self {
+                Self {
+                    inner: Intern::new(BigInt::from(c)),
+                }
+            }
+        })+
+    };
+}
+
+integer_from_literal!(i8, i16, i32, i64, i128, isize);
+integer_from_literal!(u8, u16, u32, u64, u128, usize);
+
+impl Add for Integer {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
         Self {
-            inner: BigInt::from(c),
-        }
-    }
-
-    /// operation: ==
-    pub fn eq(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner == r.inner,
-        }
-    }
-
-    /// operation: !=
-    pub fn ne(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner != r.inner,
-        }
-    }
-
-    /// operation: <
-    pub fn lt(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner < r.inner,
-        }
-    }
-
-    /// operation: <=
-    pub fn le(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner <= r.inner,
-        }
-    }
-
-    /// operation: >=
-    pub fn ge(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner >= r.inner,
-        }
-    }
-
-    /// operation: >
-    pub fn gt(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner > r.inner,
-        }
-    }
-
-    /// operation: +
-    pub fn add(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().add(r.inner.clone()),
-        }
-    }
-
-    /// operation: -
-    pub fn sub(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().sub(r.inner.clone()),
-        }
-    }
-
-    /// operation: *
-    pub fn mul(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().mul(r.inner.clone()),
-        }
-    }
-
-    /// operation: /
-    pub fn div(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().div(r.inner.clone()),
-        }
-    }
-
-    /// operation: %
-    pub fn rem(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().rem(r.inner.clone()),
+            inner: Intern::new(self.inner.add(rhs.inner.as_ref())),
         }
     }
 }
 
-impl Quantified for Integer {}
+impl Sub for Integer {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        Self {
+            inner: Intern::new(self.inner.sub(rhs.inner.as_ref())),
+        }
+    }
+}
+
+impl Mul for Integer {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        Self {
+            inner: Intern::new(self.inner.mul(rhs.inner.as_ref())),
+        }
+    }
+}
+
+impl Div for Integer {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self {
+        Self {
+            inner: Intern::new(self.inner.div(rhs.inner.as_ref())),
+        }
+    }
+}
+
+impl Rem for Integer {
+    type Output = Self;
+    fn rem(self, rhs: Self) -> Self {
+        Self {
+            inner: Intern::new(self.inner.rem(rhs.inner.as_ref())),
+        }
+    }
+}
+
+impl SMT for Integer {}
 
 /// Arbitrary precision rational number
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Rational {
-    inner: BigRational,
+    inner: Intern<BigRational>,
+}
+/// Convert to integer from literals
+macro_rules! rational_from_literal {
+    ($l:ty $(,$e:ty)* $(,)?) => {
+        impl From<$l> for Rational {
+            fn from(c: $l) -> Self {
+                Self {
+                    inner: Intern::new(BigRational::from(BigInt::from(c))),
+                }
+            }
+        }
+        $(impl From<$e> for Rational {
+            fn from(c: $e) -> Self {
+                Self {
+                    inner: Intern::new(BigRational::from(BigInt::from(c))),
+                }
+            }
+        })+
+    };
 }
 
-impl Rational {
-    /// create a rational constant, requires `inner` to be a **integer** literal
-    pub fn new(c: i128) -> Self {
+rational_from_literal!(i8, i16, i32, i64, i128, isize);
+rational_from_literal!(u8, u16, u32, u64, u128, usize);
+
+impl Add for Rational {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
         Self {
-            inner: BigRational::from(BigInt::from(c)),
-        }
-    }
-
-    /// operation: ==
-    pub fn eq(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner == r.inner,
-        }
-    }
-
-    /// operation: !=
-    pub fn ne(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner != r.inner,
-        }
-    }
-
-    /// operation: <
-    pub fn lt(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner < r.inner,
-        }
-    }
-
-    /// operation: <=
-    pub fn le(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner <= r.inner,
-        }
-    }
-
-    /// operation: >=
-    pub fn ge(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner >= r.inner,
-        }
-    }
-
-    /// operation: >
-    pub fn gt(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner > r.inner,
-        }
-    }
-
-    /// operation: +
-    pub fn add(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().add(r.inner.clone()),
-        }
-    }
-
-    /// operation: -
-    pub fn sub(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().sub(r.inner.clone()),
-        }
-    }
-
-    /// operation: *
-    pub fn mul(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().mul(r.inner.clone()),
-        }
-    }
-
-    /// operation: /
-    pub fn div(l: &Self, r: &Self) -> Self {
-        Self {
-            inner: l.inner.clone().div(r.inner.clone()),
+            inner: Intern::new(self.inner.add(rhs.inner.as_ref())),
         }
     }
 }
 
-impl Quantified for Rational {}
+impl Sub for Rational {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        Self {
+            inner: Intern::new(self.inner.sub(rhs.inner.as_ref())),
+        }
+    }
+}
+
+impl Mul for Rational {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        Self {
+            inner: Intern::new(self.inner.mul(rhs.inner.as_ref())),
+        }
+    }
+}
+
+impl Div for Rational {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self {
+        Self {
+            inner: Intern::new(self.inner.div(rhs.inner.as_ref())),
+        }
+    }
+}
+
+impl SMT for Rational {}
 
 /// SMT string
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Text {
-    inner: String,
+    inner: Intern<String>,
 }
 
-impl Text {
-    /// create a string constant, requires `inner` to be a literal
-    pub fn new(c: String) -> Self {
-        Self { inner: c }
-    }
-
-    /// operation: ==
-    pub fn eq(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner == r.inner,
-        }
-    }
-
-    /// operation: !=
-    pub fn ne(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner != r.inner,
-        }
-    }
-
-    /// operation: < (lexicographically)
-    pub fn lt(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner < r.inner,
-        }
-    }
-
-    /// operation: <= (lexicographically)
-    pub fn le(l: &Self, r: &Self) -> Boolean {
-        Boolean {
-            inner: l.inner <= r.inner,
+impl From<&'static str> for Text {
+    fn from(c: &'static str) -> Self {
+        Self {
+            inner: Intern::new(c.to_string()),
         }
     }
 }
 
-impl Quantified for Text {}
+impl SMT for Text {}
 
 /// SMT sequence
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
-pub struct Seq<T: Clone + Ord + Default> {
-    inner: Vec<T>,
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+pub struct Seq<T: SMT> {
+    inner: Intern<Vec<T>>,
 }
 
-impl<T: Clone + Ord + Default> Seq<T> {
+impl<T: SMT> Seq<T> {
     /// create an empty sequence
     pub fn empty() -> Self {
-        Self { inner: Vec::new() }
+        Self {
+            inner: Intern::new(vec![]),
+        }
     }
 
     /// operation: `v.append(e)`
-    pub fn append(v: &Self, e: &T) -> Self {
+    pub fn append(v: Self, e: T) -> Self {
         Self {
             inner: v.inner.iter().chain(std::iter::once(e)).cloned().collect(),
         }
@@ -324,9 +261,7 @@ impl<T: Clone + Ord + Default> Seq<T> {
 
     /// operation: `v.length()`
     pub fn length(v: &Self) -> Integer {
-        Integer {
-            inner: BigInt::from(v.inner.len()),
-        }
+        v.inner.len().into()
     }
 
     /// operation: `v.contains(e)`
@@ -345,15 +280,15 @@ impl<T: Clone + Ord + Default> Seq<T> {
     }
 }
 
-impl<T: Clone + Ord + Default> Quantified for Seq<T> {}
+impl<T: SMT> SMT for Seq<T> {}
 
 /// SMT set
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
-pub struct Set<T: Clone + Ord + Default> {
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+pub struct Set<T: SMT> {
     inner: BTreeSet<T>,
 }
 
-impl<T: Clone + Ord + Default> Set<T> {
+impl<T: SMT> Set<T> {
     /// create an empty set
     pub fn empty() -> Self {
         Self {
@@ -370,9 +305,7 @@ impl<T: Clone + Ord + Default> Set<T> {
 
     /// operation: `s.length()`
     pub fn length(s: &Self) -> Integer {
-        Integer {
-            inner: BigInt::from(s.inner.len()),
-        }
+        s.inner.len().into()
     }
 
     /// operation: `v.contains(e)`
@@ -383,15 +316,15 @@ impl<T: Clone + Ord + Default> Set<T> {
     }
 }
 
-impl<T: Clone + Ord + Default> Quantified for Set<T> {}
+impl<T: SMT> SMT for Set<T> {}
 
 /// SMT array
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
-pub struct Map<K: Clone + Ord + Default, V: Clone + Ord + Default> {
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+pub struct Map<K: SMT, V: SMT> {
     inner: BTreeMap<K, V>,
 }
 
-impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Map<K, V> {
+impl<K: SMT, V: SMT> Map<K, V> {
     /// create an empty map
     pub fn empty() -> Self {
         Self {
@@ -418,9 +351,7 @@ impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Map<K, V> {
 
     /// operation: `m.length()`
     pub fn length(m: &Self) -> Integer {
-        Integer {
-            inner: BigInt::from(m.inner.len()),
-        }
+        m.inner.len().into()
     }
 
     /// operation: `v.contains(e)`
@@ -431,10 +362,10 @@ impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Map<K, V> {
     }
 }
 
-impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Quantified for Map<K, V> {}
+impl<K: SMT, V: SMT> SMT for Map<K, V> {}
 
 /// Dynamically assigned error
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Error {
     inner: BTreeSet<usize>,
 }
@@ -455,4 +386,4 @@ impl Error {
     }
 }
 
-impl Quantified for Error {}
+impl SMT for Error {}
