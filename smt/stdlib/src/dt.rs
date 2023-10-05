@@ -24,7 +24,7 @@ pub trait Quantified: Default {
 }
 
 /// SMT boolean
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Boolean {
     inner: bool,
 }
@@ -80,7 +80,7 @@ impl Deref for Boolean {
 }
 
 /// Arbitrary precision integer
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Integer {
     inner: BigInt,
 }
@@ -174,7 +174,7 @@ impl Integer {
 impl Quantified for Integer {}
 
 /// Arbitrary precision rational number
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Rational {
     inner: BigRational,
 }
@@ -261,7 +261,7 @@ impl Rational {
 impl Quantified for Rational {}
 
 /// SMT string
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Text {
     inner: String,
 }
@@ -304,7 +304,7 @@ impl Text {
 impl Quantified for Text {}
 
 /// SMT sequence
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Seq<T: Clone + Ord + Default> {
     inner: Vec<T>,
 }
@@ -348,7 +348,7 @@ impl<T: Clone + Ord + Default> Seq<T> {
 impl<T: Clone + Ord + Default> Quantified for Seq<T> {}
 
 /// SMT set
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Set<T: Clone + Ord + Default> {
     inner: BTreeSet<T>,
 }
@@ -386,7 +386,7 @@ impl<T: Clone + Ord + Default> Set<T> {
 impl<T: Clone + Ord + Default> Quantified for Set<T> {}
 
 /// SMT array
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Map<K: Clone + Ord + Default, V: Clone + Ord + Default> {
     inner: BTreeMap<K, V>,
 }
@@ -434,7 +434,7 @@ impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Map<K, V> {
 impl<K: Clone + Ord + Default, V: Clone + Ord + Default> Quantified for Map<K, V> {}
 
 /// Dynamically assigned error
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Error {
     inner: BTreeSet<usize>,
 }

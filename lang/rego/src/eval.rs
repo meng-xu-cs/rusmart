@@ -32,11 +32,11 @@ impl Quantified for State {}
 #[smt_impl]
 pub fn seq_lt_recursive(l: &Seq<Value>, r: &Seq<Value>, i: &Integer) -> Boolean {
     #[allow(clippy::if_same_then_else)]
-    if Boolean::unpack(&Integer::eq(&Seq::length(r), i)) {
+    if *Integer::eq(&Seq::length(r), i) {
         Boolean::new(false)
-    } else if Boolean::unpack(&Integer::eq(&Seq::length(l), i)) {
+    } else if *Integer::eq(&Seq::length(l), i) {
         Boolean::new(true)
-    } else if Boolean::unpack(&lt(&Seq::at_unchecked(l, i), &Seq::at_unchecked(r, i))) {
+    } else if *lt(&Seq::at_unchecked(l, i), &Seq::at_unchecked(r, i)) {
         Boolean::new(true)
     } else {
         seq_lt_recursive(l, r, &Integer::add(i, &Integer::new(1)))
