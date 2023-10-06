@@ -49,9 +49,45 @@ pub fn seq_lt(l: Seq<Value>, r: Seq<Value>) -> Boolean {
 }
 
 #[smt_impl]
-pub fn lt(_lhs: Value, _rhs: Value) -> Boolean {
-    // TODO: match
-    false.into()
+pub fn lt(lhs: Value, rhs: Value) -> Boolean {
+    match (lhs, rhs) {
+        // null
+        (
+            Value::Null,
+            Value::Boolean(_)
+            | Value::Number(_)
+            | Value::String(_)
+            | Value::Seq(_)
+            | Value::Map(_)
+            | Value::Set(_),
+        ) => true.into(),
+
+        // boolean
+        (Value::Boolean(v_lhs), Value::Boolean(v_rhs)) => v_lhs & !v_rhs,
+        (
+            Value::Boolean(_),
+            Value::Number(_) | Value::String(_) | Value::Seq(_) | Value::Map(_) | Value::Set(_),
+        ) => true.into(),
+
+        // number
+        (Value::Number(v_lhs), Value::Number(v_rhs)) => (v_lhs < v_rhs).into(),
+        (Value::Number(_), Value::String(_) | Value::Seq(_) | Value::Map(_) | Value::Set(_)) => {
+            true.into()
+        }
+
+        // string
+        (Value::String(v_lhs), Value::String(v_rhs)) => (v_lhs < v_rhs).into(),
+        (Value::String(_), Value::Seq(_) | Value::Map(_) | Value::Set(_)) => true.into(),
+
+        // seq
+        (Value::Seq(v_lhs), Value::Seq(v_rhs)) => seq_lt(v_lhs, v_rhs),
+        (Value::Seq(_), Value::Map(_) | Value::Set(_)) => true.into(),
+
+        // TODO (others)
+
+        // default
+        _ => false.into(),
+    }
 }
 
 #[smt_spec(lt)]
