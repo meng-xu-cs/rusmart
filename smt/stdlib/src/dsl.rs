@@ -235,6 +235,16 @@ macro_rules! smt_expr {
     (($f:ident $($a:tt)*)) => {
         $f($($a,)*)
     };
+    // control-flow
+    ((? $c1:tt $v1:tt : $(? $cn:tt $vn:tt :)* | $d:tt)) => {
+        if *$crate::dsl::smt_expr!($c1) {
+            $crate::dsl::smt_expr!($v1)
+        } $(else if *$crate::dsl::smt_expr!($cn) {
+            $crate::dsl::smt_expr!($vn)
+        })* else {
+            $crate::dsl::smt_expr!($d)
+        }
+    };
     // type-inference enabled
     ($l:literal) => {
         $l.into()
@@ -289,8 +299,25 @@ pub use smt_expr;
 
 #[macro_export]
 macro_rules! smt_stmt {
-    (let $var:ident = $exp:expr; $($more:stmt)+) => {
-        let $var = $exp;
-        smt_stmt!($($more)+)
+    ($(# $v:ident = $e:tt;)* @ $exp:tt) => {
+        $(let $v = $crate::dsl::smt_expr!($e);)*
+        $crate::dsl::smt_expr!($exp)
     };
+    ($exp:tt) => {
+        $crate::dsl::smt_expr!($exp)
+    }
+}
+
+fn test() -> crate::dt::Boolean {
+    smt_expr! (
+        (? (b false) (b false) :? (b true) (b true) :| (b false))
+    )
+}
+
+fn test2() -> crate::dt::Boolean {
+    smt_stmt! {
+        # a = (b false);
+        # b = (b false);
+        @ (? a (b false) :? b (b true) :| (b false))
+    }
 }

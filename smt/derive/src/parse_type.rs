@@ -2,8 +2,7 @@ use std::collections::BTreeMap;
 
 use syn::{
     AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
-    ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, TypeReference,
-    Variant,
+    ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
 };
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, MarkedType, TypeName};
