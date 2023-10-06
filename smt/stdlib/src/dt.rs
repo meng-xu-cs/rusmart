@@ -253,7 +253,7 @@ impl From<&'static str> for Text {
     }
 }
 
-order_operator!(Text, eq, ne, lt, le, ge, gt);
+order_operator!(Text, eq, ne, lt, le);
 
 impl SMT for Text {}
 
