@@ -3,12 +3,12 @@ use std::collections::BTreeSet;
 use syn::{FnArg, PatType, Result, ReturnType, Signature};
 
 use crate::parse_ctxt::{bail_if_exists, bail_on, VarName};
-use crate::parse_type::{CtxtForType, TypeUse};
+use crate::parse_type::{CtxtForType, TypeTag};
 
 /// Function signature
 pub struct FuncSig {
-    params: Vec<(VarName, TypeUse)>,
-    ret_ty: TypeUse,
+    params: Vec<(VarName, TypeTag)>,
+    ret_ty: TypeTag,
 }
 
 impl FuncSig {
@@ -56,7 +56,7 @@ impl FuncSig {
                         bail_on!(pat, "duplicated parameter name");
                     }
 
-                    let ty = TypeUse::from_type(ctxt, ty)?;
+                    let ty = TypeTag::from_type(ctxt, ty)?;
                     param_decls.push((name, ty));
                 }
             }
@@ -65,7 +65,7 @@ impl FuncSig {
         // return type
         let ret_ty = match output {
             ReturnType::Default => bail_on!(sig, "no return type"),
-            ReturnType::Type(_, rty) => TypeUse::from_type(ctxt, rty)?,
+            ReturnType::Type(_, rty) => TypeTag::from_type(ctxt, rty)?,
         };
 
         // done

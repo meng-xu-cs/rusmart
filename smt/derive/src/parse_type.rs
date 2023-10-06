@@ -353,35 +353,3 @@ impl TypeDef {
         Ok(parsed)
     }
 }
-
-/// Represents all types that can appear in expressions
-pub enum TypeUse {
-    /// boolean
-    Base(TypeTag),
-    /// reference
-    Ref(TypeTag),
-}
-
-impl TypeUse {
-    /// Convert from a type
-    pub fn from_type<T: CtxtForType>(ctxt: &T, ty: &Type) -> Result<Self> {
-        let converted = match ty {
-            Type::Reference(TypeReference {
-                and_token: _,
-                lifetime,
-                mutability,
-                elem,
-            }) => {
-                bail_if_exists!(lifetime);
-                bail_if_exists!(mutability);
-                Self::Ref(TypeTag::from_type(ctxt, elem)?)
-            }
-            Type::Path(TypePath { qself, path }) => {
-                bail_if_exists!(qself);
-                Self::Base(TypeTag::from_path(ctxt, path)?)
-            }
-            _ => bail_on!(ty, "expect type path"),
-        };
-        Ok(converted)
-    }
-}

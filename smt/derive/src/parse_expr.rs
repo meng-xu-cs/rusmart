@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, FuncName, TypeName, VarName};
 use crate::parse_func::FuncSig;
-use crate::parse_type::{TypeDef, TypeUse};
+use crate::parse_type::{TypeDef, TypeTag};
 
 /// A context suitable for expression analysis
 pub trait CtxtForExpr {
@@ -143,7 +143,7 @@ pub enum Op {
 /// Instructions (operations with type)
 pub struct Inst {
     op: Box<Op>,
-    ty: TypeUse,
+    ty: TypeTag,
 }
 
 /// Expressions
@@ -159,7 +159,7 @@ pub enum Expr {
 
 impl Expr {
     /// Retrieve the type of an expression
-    pub fn ty(&self) -> &TypeUse {
+    pub fn ty(&self) -> &TypeTag {
         let i = match self {
             Self::Unit(inst) => inst,
             Self::Block { lets: _, body } => body,
@@ -179,14 +179,14 @@ pub enum Kind {
 /// A helper for expression parsing
 struct ExprParseCtxt<'a, 'b> {
     kind: Kind,
-    vars: &'a BTreeMap<VarName, &'b TypeUse>,
+    vars: &'a BTreeMap<VarName, &'b TypeTag>,
     bindings: Vec<(VarName, Expr)>,
-    new_vars: BTreeMap<VarName, TypeUse>,
+    new_vars: BTreeMap<VarName, TypeTag>,
 }
 
 impl<'a, 'b> ExprParseCtxt<'a, 'b> {
     /// For parsing in impl context
-    fn for_impl(vars: &'a BTreeMap<VarName, &'b TypeUse>) -> Self {
+    fn for_impl(vars: &'a BTreeMap<VarName, &'b TypeTag>) -> Self {
         Self {
             kind: Kind::Impl,
             vars,
@@ -196,7 +196,7 @@ impl<'a, 'b> ExprParseCtxt<'a, 'b> {
     }
 
     /// For parsing in spec context
-    fn for_spec(vars: &'a BTreeMap<VarName, &'b TypeUse>) -> Self {
+    fn for_spec(vars: &'a BTreeMap<VarName, &'b TypeTag>) -> Self {
         Self {
             kind: Kind::Spec,
             vars,
