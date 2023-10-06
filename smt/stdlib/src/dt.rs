@@ -7,6 +7,19 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::cast::ToPrimitive;
 
+/// Pre-defined order (including equality and comparison) operators
+macro_rules! order_operator {
+    ($l:ty $(,$op: tt)*) => {
+        impl $l {
+            $(
+                pub fn $op(self, rhs: Self) -> Boolean {
+                    self.inner.as_ref().eq(rhs.inner.as_ref()).into()
+            }
+            )*
+        }
+    };
+}
+
 /// Marks that this type is an SMT-enabled type
 pub trait SMT: 'static + Copy + Ord + Hash + Default + Sync + Send {
     /// variable: any
@@ -154,6 +167,8 @@ impl Rem for Integer {
     }
 }
 
+order_operator!(Integer, eq, ne, lt, le, ge, gt);
+
 impl SMT for Integer {}
 
 /// Arbitrary precision rational number
@@ -220,6 +235,8 @@ impl Div for Rational {
     }
 }
 
+order_operator!(Rational, eq, ne, lt, le, ge, gt);
+
 impl SMT for Rational {}
 
 /// SMT string
@@ -235,6 +252,8 @@ impl From<&'static str> for Text {
         }
     }
 }
+
+order_operator!(Text, eq, ne, lt, le, ge, gt);
 
 impl SMT for Text {}
 
