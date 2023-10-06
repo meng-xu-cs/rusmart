@@ -92,6 +92,18 @@ pub fn lt(lhs: Value, rhs: Value) -> Boolean {
 
 #[smt_spec(lt)]
 pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
-    // TODO: match
     false.into()
+}
+
+#[smt_spec(seq_lt)]
+pub fn spec_seq_lt(lhs: Seq<Value>, rhs: Seq<Value>) -> Boolean {
+    (|k: Integer| {
+        Boolean::from(k >= 0.into())
+            & (k < Seq::length(rhs)).into()
+            & (|i: Integer| {
+                Boolean::from(i >= 0.into())
+                    & (i < k).into()
+                    & spec_lt(Seq::at_unchecked(lhs, i), Seq::at_unchecked(rhs, k))
+            })(Integer::forall())
+    })(Integer::exists())
 }
