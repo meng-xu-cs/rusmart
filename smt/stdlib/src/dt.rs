@@ -1,14 +1,14 @@
-use internment::Intern;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
 use std::ops::{Add, BitAnd, BitOr, BitXor, Deref, Div, Mul, Not, Rem, Sub};
 
+use internment::Intern;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::cast::ToPrimitive;
 
 /// Marks that this type is an SMT-enabled type
-pub trait SMT: Copy + Ord + Hash + Default {
+pub trait SMT: 'static + Copy + Ord + Hash + Default + Sync + Send {
     /// variable: any
     fn any() -> Self {
         Self::default()
@@ -113,7 +113,7 @@ impl Add for Integer {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.add(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().add(rhs.inner.as_ref())),
         }
     }
 }
@@ -122,7 +122,7 @@ impl Sub for Integer {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.sub(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().sub(rhs.inner.as_ref())),
         }
     }
 }
@@ -131,7 +131,7 @@ impl Mul for Integer {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.mul(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().mul(rhs.inner.as_ref())),
         }
     }
 }
@@ -140,7 +140,7 @@ impl Div for Integer {
     type Output = Self;
     fn div(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.div(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().div(rhs.inner.as_ref())),
         }
     }
 }
@@ -149,7 +149,7 @@ impl Rem for Integer {
     type Output = Self;
     fn rem(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.rem(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().rem(rhs.inner.as_ref())),
         }
     }
 }
@@ -188,7 +188,7 @@ impl Add for Rational {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.add(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().add(rhs.inner.as_ref())),
         }
     }
 }
@@ -197,7 +197,7 @@ impl Sub for Rational {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.sub(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().sub(rhs.inner.as_ref())),
         }
     }
 }
@@ -206,7 +206,7 @@ impl Mul for Rational {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.mul(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().mul(rhs.inner.as_ref())),
         }
     }
 }
@@ -215,7 +215,7 @@ impl Div for Rational {
     type Output = Self;
     fn div(self, rhs: Self) -> Self {
         Self {
-            inner: Intern::new(self.inner.div(rhs.inner.as_ref())),
+            inner: Intern::new(self.inner.as_ref().div(rhs.inner.as_ref())),
         }
     }
 }
@@ -255,28 +255,25 @@ impl<T: SMT> Seq<T> {
     /// operation: `v.append(e)`
     pub fn append(v: Self, e: T) -> Self {
         Self {
-            inner: v.inner.iter().chain(std::iter::once(e)).cloned().collect(),
+            inner: Intern::new(v.inner.iter().copied().chain(std::iter::once(e)).collect()),
         }
     }
 
     /// operation: `v.length()`
-    pub fn length(v: &Self) -> Integer {
+    pub fn length(v: Self) -> Integer {
         v.inner.len().into()
     }
 
     /// operation: `v.contains(e)`
-    pub fn contains(v: &Self, e: &T) -> Boolean {
-        Boolean {
-            inner: v.inner.contains(e),
-        }
+    pub fn contains(v: Self, e: T) -> Boolean {
+        v.inner.contains(&e).into()
     }
 
     /// operation: `v[i]` with partial semantics (valid only when `i` is in bound)
-    pub fn at_unchecked(v: &Self, i: &Integer) -> T {
-        v.inner
+    pub fn at_unchecked(v: Self, i: Integer) -> T {
+        *v.inner
             .get(i.inner.to_usize().expect("index out of usize range"))
             .expect("index out of bound")
-            .clone()
     }
 }
 
@@ -285,34 +282,32 @@ impl<T: SMT> SMT for Seq<T> {}
 /// SMT set
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Set<T: SMT> {
-    inner: BTreeSet<T>,
+    inner: Intern<BTreeSet<T>>,
 }
 
 impl<T: SMT> Set<T> {
     /// create an empty set
     pub fn empty() -> Self {
         Self {
-            inner: BTreeSet::new(),
+            inner: Intern::new(BTreeSet::new()),
         }
     }
 
     /// operation: `s.insert(e)`
-    pub fn insert(s: &Self, e: &T) -> Self {
+    pub fn insert(s: Self, e: T) -> Self {
         Self {
-            inner: s.inner.iter().chain(std::iter::once(e)).cloned().collect(),
+            inner: Intern::new(s.inner.iter().copied().chain(std::iter::once(e)).collect()),
         }
     }
 
     /// operation: `s.length()`
-    pub fn length(s: &Self) -> Integer {
+    pub fn length(s: Self) -> Integer {
         s.inner.len().into()
     }
 
     /// operation: `v.contains(e)`
-    pub fn contains(s: &Self, e: &T) -> Boolean {
-        Boolean {
-            inner: s.inner.contains(e),
-        }
+    pub fn contains(s: Self, e: T) -> Boolean {
+        s.inner.contains(&e).into()
     }
 }
 
@@ -321,44 +316,43 @@ impl<T: SMT> SMT for Set<T> {}
 /// SMT array
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Map<K: SMT, V: SMT> {
-    inner: BTreeMap<K, V>,
+    inner: Intern<BTreeMap<K, V>>,
 }
 
 impl<K: SMT, V: SMT> Map<K, V> {
     /// create an empty map
     pub fn empty() -> Self {
         Self {
-            inner: BTreeMap::new(),
+            inner: Intern::new(BTreeMap::new()),
         }
     }
 
     /// operation: `m.put(k, v)`, will override `v` if `k` already exists
-    pub fn put_unchecked(m: &Self, k: &K, v: &V) -> Self {
+    pub fn put_unchecked(m: Self, k: K, v: V) -> Self {
         Self {
-            inner: m
-                .inner
-                .iter()
-                .chain(std::iter::once((k, v)))
-                .map(|(i, e)| (i.clone(), e.clone()))
-                .collect(),
+            inner: Intern::new(
+                m.inner
+                    .iter()
+                    .map(|(k, v)| (*k, *v))
+                    .chain(std::iter::once((k, v)))
+                    .collect(),
+            ),
         }
     }
 
     /// operation: `m.get(k)` with partial semantics (valid only when `k` exists)
-    pub fn get_unchecked(m: &Self, k: &K) -> V {
-        m.inner.get(k).expect("key does not exist").clone()
+    pub fn get_unchecked(m: Self, k: K) -> V {
+        *m.inner.get(&k).expect("key does not exist")
     }
 
     /// operation: `m.length()`
-    pub fn length(m: &Self) -> Integer {
+    pub fn length(m: Self) -> Integer {
         m.inner.len().into()
     }
 
     /// operation: `v.contains(e)`
-    pub fn contains_key(m: &Self, k: &K) -> Boolean {
-        Boolean {
-            inner: m.inner.contains_key(k),
-        }
+    pub fn contains_key(m: Self, k: K) -> Boolean {
+        m.inner.contains_key(&k).into()
     }
 }
 
@@ -367,21 +361,21 @@ impl<K: SMT, V: SMT> SMT for Map<K, V> {}
 /// Dynamically assigned error
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Error {
-    inner: BTreeSet<usize>,
+    inner: Intern<BTreeSet<usize>>,
 }
 
 impl Error {
     /// Create a fresh error
     pub fn fresh() -> Self {
         Self {
-            inner: BTreeSet::new(),
+            inner: Intern::new(BTreeSet::new()),
         }
     }
 
     /// Merge two errors
-    pub fn merge(l: &Self, r: &Self) -> Self {
+    pub fn merge(l: Self, r: Self) -> Self {
         Self {
-            inner: l.inner.iter().chain(r.inner.iter()).cloned().collect(),
+            inner: Intern::new(l.inner.iter().chain(r.inner.iter()).copied().collect()),
         }
     }
 }
