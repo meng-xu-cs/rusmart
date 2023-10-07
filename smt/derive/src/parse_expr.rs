@@ -1,4 +1,4 @@
-use syn::{parse, Local, LocalInit, Result, Stmt};
+use syn::{Expr as Exp, Local, LocalInit, Result, Stmt};
 
 use std::collections::BTreeMap;
 
@@ -169,18 +169,19 @@ impl Expr {
 
     /// Extract one from impl body
     pub fn from_impl(sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        let mut parser = ExprParseCtxt::for_impl(sig);
+        let mut parser = ExprParseCtxt::new(Kind::Impl, sig);
         parser.convert_stmts(stmt)
     }
 
     /// Extract one from spec body
     pub fn from_spec(sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        let mut parser = ExprParseCtxt::for_spec(sig);
+        let mut parser = ExprParseCtxt::new(Kind::Spec, sig);
         parser.convert_stmts(stmt)
     }
 }
 
 /// Marks whether this expression is for impl or spec
+#[derive(Copy, Clone)]
 enum Kind {
     /// actual implementation
     Impl,
@@ -189,39 +190,53 @@ enum Kind {
 }
 
 /// A helper for expression parsing
-struct ExprParseCtxt<'a> {
+struct ExprParseCtxt {
     kind: Kind,
-    vars: BTreeMap<VarName, &'a TypeTag>,
+    vars: BTreeMap<VarName, TypeTag>,
     bindings: Vec<(VarName, Expr)>,
     new_vars: BTreeMap<VarName, TypeTag>,
 }
 
-impl<'a> ExprParseCtxt<'a> {
-    /// For parsing in impl context
-    fn for_impl(sig: &'a FuncSig) -> Self {
+impl ExprParseCtxt {
+    /// For creating a new impl context
+    fn new(kind: Kind, sig: &FuncSig) -> Self {
         Self {
-            kind: Kind::Impl,
+            kind,
             vars: sig.param_map(),
             bindings: vec![],
             new_vars: BTreeMap::new(),
         }
     }
 
-    /// For parsing in spec context
-    fn for_spec(sig: &'a FuncSig) -> Self {
+    /// Duplicate a context for parsing sub-expressions
+    fn dup(&self) -> Self {
+        let mut vars = self.vars.clone();
+        for (name, ty) in self.new_vars.iter() {
+            vars.insert(name.clone(), ty.clone());
+        }
         Self {
-            kind: Kind::Spec,
-            vars: sig.param_map(),
+            kind: self.kind,
+            vars,
             bindings: vec![],
             new_vars: BTreeMap::new(),
         }
+    }
+
+    /// Ensure the variable name is unique
+    fn has_name(&self, name: &VarName) -> bool {
+        self.vars.contains_key(name) || self.new_vars.contains_key(name)
     }
 
     /// Consume the stream of statements
     fn convert_stmts(&mut self, stmts: &[Stmt]) -> Result<Expr> {
+        let mut expr_found = None;
         for stmt in stmts {
             match stmt {
                 Stmt::Local(binding) => {
+                    if expr_found.is_some() {
+                        bail_on!(binding, "let-bindings not allowed after expression");
+                    }
+
                     // this is a let-binding
                     let Local {
                         attrs: _,
@@ -231,7 +246,13 @@ impl<'a> ExprParseCtxt<'a> {
                         semi_token: _,
                     } = binding;
 
+                    // find the name
                     let name = VarName::from_pat(pat)?;
+                    if self.has_name(&name) {
+                        bail_on!(pat, "name conflict");
+                    }
+
+                    // parse the body
                     let body = bail_if_missing!(init, binding, "expect initializer");
                     let LocalInit {
                         eq_token: _,
@@ -239,14 +260,37 @@ impl<'a> ExprParseCtxt<'a> {
                         diverge,
                     } = body;
                     bail_if_exists!(diverge.as_ref().map(|(_, div)| div));
+
+                    let mut parser = self.dup();
+                    let body_expr = parser.convert_expr(expr)?;
+
+                    // done
+                    self.new_vars.insert(name.clone(), body_expr.ty().clone());
+                    self.bindings.push((name, body_expr));
                 }
                 Stmt::Expr(expr, semi_token) => {
                     // expecting a unit expression
                     bail_if_exists!(semi_token);
+
+                    // convert the expression and mark that we have found it in the statements
+                    expr_found = Some(self.convert_expr(expr)?);
                 }
                 Stmt::Item(_) | Stmt::Macro(_) => bail_on!(stmt, "unexpected item"),
             }
         }
+
+        // check we have an expression
+        match expr_found {
+            None => bail_on!(
+                stmts.last().expect("at least one statement"),
+                "unable to find the main expression"
+            ),
+            Some(e) => Ok(e),
+        }
+    }
+
+    /// Convert an expression
+    fn convert_expr(&mut self, expr: &Exp) -> Result<Expr> {
         todo!()
     }
 }

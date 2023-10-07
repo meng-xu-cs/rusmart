@@ -77,10 +77,10 @@ impl FuncSig {
     }
 
     /// Collect variables declared in the parameter list
-    pub fn param_map(&self) -> BTreeMap<VarName, &TypeTag> {
+    pub fn param_map(&self) -> BTreeMap<VarName, TypeTag> {
         self.params
             .iter()
-            .map(|(name, ty)| (name.clone(), ty))
+            .map(|(name, ty)| (name.clone(), ty.clone()))
             .collect()
     }
 }

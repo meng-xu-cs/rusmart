@@ -337,6 +337,7 @@ impl Context {
     pub fn next(self) -> Result<ContextWithType> {
         let mut parsed_types = BTreeMap::new();
         for (name, marked) in &self.types {
+            trace!("handling type: {}", name);
             let parsed = TypeDef::from_marked(&self, marked)?;
             trace!("type analyzed: {}", name);
             parsed_types.insert(name.clone(), parsed);
@@ -381,6 +382,7 @@ impl ContextWithType {
                 block: _, // handled later
             } = &marked.0;
 
+            trace!("handling impl sig: {}", name);
             let sig = FuncSig::from_sig(&self, sig)?;
             trace!("impl sig analyzed: {}", name);
             sig_impls.insert(name.clone(), sig);
@@ -396,6 +398,7 @@ impl ContextWithType {
                 block: _, // handled later
             } = &marked.0;
 
+            trace!("handling spec sig: {}", name);
             let sig = FuncSig::from_sig(&self, sig)?;
             trace!("spec sig analyzed: {}", name);
             sig_specs.insert(name.clone(), sig);
@@ -451,6 +454,7 @@ impl ContextWithTypeAndSig {
         // impl
         let mut body_impls = BTreeMap::new();
         for (name, (sig, stmt)) in &self.impls {
+            trace!("handling impl body: {}", name);
             let body = Expr::from_impl(sig, stmt)?;
             trace!("impl body analyzed: {}", name);
             body_impls.insert(name.clone(), body);
@@ -459,6 +463,7 @@ impl ContextWithTypeAndSig {
         // spec
         let mut body_specs = BTreeMap::new();
         for (name, (sig, stmt)) in &self.specs {
+            trace!("handling spec body: {}", name);
             let body = Expr::from_spec(sig, stmt)?;
             trace!("spec body analyzed: {}", name);
             body_specs.insert(name.clone(), body);
