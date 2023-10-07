@@ -126,6 +126,12 @@ impl TryFrom<&Ident> for TypeName {
     }
 }
 
+impl AsRef<str> for TypeName {
+    fn as_ref(&self) -> &str {
+        &self.ident
+    }
+}
+
 impl Display for TypeName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.ident)
@@ -136,6 +142,12 @@ impl Display for TypeName {
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct FuncName {
     ident: String,
+}
+
+impl AsRef<str> for FuncName {
+    fn as_ref(&self) -> &str {
+        &self.ident
+    }
 }
 
 impl Display for FuncName {
@@ -156,6 +168,12 @@ impl TryFrom<&Ident> for FuncName {
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct VarName {
     ident: String,
+}
+
+impl AsRef<str> for VarName {
+    fn as_ref(&self) -> &str {
+        &self.ident
+    }
 }
 
 impl Display for VarName {
@@ -515,7 +533,7 @@ impl ContextWithTypeAndSig {
         let mut body_impls = BTreeMap::new();
         for (name, (sig, stmt)) in &self.impls {
             trace!("handling impl body: {}", name);
-            let body = Expr::from_impl(sig, stmt)?;
+            let body = Expr::from_impl(&self, sig, stmt)?;
             trace!("impl body analyzed: {}", name);
             body_impls.insert(name.clone(), body);
         }
@@ -524,7 +542,7 @@ impl ContextWithTypeAndSig {
         let mut body_specs = BTreeMap::new();
         for (name, (sig, stmt)) in &self.specs {
             trace!("handling spec body: {}", name);
-            let body = Expr::from_spec(sig, stmt)?;
+            let body = Expr::from_spec(&self, sig, stmt)?;
             trace!("spec body analyzed: {}", name);
             body_specs.insert(name.clone(), body);
         }

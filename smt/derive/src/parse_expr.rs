@@ -1,5 +1,6 @@
 use syn::{
-    Block, Expr as Exp, ExprBlock, ExprCall, ExprPath, Local, LocalInit, Path, Result, Stmt,
+    Block, Expr as Exp, ExprBlock, ExprCall, ExprPath, Local, LocalInit, Path, PathArguments,
+    PathSegment, Result, Stmt,
 };
 
 use std::collections::BTreeMap;
@@ -170,14 +171,14 @@ impl Expr {
     }
 
     /// Extract one from impl body
-    pub fn from_impl(sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        let mut parser = ExprParseCtxt::new(Kind::Impl, sig);
+    pub fn from_impl<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
+        let mut parser = ExprParseCtxt::new(ctxt, Kind::Impl, sig);
         parser.convert_stmts(stmt)
     }
 
     /// Extract one from spec body
-    pub fn from_spec(sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        let mut parser = ExprParseCtxt::new(Kind::Spec, sig);
+    pub fn from_spec<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
+        let mut parser = ExprParseCtxt::new(ctxt, Kind::Spec, sig);
         parser.convert_stmts(stmt)
     }
 }
@@ -192,17 +193,19 @@ enum Kind {
 }
 
 /// A helper for expression parsing
-struct ExprParseCtxt {
+struct ExprParseCtxt<'a, T: CtxtForExpr> {
+    ctxt: &'a T,
     kind: Kind,
     vars: BTreeMap<VarName, TypeTag>,
     bindings: Vec<(VarName, Expr)>,
     new_vars: BTreeMap<VarName, TypeTag>,
 }
 
-impl ExprParseCtxt {
+impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
     /// For creating a new impl context
-    fn new(kind: Kind, sig: &FuncSig) -> Self {
+    fn new(ctxt: &'a T, kind: Kind, sig: &FuncSig) -> Self {
         Self {
+            ctxt,
             kind,
             vars: sig.param_map(),
             bindings: vec![],
@@ -217,6 +220,7 @@ impl ExprParseCtxt {
             vars.insert(name.clone(), ty.clone());
         }
         Self {
+            ctxt: self.ctxt,
             kind: self.kind,
             vars,
             bindings: vec![],
@@ -227,6 +231,21 @@ impl ExprParseCtxt {
     /// Ensure the variable name is unique
     fn has_name(&self, name: &VarName) -> bool {
         self.vars.contains_key(name) || self.new_vars.contains_key(name)
+    }
+
+    /// Get the callee signature
+    fn get_func_sig(&self, name: &FuncName, path: &Path) -> Result<&FuncSig> {
+        let candidate = match self.kind {
+            Kind::Impl => self.ctxt.get_impl_sig(name),
+            Kind::Spec => self
+                .ctxt
+                .get_spec_sig(name)
+                .or_else(|| self.ctxt.get_impl_sig(name)),
+        };
+        match candidate {
+            None => bail_on!(path, "unknown function"),
+            Some(sig) => Ok(sig),
+        }
     }
 
     /// Consume the stream of statements
@@ -309,6 +328,7 @@ impl ExprParseCtxt {
                 self.convert_stmts(stmts)
             }
             Exp::Call(expr_call) => {
+                // extract the path
                 let ExprCall {
                     attrs: _,
                     func,
@@ -332,6 +352,35 @@ impl ExprParseCtxt {
                     segments,
                 } = path;
                 bail_if_exists!(leading_colon);
+
+                // extract the callee
+                let mut iter = segments.iter().rev();
+                let method = match iter.next() {
+                    None => bail_on!(segments, "invalid path"),
+                    Some(segment) => {
+                        let PathSegment { ident, arguments } = segment;
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected path arguments");
+                        }
+                        FuncName::try_from(ident)?
+                    }
+                };
+                let class = match iter.next() {
+                    None => None,
+                    Some(segment) => {
+                        let PathSegment { ident, arguments } = segment;
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected path arguments");
+                        }
+                        Some(ident.to_string())
+                    }
+                };
+                match (class.as_deref(), method.as_ref()) {
+                    (None | Some("Self"), _) => {
+                        self.get_func_sig(&method, path)?;
+                    }
+                    _ => bail_on!(path, "unknown callee"),
+                }
 
                 // TODO
                 bail_on!(segments, "TODO");
