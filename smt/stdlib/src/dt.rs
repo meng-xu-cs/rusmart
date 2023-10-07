@@ -13,8 +13,26 @@ macro_rules! order_operator {
         impl $l {
             $(
                 pub fn $op(self, rhs: Self) -> Boolean {
-                    self.inner.as_ref().eq(rhs.inner.as_ref()).into()
+                    self.inner.as_ref().$op(rhs.inner.as_ref()).into()
             }
+            )*
+        }
+    };
+}
+
+/// Pre-defined arithmetic operators
+macro_rules! arith_operator {
+    ($l:ty $(,$op: tt)*) => {
+        impl $l {
+            $(
+                #[allow(clippy::should_implement_trait)]
+                pub fn $op(self, rhs: Self) -> Self {
+                    Self {
+                        inner: Intern::new(
+                            self.inner.as_ref().$op(rhs.inner.as_ref())
+                        )
+                    }
+                }
             )*
         }
     };
@@ -121,52 +139,7 @@ macro_rules! integer_from_literal {
 
 integer_from_literal!(i8, i16, i32, i64, i128, isize);
 integer_from_literal!(u8, u16, u32, u64, u128, usize);
-
-impl Add for Integer {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().add(rhs.inner.as_ref())),
-        }
-    }
-}
-
-impl Sub for Integer {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().sub(rhs.inner.as_ref())),
-        }
-    }
-}
-
-impl Mul for Integer {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().mul(rhs.inner.as_ref())),
-        }
-    }
-}
-
-impl Div for Integer {
-    type Output = Self;
-    fn div(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().div(rhs.inner.as_ref())),
-        }
-    }
-}
-
-impl Rem for Integer {
-    type Output = Self;
-    fn rem(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().rem(rhs.inner.as_ref())),
-        }
-    }
-}
-
+arith_operator!(Integer, add, sub, mul, div, rem);
 order_operator!(Integer, eq, ne, lt, le, ge, gt);
 
 impl SMT for Integer {}
@@ -235,6 +208,7 @@ impl Div for Rational {
     }
 }
 
+arith_operator!(Rational, add, sub, mul, div);
 order_operator!(Rational, eq, ne, lt, le, ge, gt);
 
 impl SMT for Rational {}

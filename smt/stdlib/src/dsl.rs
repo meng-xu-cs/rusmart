@@ -245,54 +245,11 @@ macro_rules! smt_expr {
             $crate::dsl::smt_expr!($d)
         }
     };
-    // type-inference enabled
-    ($l:literal) => {
-        $l.into()
-    };
-    ((== $lhs:tt $rhs:tt)) => {
-        $crate::dt::Boolean::from(
-            $crate::dsl::smt_expr!($lhs) == $crate::dsl::smt_expr!($rhs)
-        )
-    };
-    ((!= $lhs:tt $rhs:tt)) => {
-        $crate::dt::Boolean::from(
-            $crate::dsl::smt_expr!($lhs) != $crate::dsl::smt_expr!($rhs)
-        )
-    };
-    ((< $lhs:tt $rhs:tt)) => {
-        $crate::dt::Boolean::from(
-            $crate::dsl::smt_expr!($lhs) < $crate::dsl::smt_expr!($rhs)
-        )
-    };
-    ((<= $lhs:tt $rhs:tt)) => {
-        $crate::dt::Boolean::from(
-            $crate::dsl::smt_expr!($lhs) <= $crate::dsl::smt_expr!($rhs)
-        )
-    };
-    ((>= $lhs:tt $rhs:tt)) => {
-        $crate::dt::Boolean::from(
-            $crate::dsl::smt_expr!($lhs) >= $crate::dsl::smt_expr!($rhs)
-        )
-    };
-    ((> $lhs:tt $rhs:tt)) => {
-        $crate::dt::Boolean::from(
-            $crate::dsl::smt_expr!($lhs) > $crate::dsl::smt_expr!($rhs)
-        )
-    };
-    ((+ $lhs:tt $rhs:tt)) => {
-        $crate::dsl::smt_expr!($lhs) + $crate::dsl::smt_expr!($rhs)
-    };
-    ((- $lhs:tt $rhs:tt)) => {
-        $crate::dsl::smt_expr!($lhs) - $crate::dsl::smt_expr!($rhs)
-    };
-    ((* $lhs:tt $rhs:tt)) => {
-        $crate::dsl::smt_expr!($lhs) * $crate::dsl::smt_expr!($rhs)
-    };
-    ((/ $lhs:tt $rhs:tt)) => {
-        $crate::dsl::smt_expr!($lhs) / $crate::dsl::smt_expr!($rhs)
-    };
-    ((% $lhs:tt $rhs:tt)) => {
-        $crate::dsl::smt_expr!($lhs) & $crate::dsl::smt_expr!($rhs)
+    ((~ $v:tt $(| $p1:pat => $e1:tt)+ $(_ => $d:tt)?)) => {
+        match $v {
+            $($p1 => $crate::dsl::smt_expr!($e1),)+
+            $(_ => $crate::dsl::smt_expr!($d),)?
+        }
     };
 }
 pub use smt_expr;
