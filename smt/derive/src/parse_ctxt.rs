@@ -16,10 +16,25 @@ use crate::parse_type::{CtxtForType, TypeDef};
 /// Exit the parsing early with an error
 macro_rules! bail_on {
     ($item:expr, $msg:literal $(,)?) => {
-        return Err(syn::Error::new(syn::spanned::Spanned::span($item), $msg))
+        {
+            let __x = $item;
+            let __s = syn::spanned::Spanned::span($item);
+            return Err(syn::Error::new(
+                __s,
+                format!("{}\n{}", $msg, quote::quote_spanned!(__s => #__x)),
+            ))
+        }
     };
     ($item:expr, $fmt:expr, $($arg:tt)*) => {
-        return Err(syn::Error::new(syn::spanned::Spanned::span($item), format!($fmt, $($arg)*)))
+        {
+            let __x = $item;
+            let __s = syn::spanned::Spanned::span($item);
+            let __m = format!($fmt, $($arg)*);
+            return Err(syn::Error::new(
+                __s,
+                format!("{}\n{}", __m, quote::quote_spanned!(__s => #__x)),
+            ))
+        }
     };
 }
 pub(crate) use bail_on;
@@ -28,15 +43,32 @@ pub(crate) use bail_on;
 macro_rules! bail_on_with_note {
     ($loc:expr, $note:literal, $item:expr, $msg:literal $(,)?) => {
         return Err({
-            let mut __e = syn::Error::new(syn::spanned::Spanned::span($item), $msg);
-            __e.combine(syn::Error::new(syn::spanned::Spanned::span($loc), $note));
+            let __x1 = $item;
+            let __s1 = syn::spanned::Spanned::span($item);
+            let __n1 = format!("{}\n{}", $msg, quote::quote_spanned!(__s1 => #__x1));
+
+            let __x2 = $loc;
+            let __s2 = syn::spanned::Spanned::span($loc);
+            let __n2 = format!("{}\n{}", $note, quote::quote_spanned!(__s2 => #__x2));
+
+            let mut __e = syn::Error::new(__s1, __n1);
+            __e.combine(syn::Error::new(__s2, __n2));
             __e
         })
     };
     ($loc:expr, $note:literal, $item:expr, $fmt:expr, $($arg:tt)*) => {
         return Err({
-            let mut __e = syn::Error::new(syn::spanned::Spanned::span($item), format!($fmt, $($arg)*));
-            __e.combine(syn::Error::new(syn::spanned::Spanned::span($loc), $note));
+            let __x1 = $item;
+            let __s1 = syn::spanned::Spanned::span($item);
+            let __m1 = format!($fmt, $($arg)*);
+            let __n1 = format!("{}\n{}", __m1, quote::quote_spanned!(__s1 => #__x1));
+
+            let __x2 = $loc;
+            let __s2 = syn::spanned::Spanned::span($loc);
+            let __m2 = format!("{}\n{}", $note, quote::quote_spanned!(__s2 => #__x2));
+
+            let mut __e = syn::Error::new(__s1, __m1);
+            __e.combine(syn::Error::new(__s2, __m2));
             __e
         })
     };

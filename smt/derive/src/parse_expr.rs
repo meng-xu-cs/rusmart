@@ -325,7 +325,7 @@ impl ExprParseCtxt {
                     qself,
                     path,
                 } = call_path;
-                bail_if_exists!(qself);
+                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
 
                 let Path {
                     leading_colon,

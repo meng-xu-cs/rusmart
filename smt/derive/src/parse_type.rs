@@ -160,7 +160,7 @@ impl TypeTag {
     pub fn from_type<T: CtxtForType>(ctxt: &T, ty: &Type) -> Result<Self> {
         match ty {
             Type::Path(TypePath { qself, path }) => {
-                bail_if_exists!(qself);
+                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
                 Self::from_path(ctxt, path)
             }
             _ => bail_on!(ty, "expect type path"),
