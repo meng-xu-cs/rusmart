@@ -9,7 +9,7 @@ use syn::{
 };
 use walkdir::WalkDir;
 
-use crate::parse_func::FuncSig;
+use crate::parse_func::{FuncDef, FuncSig};
 use crate::parse_type::{CtxtForType, TypeDef};
 
 /// Exit the parsing early with an error
@@ -62,7 +62,7 @@ macro_rules! bail_if_missing {
         }
     };
 }
-use crate::parse_expr::CtxtForExpr;
+use crate::parse_expr::{CtxtForExpr, Expr};
 pub(crate) use bail_if_missing;
 
 /// Test whether an identifier is a reserved keyword
@@ -445,6 +445,54 @@ pub struct ContextWithTypeAndSig {
     specs: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
 }
 
+impl ContextWithTypeAndSig {
+    /// Parse signatures
+    pub fn next(self) -> Result<ContextWithTypeAndFunc> {
+        // impl
+        let mut body_impls = BTreeMap::new();
+        for (name, (sig, stmt)) in &self.impls {
+            let body = Expr::from_impl(sig, stmt)?;
+            trace!("impl body analyzed: {}", name);
+            body_impls.insert(name.clone(), body);
+        }
+
+        // spec
+        let mut body_specs = BTreeMap::new();
+        for (name, (sig, stmt)) in &self.specs {
+            let body = Expr::from_spec(sig, stmt)?;
+            trace!("spec body analyzed: {}", name);
+            body_specs.insert(name.clone(), body);
+        }
+
+        let Self {
+            types,
+            impls,
+            specs,
+        } = self;
+
+        let unpacked_impls = impls
+            .into_iter()
+            .map(|(name, (sig, _))| {
+                let body = body_impls.remove(&name).unwrap();
+                (name, FuncDef::new(sig, body))
+            })
+            .collect();
+        let unpacked_specs = specs
+            .into_iter()
+            .map(|(name, (sig, _))| {
+                let body = body_impls.remove(&name).unwrap();
+                (name, FuncDef::new(sig, body))
+            })
+            .collect();
+
+        Ok(ContextWithTypeAndFunc {
+            types,
+            impls: unpacked_impls,
+            specs: unpacked_specs,
+        })
+    }
+}
+
 impl CtxtForType for ContextWithTypeAndSig {
     fn has_type(&self, name: &TypeName) -> bool {
         self.types.contains_key(name)
@@ -463,4 +511,11 @@ impl CtxtForExpr for ContextWithTypeAndSig {
     fn get_spec_sig(&self, name: &FuncName) -> Option<&FuncSig> {
         self.specs.get(name).map(|(sig, _)| sig)
     }
+}
+
+/// Context manager after type, signature, and expression conversion is done
+pub struct ContextWithTypeAndFunc {
+    types: BTreeMap<TypeName, TypeDef>,
+    impls: BTreeMap<FuncName, FuncDef>,
+    specs: BTreeMap<FuncName, FuncDef>,
 }

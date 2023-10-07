@@ -1,8 +1,9 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use syn::{FnArg, PatType, Result, ReturnType, Signature};
 
 use crate::parse_ctxt::{bail_if_exists, bail_on, VarName};
+use crate::parse_expr::Expr;
 use crate::parse_type::{CtxtForType, TypeTag};
 
 /// Function signature
@@ -73,5 +74,26 @@ impl FuncSig {
             params: param_decls,
             ret_ty,
         })
+    }
+
+    /// Collect variables declared in the parameter list
+    pub fn param_map(&self) -> BTreeMap<VarName, &TypeTag> {
+        self.params
+            .iter()
+            .map(|(name, ty)| (name.clone(), ty))
+            .collect()
+    }
+}
+
+/// Function definition
+pub struct FuncDef {
+    sig: FuncSig,
+    body: Expr,
+}
+
+impl FuncDef {
+    /// Create a new function definition
+    pub fn new(sig: FuncSig, body: Expr) -> Self {
+        Self { sig, body }
     }
 }

@@ -1,4 +1,4 @@
-use syn::{Local, LocalInit, Result, Stmt};
+use syn::{parse, Local, LocalInit, Result, Stmt};
 
 use std::collections::BTreeMap;
 
@@ -166,10 +166,22 @@ impl Expr {
         };
         &i.ty
     }
+
+    /// Extract one from impl body
+    pub fn from_impl(sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
+        let mut parser = ExprParseCtxt::for_impl(sig);
+        parser.convert_stmts(stmt)
+    }
+
+    /// Extract one from spec body
+    pub fn from_spec(sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
+        let mut parser = ExprParseCtxt::for_spec(sig);
+        parser.convert_stmts(stmt)
+    }
 }
 
 /// Marks whether this expression is for impl or spec
-pub enum Kind {
+enum Kind {
     /// actual implementation
     Impl,
     /// formal specification
@@ -177,29 +189,29 @@ pub enum Kind {
 }
 
 /// A helper for expression parsing
-struct ExprParseCtxt<'a, 'b> {
+struct ExprParseCtxt<'a> {
     kind: Kind,
-    vars: &'a BTreeMap<VarName, &'b TypeTag>,
+    vars: BTreeMap<VarName, &'a TypeTag>,
     bindings: Vec<(VarName, Expr)>,
     new_vars: BTreeMap<VarName, TypeTag>,
 }
 
-impl<'a, 'b> ExprParseCtxt<'a, 'b> {
+impl<'a> ExprParseCtxt<'a> {
     /// For parsing in impl context
-    fn for_impl(vars: &'a BTreeMap<VarName, &'b TypeTag>) -> Self {
+    fn for_impl(sig: &'a FuncSig) -> Self {
         Self {
             kind: Kind::Impl,
-            vars,
+            vars: sig.param_map(),
             bindings: vec![],
             new_vars: BTreeMap::new(),
         }
     }
 
     /// For parsing in spec context
-    fn for_spec(vars: &'a BTreeMap<VarName, &'b TypeTag>) -> Self {
+    fn for_spec(sig: &'a FuncSig) -> Self {
         Self {
             kind: Kind::Spec,
-            vars,
+            vars: sig.param_map(),
             bindings: vec![],
             new_vars: BTreeMap::new(),
         }

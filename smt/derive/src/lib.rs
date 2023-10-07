@@ -15,6 +15,9 @@ pub fn derive<P: AsRef<Path>>(input: P) {
 
 /// Internal entrypoint for ergonomic error propagation
 fn derive_internal(path_crate: &Path) -> syn::Result<()> {
-    parse_ctxt::Context::new(path_crate)?.next()?.next()?;
+    parse_ctxt::Context::new(path_crate)?
+        .next()?
+        .next()?
+        .next()?;
     Ok(())
 }
