@@ -256,14 +256,15 @@ pub use smt_expr;
 
 #[macro_export]
 macro_rules! smt_stmt {
-    ($(# $v:ident = $e:tt;)* @ $exp:tt) => {
-        $(let $v = $crate::dsl::smt_expr!($e);)*
-        $crate::dsl::smt_expr!($exp)
+    ({ $(# $v:ident = $e:tt;)* @ $exp:tt }) => {
+        $(let $v = $crate::dsl::smt_stmt!($e);)*
+        $crate::dsl::smt_stmt!($exp)
     };
-    ($exp:tt) => {
-        $crate::dsl::smt_expr!($exp)
+    (( $($exp:tt)+ )) => {
+        $crate::dsl::smt_expr!(($($exp)+))
     }
 }
+pub use smt_stmt;
 
 fn test() -> crate::dt::Boolean {
     smt_expr! (
@@ -272,9 +273,9 @@ fn test() -> crate::dt::Boolean {
 }
 
 fn test2() -> crate::dt::Boolean {
-    smt_stmt! {
+    smt_stmt! {{
         # a = (b false);
         # b = (b false);
         @ (? a (b false) :? b (b true) :| (b false))
-    }
+    }}
 }
