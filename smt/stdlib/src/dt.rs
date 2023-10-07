@@ -39,22 +39,7 @@ macro_rules! arith_operator {
 }
 
 /// Marks that this type is an SMT-enabled type
-pub trait SMT: 'static + Copy + Ord + Hash + Default + Sync + Send {
-    /// variable: any
-    fn any() -> Self {
-        Self::default()
-    }
-
-    /// variable: forall
-    fn forall() -> Self {
-        Self::any()
-    }
-
-    /// variable: exists
-    fn exists() -> Self {
-        Self::any()
-    }
-}
+pub trait SMT: 'static + Copy + Ord + Hash + Default + Sync + Send {}
 
 /// SMT boolean
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
@@ -201,8 +186,8 @@ impl<T: SMT> Seq<T> {
         }
     }
 
-    /// operation: `v.insert(e)`
-    pub fn insert(v: Self, e: T) -> Self {
+    /// operation: `v.append(e)`
+    pub fn append(v: Self, e: T) -> Self {
         Self {
             inner: Intern::new(v.inner.iter().copied().chain(std::iter::once(e)).collect()),
         }
@@ -299,8 +284,8 @@ impl<K: SMT, V: SMT> Map<K, V> {
         m.inner.len().into()
     }
 
-    /// operation: `v.contains(e)`
-    pub fn contains(m: Self, k: K) -> Boolean {
+    /// operation: `v.contains_key(e)`
+    pub fn contains_key(m: Self, k: K) -> Boolean {
         m.inner.contains_key(&k).into()
     }
 }
