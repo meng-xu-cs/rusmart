@@ -64,7 +64,7 @@ pub fn lt(lhs: Value, rhs: Value) -> Boolean {
         ) => true.into(),
 
         // boolean
-        (Value::Boolean(v_lhs), Value::Boolean(v_rhs)) => v_lhs & !v_rhs,
+        (Value::Boolean(v_lhs), Value::Boolean(v_rhs)) => Boolean::and(v_lhs, Boolean::not(v_rhs)),
         (
             Value::Boolean(_),
             Value::Number(_) | Value::String(_) | Value::Seq(_) | Value::Map(_) | Value::Set(_),
@@ -98,6 +98,7 @@ pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
 
 #[smt_spec(seq_lt)]
 pub fn spec_seq_lt(lhs: Seq<Value>, rhs: Seq<Value>) -> Boolean {
+    /*
     (|k: Integer| {
         Boolean::from(k >= 0.into())
             & (k < Seq::length(rhs)).into()
@@ -107,6 +108,8 @@ pub fn spec_seq_lt(lhs: Seq<Value>, rhs: Seq<Value>) -> Boolean {
                     & spec_lt(Seq::at_unchecked(lhs, i), Seq::at_unchecked(rhs, k))
             })(Integer::forall())
     })(Integer::exists())
+     */
+    todo!()
 }
 
 pub fn test() -> Boolean {

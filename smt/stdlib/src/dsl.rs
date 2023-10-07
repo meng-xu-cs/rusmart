@@ -259,7 +259,7 @@ macro_rules! smt_expr {
         )
     };
     // error
-    (err) => {
+    ((err)) => {
         $crate::dt::Error::fresh()
     };
     ((++ $lhs:tt $rhs:tt)) => {
@@ -269,7 +269,7 @@ macro_rules! smt_expr {
         )
     };
     // user-defined function
-    (($f:ident $($a:tt)*)) => {
+    ([$f:ident $($a:tt)*]) => {
         $f($($a,)*)
     };
     // control-flow
@@ -301,6 +301,9 @@ macro_rules! smt_stmt {
     // operation
     (( $($exp:tt)+ )) => {
         $crate::dsl::smt_expr!(($($exp)+))
+    };
+    ([ $($exp:tt)+ ]) => {
+        $crate::dsl::smt_expr!([$($exp)+])
     };
     // block
     ({ $(# $v:ident = $e:tt;)* @ $exp:tt }) => {
