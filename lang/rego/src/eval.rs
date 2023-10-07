@@ -1,6 +1,6 @@
 use rusmart_smt_remark::{smt_impl, smt_spec, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Map, Rational, Seq, Set, Text, SMT};
-use rusmart_smt_stdlib::smt_expr;
+use rusmart_smt_stdlib::{smt_expr, smt_stmt};
 
 /// A term *in its valid state* is defined by the following ADT
 #[smt_type]
@@ -42,6 +42,16 @@ pub fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
     } else {
         seq_lt_recursive(l, r, Integer::add(i, 1.into()))
     }
+}
+
+#[smt_impl]
+pub fn seq_lt_recursive_smt(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
+    smt_stmt!(
+        (? (== (|l|) i) false
+        :? (== (|r|) i) true
+        :? (< (l[i]) (r[i])) true
+        :| [seq_lt_recursive l r (+ i 1)])
+    )
 }
 
 #[smt_impl]

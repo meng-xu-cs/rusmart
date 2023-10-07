@@ -293,9 +293,15 @@ macro_rules! smt_expr {
             $crate::dsl::smt_stmt!($d)
         }
     };
-    ((~ $v:tt $(| $p1:pat => $e1:tt)+ $(_ => $d:tt)?)) => {
+    ((~ $v:tt $(| $p:pat => $e:tt)+ $(_ => $d:tt)?)) => {
         match $v {
-            $($p1 => $crate::dsl::smt_stmt!($e1),)+
+            $($p => $crate::dsl::smt_stmt!($e),)+
+            $(_ => $crate::dsl::smt_stmt!($d),)?
+        }
+    };
+    ((~ $v:tt $(, $v_more:tt)* $(| ($p:pat $(, $p_more:pat)*) => $e:tt)+ $(_ => $d:tt)?)) => {
+        match ($v $(, $v_more)+) {
+            $(($p $(, $p_more)+) => $crate::dsl::smt_stmt!($e),)+
             $(_ => $crate::dsl::smt_stmt!($d),)?
         }
     };
@@ -333,7 +339,7 @@ macro_rules! smt_expr {
     ((% $lhs:tt $rhs:tt)) => {
         $crate::dsl::smt_stmt!($lhs).rem($crate::dsl::smt_stmt!($rhs))
     };
-    ((len $c:tt)) => {
+    ((|$c:tt|)) => {
         $crate::dsl::smt_stmt!($c).length()
     };
     ((in $c:tt $e:tt)) => {
