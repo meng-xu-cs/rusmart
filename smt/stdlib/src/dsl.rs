@@ -17,6 +17,11 @@ macro_rules! smt_expr {
         $crate::dt::Text::from($l)
     };
     // boolean
+    ((! $v:tt)) => {
+        $crate::dt::Boolean::not(
+            $crate::dsl::smt_stmt!($lhs),
+        )
+    };
     ((& $lhs:tt $rhs:tt)) => {
         $crate::dt::Boolean::and(
             $crate::dsl::smt_stmt!($lhs),
@@ -193,7 +198,9 @@ macro_rules! smt_expr {
         $crate::dt::Seq::empty()
     };
     ((len_vec $v:tt)) => {
-        $crate::dt::Seq::length($v)
+        $crate::dt::Seq::length(
+            $crate::dsl::smt_stmt!($v),
+        )
     };
     ((+vec $v:tt [$e:tt])) => {
         $crate::dt::Seq::append(
@@ -218,7 +225,9 @@ macro_rules! smt_expr {
         $crate::dt::Set::empty()
     };
     ((len_set $s:tt)) => {
-        $crate::dt::Set::length($s)
+        $crate::dt::Set::length(
+            $crate::dsl::smt_stmt!($s),
+        )
     };
     ((+set $s:tt [$e:tt])) => {
         $crate::dt::Set::insert(
@@ -237,7 +246,9 @@ macro_rules! smt_expr {
         $crate::dt::Map::empty()
     };
     ((len_map $m:tt)) => {
-        $crate::dt::Map::length($m)
+        $crate::dt::Map::length(
+            $crate::dsl::smt_stmt!($m),
+        )
     };
     ((+map $m:tt $k:tt $v:tt)) => {
         $crate::dt::Map::put_unchecked(
@@ -288,6 +299,58 @@ macro_rules! smt_expr {
             $(_ => $crate::dsl::smt_stmt!($d),)?
         }
     };
+    // with type inference enabled
+    ((== $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).eq($crate::dsl::smt_stmt!($rhs))
+    };
+    ((!= $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).ne($crate::dsl::smt_stmt!($rhs))
+    };
+    ((< $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).lt($crate::dsl::smt_stmt!($rhs))
+    };
+    ((<= $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).le($crate::dsl::smt_stmt!($rhs))
+    };
+    ((>= $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).ge($crate::dsl::smt_stmt!($rhs))
+    };
+    ((> $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).gt($crate::dsl::smt_stmt!($rhs))
+    };
+    ((+ $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).add($crate::dsl::smt_stmt!($rhs))
+    };
+    ((- $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).sub($crate::dsl::smt_stmt!($rhs))
+    };
+    ((* $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).mul($crate::dsl::smt_stmt!($rhs))
+    };
+    ((/ $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).div($crate::dsl::smt_stmt!($rhs))
+    };
+    ((% $lhs:tt $rhs:tt)) => {
+        $crate::dsl::smt_stmt!($lhs).rem($crate::dsl::smt_stmt!($rhs))
+    };
+    ((len $c:tt)) => {
+        $crate::dsl::smt_stmt!($c).length()
+    };
+    ((in $c:tt $e:tt)) => {
+        $crate::dsl::smt_stmt!($c).contains($crate::dsl::smt_stmt!($e))
+    };
+    ((++ $c:tt $e:tt)) => {
+        $crate::dsl::smt_stmt!($c).insert($crate::dsl::smt_stmt!($e))
+    };
+    (($c:tt[$k:tt])) => {
+        $crate::dsl::smt_stmt!($c).get_unchecked($crate::dsl::smt_stmt!($k))
+    };
+    (($c:tt[$k:tt := $v:tt])) => {
+        $crate::dsl::smt_stmt!($c).put_unchecked(
+            $crate::dsl::smt_stmt!($k),
+            $crate::dsl::smt_stmt!($v),
+        )
+    };
 }
 pub use smt_expr;
 
@@ -309,6 +372,16 @@ macro_rules! smt_stmt {
     ({ $(# $v:ident = $e:tt;)* @ $exp:tt }) => {
         $(let $v = $crate::dsl::smt_stmt!($e);)*
         $crate::dsl::smt_expr!($exp)
+    };
+    // with type inference enabled
+    (true) => {
+        $crate::dt::Boolean::from(true)
+    };
+    (false) => {
+        $crate::dt::Boolean::from(false)
+    };
+    ($l:literal) => {
+        $l.into()
     };
 }
 pub use smt_stmt;

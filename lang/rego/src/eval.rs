@@ -37,7 +37,7 @@ pub fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
         false.into()
     } else if Seq::length(r) == i {
         true.into()
-    } else if *lt(Seq::at_unchecked(l, i), Seq::at_unchecked(r, i)) {
+    } else if *lt(Seq::get_unchecked(l, i), Seq::get_unchecked(r, i)) {
         true.into()
     } else {
         seq_lt_recursive(l, r, Integer::add(i, 1.into()))

@@ -201,8 +201,8 @@ impl<T: SMT> Seq<T> {
         }
     }
 
-    /// operation: `v.append(e)`
-    pub fn append(v: Self, e: T) -> Self {
+    /// operation: `v.insert(e)`
+    pub fn insert(v: Self, e: T) -> Self {
         Self {
             inner: Intern::new(v.inner.iter().copied().chain(std::iter::once(e)).collect()),
         }
@@ -219,7 +219,7 @@ impl<T: SMT> Seq<T> {
     }
 
     /// operation: `v[i]` with partial semantics (valid only when `i` is in bound)
-    pub fn at_unchecked(v: Self, i: Integer) -> T {
+    pub fn get_unchecked(v: Self, i: Integer) -> T {
         *v.inner
             .get(i.inner.to_usize().expect("index out of usize range"))
             .expect("index out of bound")
@@ -300,7 +300,7 @@ impl<K: SMT, V: SMT> Map<K, V> {
     }
 
     /// operation: `v.contains(e)`
-    pub fn contains_key(m: Self, k: K) -> Boolean {
+    pub fn contains(m: Self, k: K) -> Boolean {
         m.inner.contains_key(&k).into()
     }
 }
