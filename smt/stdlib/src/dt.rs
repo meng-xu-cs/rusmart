@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
-use std::ops::{Add, BitAnd, BitOr, BitXor, Deref, Div, Mul, Not, Rem, Sub};
+use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 
 use internment::Intern;
 use num_bigint::BigInt;
@@ -68,44 +68,35 @@ impl From<bool> for Boolean {
     }
 }
 
-impl Not for Boolean {
-    type Output = Self;
-    fn not(self) -> Self {
-        Self { inner: !self.inner }
-    }
-}
-
-impl BitAnd for Boolean {
-    type Output = Self;
-    fn bitand(self, rhs: Self) -> Self {
-        Self {
-            inner: self.inner & rhs.inner,
-        }
-    }
-}
-
-impl BitOr for Boolean {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self {
-        Self {
-            inner: self.inner | rhs.inner,
-        }
-    }
-}
-
-impl BitXor for Boolean {
-    type Output = Self;
-    fn bitxor(self, rhs: Self) -> Self {
-        Self {
-            inner: self.inner ^ rhs.inner,
-        }
-    }
-}
-
 impl Deref for Boolean {
     type Target = bool;
     fn deref(&self) -> &bool {
         &self.inner
+    }
+}
+
+impl Boolean {
+    #[allow(clippy::should_implement_trait)]
+    pub fn not(self) -> Self {
+        Self { inner: !self.inner }
+    }
+
+    pub fn and(self, rhs: Self) -> Self {
+        Self {
+            inner: self.inner & rhs.inner,
+        }
+    }
+
+    pub fn or(self, rhs: Self) -> Self {
+        Self {
+            inner: self.inner | rhs.inner,
+        }
+    }
+
+    pub fn xor(self, rhs: Self) -> Self {
+        Self {
+            inner: self.inner ^ rhs.inner,
+        }
     }
 }
 
@@ -139,6 +130,7 @@ macro_rules! integer_from_literal {
 
 integer_from_literal!(i8, i16, i32, i64, i128, isize);
 integer_from_literal!(u8, u16, u32, u64, u128, usize);
+
 arith_operator!(Integer, add, sub, mul, div, rem);
 order_operator!(Integer, eq, ne, lt, le, ge, gt);
 
@@ -171,42 +163,6 @@ macro_rules! rational_from_literal {
 
 rational_from_literal!(i8, i16, i32, i64, i128, isize);
 rational_from_literal!(u8, u16, u32, u64, u128, usize);
-
-impl Add for Rational {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().add(rhs.inner.as_ref())),
-        }
-    }
-}
-
-impl Sub for Rational {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().sub(rhs.inner.as_ref())),
-        }
-    }
-}
-
-impl Mul for Rational {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().mul(rhs.inner.as_ref())),
-        }
-    }
-}
-
-impl Div for Rational {
-    type Output = Self;
-    fn div(self, rhs: Self) -> Self {
-        Self {
-            inner: Intern::new(self.inner.as_ref().div(rhs.inner.as_ref())),
-        }
-    }
-}
 
 arith_operator!(Rational, add, sub, mul, div);
 order_operator!(Rational, eq, ne, lt, le, ge, gt);

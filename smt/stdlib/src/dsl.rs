@@ -1,12 +1,11 @@
 #[macro_export]
 macro_rules! smt_expr {
-    // ident
-    ($i:ident) => {
-        $i
-    };
     // literals
-    ((b $l:literal)) => {
-        $crate::dt::Boolean::from($l)
+    ((b true)) => {
+        $crate::dt::Boolean::from(true)
+    };
+    ((b false)) => {
+        $crate::dt::Boolean::from(false)
     };
     ((i $l:literal)) => {
         $crate::dt::Integer::from($l)
@@ -19,216 +18,254 @@ macro_rules! smt_expr {
     };
     // boolean
     ((& $lhs:tt $rhs:tt)) => {
-        $crate::dt::Boolean::bitand(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+        $crate::dt::Boolean::and(
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((| $lhs:tt $rhs:tt)) => {
         $crate::dt::Boolean::bitor(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((^ $lhs:tt $rhs:tt)) => {
         $crate::dt::Boolean::bitxor(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     // integer
     ((==i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::eq(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((!=i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::ne(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((<i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::lt(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((<=i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::le(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((>=i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::ge(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((>i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::gt(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((+i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::add(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((-i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::sub(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((*i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::mul(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((/i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::div(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((%i $lhs:tt $rhs:tt)) => {
         $crate::dt::Integer::rem(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     // rational
     ((==r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::eq(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((!=r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::ne(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((<r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::lt(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((<=r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::le(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((>=r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::ge(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((>r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::gt(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((+r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::add(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((-r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::sub(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((*r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::mul(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((/r $lhs:tt $rhs:tt)) => {
         $crate::dt::Rational::div(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     // text
     ((==t $lhs:tt $rhs:tt)) => {
         $crate::dt::Text::eq(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((!=t $lhs:tt $rhs:tt)) => {
         $crate::dt::Text::ne(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((<t $lhs:tt $rhs:tt)) => {
         $crate::dt::Text::lt(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     ((<=t $lhs:tt $rhs:tt)) => {
         $crate::dt::Text::le(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     // seq
-    ([]) => {
+    ((vec)) => {
         $crate::dt::Seq::empty()
     };
-    ([|$v:tt|]) => {
+    ((len_vec $v:tt)) => {
         $crate::dt::Seq::length($v)
     };
-    ([++ $v:tt $e:tt]) => {
+    ((+vec $v:tt [$e:tt])) => {
         $crate::dt::Seq::append(
-            $crate::dsl::smt_expr!($v), $crate::dsl::smt_expr!($e)
+            $crate::dsl::smt_stmt!($v),
+            $crate::dsl::smt_stmt!($e),
         )
     };
-    ([in $v:tt $e:tt]) => {
+    ((in_vec $v:tt $e:tt)) => {
         $crate::dt::Seq::contains(
-            $crate::dsl::smt_expr!($v), $crate::dsl::smt_expr!($e)
+            $crate::dsl::smt_stmt!($v),
+            $crate::dsl::smt_stmt!($e),
         )
     };
-    ([at $v:tt $i:tt]) => {
+    ((get_vec $v:tt $i:tt)) => {
         $crate::dt::Seq::at_unchecked(
-            $crate::dsl::smt_expr!($v), $crate::dsl::smt_expr!($i)
+            $crate::dsl::smt_stmt!($v),
+            $crate::dsl::smt_stmt!($i),
         )
     };
     // set
-    (()) => {
+    ((set)) => {
         $crate::dt::Set::empty()
     };
-    ((|$s:tt|)) => {
+    ((len_set $s:tt)) => {
         $crate::dt::Set::length($s)
     };
-    ((add $s:tt $e:tt)) => {
+    ((+set $s:tt [$e:tt])) => {
         $crate::dt::Set::insert(
-            $crate::dsl::smt_expr!($s), $crate::dsl::smt_expr!($e)
+            $crate::dsl::smt_stmt!($s),
+            $crate::dsl::smt_stmt!($e),
         )
     };
-    ((in $s:tt $e:tt)) => {
+    ((in_set $s:tt $e:tt)) => {
         $crate::dt::Set::contains(
-            $crate::dsl::smt_expr!($s), $crate::dsl::smt_expr!($e)
+            $crate::dsl::smt_stmt!($s),
+            $crate::dsl::smt_stmt!($e),
         )
     };
     // map
-    ({}) => {
+    ((map)) => {
         $crate::dt::Map::empty()
     };
-    ({|$m:tt|}) => {
+    ((len_map $m:tt)) => {
         $crate::dt::Map::length($m)
     };
-    ({put $m:tt $k:tt $v:tt}) => {
+    ((+map $m:tt $k:tt $v:tt)) => {
         $crate::dt::Map::put_unchecked(
-            $crate::dsl::smt_expr!($m), $crate::dsl::smt_expr!($k), $crate::dsl::smt_expr!($v)
+            $crate::dsl::smt_stmt!($m),
+            $crate::dsl::smt_stmt!($k),
+            $crate::dsl::smt_stmt!($v),
         )
     };
-    ({get $m:tt $k:tt}) => {
+    ((get_map $m:tt $k:tt)) => {
         $crate::dt::Map::get_unchecked(
-            $crate::dsl::smt_expr!($m), $crate::dsl::smt_expr!($k)
+            $crate::dsl::smt_stmt!($m),
+            $crate::dsl::smt_stmt!($k),
         )
     };
-    ({in $m:tt $k:tt}) => {
+    ((in_map $m:tt $k:tt)) => {
         $crate::dt::Map::contains_key(
-            $crate::dsl::smt_expr!($m), $crate::dsl::smt_expr!($k)
+            $crate::dsl::smt_stmt!($m),
+            $crate::dsl::smt_stmt!($k),
         )
     };
     // error
     (err) => {
         $crate::dt::Error::fresh()
     };
-    ((# $lhs:tt $rhs:tt)) => {
+    ((++ $lhs:tt $rhs:tt)) => {
         $crate::dt::Error::merge(
-            $crate::dsl::smt_expr!($lhs), $crate::dsl::smt_expr!($rhs)
+            $crate::dsl::smt_stmt!($lhs),
+            $crate::dsl::smt_stmt!($rhs),
         )
     };
     // user-defined function
@@ -237,32 +274,39 @@ macro_rules! smt_expr {
     };
     // control-flow
     ((? $c1:tt $v1:tt : $(? $cn:tt $vn:tt :)* | $d:tt)) => {
-        if *$crate::dsl::smt_expr!($c1) {
-            $crate::dsl::smt_expr!($v1)
-        } $(else if *$crate::dsl::smt_expr!($cn) {
-            $crate::dsl::smt_expr!($vn)
+        if *$crate::dsl::smt_stmt!($c1) {
+            $crate::dsl::smt_stmt!($v1)
+        } $(else if *$crate::dsl::smt_stmt!($cn) {
+            $crate::dsl::smt_stmt!($vn)
         })* else {
-            $crate::dsl::smt_expr!($d)
+            $crate::dsl::smt_stmt!($d)
         }
     };
     ((~ $v:tt $(| $p1:pat => $e1:tt)+ $(_ => $d:tt)?)) => {
         match $v {
-            $($p1 => $crate::dsl::smt_expr!($e1),)+
-            $(_ => $crate::dsl::smt_expr!($d),)?
+            $($p1 => $crate::dsl::smt_stmt!($e1),)+
+            $(_ => $crate::dsl::smt_stmt!($d),)?
         }
     };
 }
 pub use smt_expr;
 
+/// Construct an SMT statement (with or without block)
 #[macro_export]
 macro_rules! smt_stmt {
-    ({ $(# $v:ident = $e:tt;)* @ $exp:tt }) => {
-        $(let $v = $crate::dsl::smt_stmt!($e);)*
-        $crate::dsl::smt_stmt!($exp)
+    // ident
+    ($i:ident) => {
+        $i
     };
+    // operation
     (( $($exp:tt)+ )) => {
         $crate::dsl::smt_expr!(($($exp)+))
-    }
+    };
+    // block
+    ({ $(# $v:ident = $e:tt;)* @ $exp:tt }) => {
+        $(let $v = $crate::dsl::smt_stmt!($e);)*
+        $crate::dsl::smt_expr!($exp)
+    };
 }
 pub use smt_stmt;
 
