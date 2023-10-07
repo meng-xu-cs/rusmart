@@ -1,4 +1,6 @@
-use syn::{Expr as Exp, Local, LocalInit, Result, Stmt};
+use syn::{
+    Block, Expr as Exp, ExprBlock, ExprCall, ExprPath, Local, LocalInit, Path, Result, Stmt,
+};
 
 use std::collections::BTreeMap;
 
@@ -291,6 +293,50 @@ impl ExprParseCtxt {
 
     /// Convert an expression
     fn convert_expr(&mut self, expr: &Exp) -> Result<Expr> {
-        todo!()
+        match expr {
+            Exp::Block(expr_block) => {
+                let ExprBlock {
+                    attrs: _,
+                    label,
+                    block:
+                        Block {
+                            brace_token: _,
+                            stmts,
+                        },
+                } = expr_block;
+
+                bail_if_exists!(label);
+                self.convert_stmts(stmts)
+            }
+            Exp::Call(expr_call) => {
+                let ExprCall {
+                    attrs: _,
+                    func,
+                    paren_token: _,
+                    args,
+                } = expr_call;
+
+                let call_path = match func.as_ref() {
+                    Exp::Path(p) => p,
+                    _ => bail_on!(func, "unrecognized callee"),
+                };
+                let ExprPath {
+                    attrs: _,
+                    qself,
+                    path,
+                } = call_path;
+                bail_if_exists!(qself);
+
+                let Path {
+                    leading_colon,
+                    segments,
+                } = path;
+                bail_if_exists!(leading_colon);
+
+                // TODO
+                bail_on!(segments, "TODO");
+            }
+            _ => bail_on!(expr, "invalid expression"),
+        }
     }
 }

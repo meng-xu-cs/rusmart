@@ -5,7 +5,8 @@ use std::path::Path;
 
 use log::trace;
 use syn::{
-    Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Pat, PatIdent, Result, Stmt,
+    Attribute, Error, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Pat, PatIdent,
+    PathArguments, PathSegment, Result, Stmt,
 };
 use walkdir::WalkDir;
 
@@ -136,6 +137,33 @@ impl TryFrom<&Ident> for VarName {
 
     fn try_from(value: &Ident) -> Result<Self> {
         validate_identifier(value).map(|ident| Self { ident })
+    }
+}
+
+/// Represents a namespace in the language
+pub struct Namespace;
+
+impl Namespace {
+    pub fn consume_prefix<'a, I: Iterator<Item = &'a PathSegment>>(
+        mut iter: I,
+        expected: &[&'static str],
+    ) -> Result<()> {
+        let mut toks = expected.iter();
+        loop {
+            match (iter.next(), toks.next()) {
+                (None, _) => return Ok(()),
+                (Some(segment), None) => bail_on!(segment, "unexpected segment"),
+                (Some(segment), Some(token)) => {
+                    let PathSegment { ident, arguments } = segment;
+                    if ident.to_string().as_str() != *token {
+                        bail_on!(ident, "unknown path");
+                    }
+                    if !matches!(arguments, PathArguments::None) {
+                        bail_on!(arguments, "unexpected path arguments");
+                    }
+                }
+            }
+        }
     }
 }
 
