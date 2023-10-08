@@ -403,16 +403,29 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 };
 
                 // now parse arguments
+                let args_len = args.len();
+                let mut args_iter = args.iter();
+
+                let check_args_len = |expected| {
+                    if args_len != expected {
+                        bail_on!(
+                            args,
+                            "argument number mismatch: expect {}, actual {}",
+                            args_len,
+                            expected
+                        );
+                    }
+                    Ok(())
+                };
+
                 let (op, ty) = if class.as_str() == "Self" {
                     // user-defined function
                     let callee = self.get_func_sig(&method, path)?;
                     let params = callee.param_vec();
-                    if args.len() != params.len() {
-                        bail_on!(args, "number of arguments mismatch");
-                    }
 
+                    check_args_len(params.len())?;
                     let mut new_args = vec![];
-                    for (arg_expr, (_, arg_ty)) in args.iter().zip(callee.param_vec().iter()) {
+                    for (arg_expr, (_, arg_ty)) in args_iter.zip(callee.param_vec().iter()) {
                         let converted = self.dup(Some(arg_ty.clone())).convert_expr(arg_expr)?;
                         new_args.push(converted);
                     }
@@ -425,17 +438,50 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     )
                 } else {
                     // intrinsics
-                    let args_len = args.len();
-                    let mut args_iter = args.iter();
                     let (intrinsic, ty) = match (class.as_str(), method.as_ref()) {
                         // boolean
                         ("Boolean", "from") => {
-                            if args_len != 1 {
-                                bail_on!(args, "number of arguments mismatch");
-                            }
+                            check_args_len(1)?;
                             // argument must be a literal
                             let literal = Self::expect_expr_lit_bool(args_iter.next().unwrap())?;
                             (BoolVal(literal), TypeTag::Boolean)
+                        }
+                        ("Boolean", "not") => {
+                            check_args_len(1)?;
+                            let a1 = self
+                                .dup(Some(TypeTag::Boolean))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (Not(a1), TypeTag::Boolean)
+                        }
+                        ("Boolean", "and") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(TypeTag::Boolean))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(TypeTag::Boolean))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (And(a1, a2), TypeTag::Boolean)
+                        }
+                        ("Boolean", "or") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(TypeTag::Boolean))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(TypeTag::Boolean))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (Or(a1, a2), TypeTag::Boolean)
+                        }
+                        ("Boolean", "xor") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(TypeTag::Boolean))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(TypeTag::Boolean))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (Xor(a1, a2), TypeTag::Boolean)
                         }
 
                         // others
@@ -443,6 +489,13 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     };
                     (Op::Intrinsic(intrinsic), ty)
                 };
+
+                // type check
+                if let Some(ety) = self.expected.as_ref() {
+                    if ety != &ty {
+                        bail_on!(expr_call, "type mismatch");
+                    }
+                }
 
                 // pack into expression
                 Inst { op: op.into(), ty }
@@ -470,6 +523,23 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 match lit {
                     Lit::Bool(val) => Ok(val.value),
                     _ => bail_on!(lit, "not a boolean literal"),
+                }
+            }
+            _ => bail_on!(expr, "not a literal"),
+        }
+    }
+
+    /// Convert an expression to an integer literal
+    fn expect_expr_lit_int(expr: &Exp) -> Result<i128> {
+        match expr {
+            Exp::Lit(expr_lit) => {
+                let ExprLit { attrs: _, lit } = expr_lit;
+                match lit {
+                    Lit::Int(val) => match val.token().to_string().parse() {
+                        Ok(v) => Ok(v),
+                        Err(_) => bail_on!(val, "unable to parse"),
+                    },
+                    _ => bail_on!(lit, "not a integer literal"),
                 }
             }
             _ => bail_on!(expr, "not a literal"),
