@@ -336,6 +336,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
     /// Convert an expression
     fn convert_expr(self, expr: &Exp) -> Result<Expr> {
         use Intrinsic::*;
+        use TypeTag::*;
 
         // case on expression type
         let inst = match expr {
@@ -444,44 +445,318 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                             check_args_len(1)?;
                             // argument must be a literal
                             let literal = Self::expect_expr_lit_bool(args_iter.next().unwrap())?;
-                            (BoolVal(literal), TypeTag::Boolean)
+                            (BoolVal(literal), Boolean)
                         }
                         ("Boolean", "not") => {
                             check_args_len(1)?;
                             let a1 = self
-                                .dup(Some(TypeTag::Boolean))
+                                .dup(Some(Boolean))
                                 .convert_expr(args_iter.next().unwrap())?;
-                            (Not(a1), TypeTag::Boolean)
+                            (Not(a1), Boolean)
                         }
                         ("Boolean", "and") => {
                             check_args_len(2)?;
                             let a1 = self
-                                .dup(Some(TypeTag::Boolean))
+                                .dup(Some(Boolean))
                                 .convert_expr(args_iter.next().unwrap())?;
                             let a2 = self
-                                .dup(Some(TypeTag::Boolean))
+                                .dup(Some(Boolean))
                                 .convert_expr(args_iter.next().unwrap())?;
-                            (And(a1, a2), TypeTag::Boolean)
+                            (And(a1, a2), Boolean)
                         }
                         ("Boolean", "or") => {
                             check_args_len(2)?;
                             let a1 = self
-                                .dup(Some(TypeTag::Boolean))
+                                .dup(Some(Boolean))
                                 .convert_expr(args_iter.next().unwrap())?;
                             let a2 = self
-                                .dup(Some(TypeTag::Boolean))
+                                .dup(Some(Boolean))
                                 .convert_expr(args_iter.next().unwrap())?;
-                            (Or(a1, a2), TypeTag::Boolean)
+                            (Or(a1, a2), Boolean)
                         }
                         ("Boolean", "xor") => {
                             check_args_len(2)?;
                             let a1 = self
-                                .dup(Some(TypeTag::Boolean))
+                                .dup(Some(Boolean))
                                 .convert_expr(args_iter.next().unwrap())?;
                             let a2 = self
-                                .dup(Some(TypeTag::Boolean))
+                                .dup(Some(Boolean))
                                 .convert_expr(args_iter.next().unwrap())?;
-                            (Xor(a1, a2), TypeTag::Boolean)
+                            (Xor(a1, a2), Boolean)
+                        }
+
+                        // integer
+                        ("Integer", "from") => {
+                            check_args_len(1)?;
+                            // argument must be a literal
+                            let literal = Self::expect_expr_lit_int(args_iter.next().unwrap())?;
+                            (IntVal(literal), Integer)
+                        }
+                        ("Integer", "add") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntAdd(a1, a2), Integer)
+                        }
+                        ("Integer", "sub") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntSub(a1, a2), Integer)
+                        }
+                        ("Integer", "mul") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntMul(a1, a2), Integer)
+                        }
+                        ("Integer", "div") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntDiv(a1, a2), Integer)
+                        }
+                        ("Integer", "rem") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntRem(a1, a2), Integer)
+                        }
+                        ("Integer", "eq") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntEq(a1, a2), Boolean)
+                        }
+                        ("Integer", "ne") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntNe(a1, a2), Boolean)
+                        }
+                        ("Integer", "lt") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntLt(a1, a2), Boolean)
+                        }
+                        ("Integer", "le") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntLe(a1, a2), Boolean)
+                        }
+                        ("Integer", "ge") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntGe(a1, a2), Boolean)
+                        }
+                        ("Integer", "gt") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (IntGt(a1, a2), Boolean)
+                        }
+
+                        // rational
+                        ("Rational", "from") => {
+                            check_args_len(1)?;
+                            // argument must be a literal
+                            let literal = Self::expect_expr_lit_int(args_iter.next().unwrap())?;
+                            (NumVal(literal), Rational)
+                        }
+                        ("Rational", "add") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumAdd(a1, a2), Rational)
+                        }
+                        ("Rational", "sub") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Integer))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumSub(a1, a2), Rational)
+                        }
+                        ("Rational", "mul") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumMul(a1, a2), Rational)
+                        }
+                        ("Rational", "div") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumDiv(a1, a2), Rational)
+                        }
+                        ("Rational", "eq") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumEq(a1, a2), Boolean)
+                        }
+                        ("Rational", "ne") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumNe(a1, a2), Boolean)
+                        }
+                        ("Rational", "lt") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumLt(a1, a2), Boolean)
+                        }
+                        ("Rational", "le") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumLe(a1, a2), Boolean)
+                        }
+                        ("Rational", "ge") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumGe(a1, a2), Boolean)
+                        }
+                        ("Rational", "gt") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Rational))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (NumGt(a1, a2), Boolean)
+                        }
+
+                        // string
+                        ("Text", "from") => {
+                            check_args_len(1)?;
+                            // argument must be a literal
+                            let literal = Self::expect_expr_lit_str(args_iter.next().unwrap())?;
+                            (StrVal(literal), Text)
+                        }
+                        ("Text", "eq") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (StrEq(a1, a2), Boolean)
+                        }
+                        ("Text", "ne") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (StrNe(a1, a2), Boolean)
+                        }
+                        ("Text", "lt") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (StrLt(a1, a2), Boolean)
+                        }
+                        ("Text", "le") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Text))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (StrLe(a1, a2), Boolean)
                         }
 
                         // others
@@ -539,6 +814,20 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                         Ok(v) => Ok(v),
                         Err(_) => bail_on!(val, "unable to parse"),
                     },
+                    _ => bail_on!(lit, "not a integer literal"),
+                }
+            }
+            _ => bail_on!(expr, "not a literal"),
+        }
+    }
+
+    /// Convert an expression to a string literal
+    fn expect_expr_lit_str(expr: &Exp) -> Result<String> {
+        match expr {
+            Exp::Lit(expr_lit) => {
+                let ExprLit { attrs: _, lit } = expr_lit;
+                match lit {
+                    Lit::Str(val) => Ok(val.token().to_string()),
                     _ => bail_on!(lit, "not a integer literal"),
                 }
             }
