@@ -218,6 +218,11 @@ impl TypeTuple {
 
         Ok(Self { slots })
     }
+
+    /// Get slots
+    pub fn slots(&self) -> &[TypeTag] {
+        &self.slots
+    }
 }
 
 /// Represents a record definition
@@ -254,6 +259,11 @@ impl TypeRecord {
         }
 
         Ok(Self { fields })
+    }
+
+    /// Get fields
+    pub fn fields(&self) -> &BTreeMap<String, TypeTag> {
+        &self.fields
     }
 }
 
@@ -312,6 +322,11 @@ impl TypeADT {
         }
 
         Ok(Self { variants })
+    }
+
+    /// Get variants as map
+    pub fn variants(&self) -> &BTreeMap<String, ADTVariant> {
+        &self.variants
     }
 }
 

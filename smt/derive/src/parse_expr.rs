@@ -1,5 +1,6 @@
 use syn::{
-    Block, Expr as Exp, ExprBlock, ExprCall, ExprLit, ExprPath, Lit, Local, LocalInit, Pat,
+    Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprLit, ExprMatch, ExprPath, ExprTuple,
+    FieldPat, Lit, Local, LocalInit, Member, Pat, PatOr, PatStruct, PatTuple, PatTupleStruct,
     PatType, Path, PathArguments, PathSegment, Result, Stmt,
 };
 
@@ -7,7 +8,7 @@ use std::collections::BTreeMap;
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, FuncName, TypeName, VarName};
 use crate::parse_func::FuncSig;
-use crate::parse_type::{CtxtForType, TypeDef, TypeTag};
+use crate::parse_type::{ADTVariant, CtxtForType, TypeDef, TypeTag};
 
 /// A context suitable for expression analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -129,10 +130,37 @@ pub struct PhiNode {
     body: Expr,
 }
 
+/// Bindings through unpacking
+pub enum Unpack {
+    Unit,
+    Tuple(BTreeMap<usize, VarName>),
+    Record(BTreeMap<String, VarName>),
+}
+
+/// ADT variant identifier
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+pub struct ADTBranch {
+    adt: TypeName,
+    branch: String,
+}
+
+/// Match atom
+pub struct MatchAtom {
+    cases: BTreeMap<ADTBranch, Unpack>,
+}
+
+/// Match arm
+pub struct MatchArm {
+    atoms: Vec<MatchAtom>,
+    body: Expr,
+}
+
 /// Operations
 pub enum Op {
     /// `<var>`
     Var(VarName),
+    /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
+    Match(Vec<MatchArm>),
     /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
     Phi { nodes: Vec<PhiNode>, default: Expr },
     /// `<class>::<method>(<a1>, <a2>, ...)`
@@ -227,9 +255,9 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
         }
     }
 
-    /// Ensure the variable name is unique
-    fn has_name(&self, name: &VarName) -> bool {
-        self.vars.contains_key(name) || self.new_vars.contains_key(name)
+    /// Get the type of a local variable
+    fn get_var_type(&self, name: &VarName) -> Option<&TypeTag> {
+        self.vars.get(name).or_else(|| self.new_vars.get(name))
     }
 
     /// Get the callee signature
@@ -245,6 +273,232 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
             None => bail_on!(path, "unknown function"),
             Some(sig) => Ok(sig),
         }
+    }
+
+    /// Retrieve a type variant by path
+    fn get_adt_variant_by_path(&self, path: &Path) -> Result<(ADTBranch, &ADTVariant)> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        // extract names
+        let mut iter = segments.iter().rev();
+        let variant_name = match iter.next() {
+            None => bail_on!(path, "invalid path to a type variant"),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected path arguments");
+                }
+                ident.to_string()
+            }
+        };
+        let type_name = match iter.next() {
+            None => bail_on!(path, "invalid path to a type variant"),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected path arguments");
+                }
+                ident.try_into()?
+            }
+        };
+
+        // look-up
+        let type_def = match self.ctxt.get_type(&type_name) {
+            None => bail_on!(path, "no such type"),
+            Some(def) => def,
+        };
+
+        let variant_def = match type_def {
+            TypeDef::Algebraic(adt) => match adt.variants().get(&variant_name) {
+                None => bail_on!(path, "no such variant"),
+                Some(variant) => variant,
+            },
+            _ => bail_on!(path, "not an ADT"),
+        };
+
+        // done
+        let branch_id = ADTBranch {
+            adt: type_name,
+            branch: variant_name,
+        };
+        Ok((branch_id, variant_def))
+    }
+
+    /// Analyze a pattern for: match arm -> head -> case -> binding
+    fn analyze_pat_match_binding(&self, pat: &Pat) -> Result<Option<VarName>> {
+        let binding = match pat {
+            Pat::Wild(_) => None,
+            _ => Some(VarName::from_pat(pat)?),
+        };
+        Ok(binding)
+    }
+
+    /// Analyze a pattern for: match arm -> head -> case
+    fn analyze_pat_match_case(
+        &self,
+        pat: &Pat,
+    ) -> Result<(ADTBranch, Unpack, BTreeMap<VarName, TypeTag>)> {
+        let mut bindings = BTreeMap::new();
+
+        let (branch, unpack) = match pat {
+            Pat::Path(pat_path) => {
+                let ExprPath {
+                    attrs: _,
+                    qself,
+                    path,
+                } = pat_path;
+                bail_if_exists!(qself.as_ref().map(|q| &q.ty));
+
+                let (branch, variant) = self.get_adt_variant_by_path(path)?;
+                match variant {
+                    ADTVariant::Unit => (),
+                    _ => bail_on!(pat, "unexpected pattern"),
+                }
+                (branch, Unpack::Unit)
+            }
+            Pat::TupleStruct(pat_tuple) => {
+                let PatTupleStruct {
+                    attrs: _,
+                    qself,
+                    path,
+                    paren_token: _,
+                    elems,
+                } = pat_tuple;
+                bail_if_exists!(qself.as_ref().map(|q| &q.ty));
+
+                let (branch, variant) = self.get_adt_variant_by_path(path)?;
+                match variant {
+                    ADTVariant::Tuple(def_tuple) => {
+                        let slots = def_tuple.slots();
+                        if elems.len() != slots.len() {
+                            bail_on!(elems, "number of slots mismatch");
+                        }
+
+                        let mut unpack = BTreeMap::new();
+                        for (i, (elem, slot)) in elems.iter().zip(slots.iter()).enumerate() {
+                            match self.analyze_pat_match_binding(elem)? {
+                                None => (),
+                                Some(var) => {
+                                    match bindings.insert(var.clone(), slot.clone()) {
+                                        None => (),
+                                        Some(_) => {
+                                            bail_on!(elem, "duplicated name");
+                                        }
+                                    }
+                                    unpack.insert(i, var);
+                                }
+                            }
+                        }
+                        (branch, Unpack::Tuple(unpack))
+                    }
+                    _ => bail_on!(pat, "unexpected pattern"),
+                }
+            }
+            Pat::Struct(pat_struct) => {
+                let PatStruct {
+                    attrs: _,
+                    qself,
+                    path,
+                    brace_token: _,
+                    fields,
+                    rest,
+                } = pat_struct;
+                bail_if_exists!(qself.as_ref().map(|q| &q.ty));
+                bail_if_exists!(rest);
+
+                let (branch, variant) = self.get_adt_variant_by_path(path)?;
+                match variant {
+                    ADTVariant::Record(def_record) => {
+                        let records = def_record.fields();
+                        if fields.len() != records.len() {
+                            bail_on!(fields, "number of fields mismatch");
+                        }
+
+                        let mut unpack = BTreeMap::new();
+                        for field in fields {
+                            let FieldPat {
+                                attrs: _,
+                                member,
+                                colon_token: _,
+                                pat,
+                            } = field;
+                            let field_name = match member {
+                                Member::Named(name) => name.to_string(),
+                                Member::Unnamed(_) => bail_on!(member, "unnamed field"),
+                            };
+
+                            let field_type = match records.get(&field_name) {
+                                None => bail_on!(member, "no such field"),
+                                Some(t) => t,
+                            };
+
+                            match self.analyze_pat_match_binding(pat)? {
+                                None => (),
+                                Some(var) => {
+                                    match bindings.insert(var.clone(), field_type.clone()) {
+                                        None => (),
+                                        Some(_) => {
+                                            bail_on!(pat, "duplicated name");
+                                        }
+                                    }
+                                    unpack.insert(field_name, var);
+                                }
+                            }
+                        }
+                        (branch, Unpack::Record(unpack))
+                    }
+                    _ => bail_on!(pat, "unexpected pattern"),
+                }
+            }
+            _ => bail_on!(pat, "invalid case pattern"),
+        };
+
+        Ok((branch, unpack, bindings))
+    }
+
+    /// Analyze a pattern for: match arm -> head
+    fn analyze_pat_match_head(&self, pat: &Pat) -> Result<(MatchAtom, BTreeMap<VarName, TypeTag>)> {
+        let mut variants = BTreeMap::new();
+        let bindings = match pat {
+            Pat::Or(pat_or) => {
+                let PatOr {
+                    attrs: _,
+                    leading_vert,
+                    cases,
+                } = pat_or;
+                bail_if_exists!(leading_vert);
+
+                let mut iter = cases.iter();
+                let (branch, unpack, ref_bindings) = match iter.next() {
+                    None => bail_on!(cases, "no case patterns"),
+                    Some(pat_case) => self.analyze_pat_match_case(pat_case)?,
+                };
+                if variants.insert(branch, unpack).is_some() {
+                    bail_on!(cases, "duplicated adt variant");
+                }
+
+                for case in iter.by_ref() {
+                    let (branch, unpack, new_bindings) = self.analyze_pat_match_case(case)?;
+                    if variants.insert(branch, unpack).is_some() {
+                        bail_on!(cases, "duplicated adt variant");
+                    }
+                    if ref_bindings != new_bindings {
+                        bail_on!(case, "case patterns do not bind the same variable set");
+                    }
+                }
+                ref_bindings
+            }
+            _ => {
+                let (branch, unpack, bindings) = self.analyze_pat_match_case(pat)?;
+                variants.insert(branch, unpack);
+                bindings
+            }
+        };
+        Ok((MatchAtom { cases: variants }, bindings))
     }
 
     /// Consume the stream of statements
@@ -281,7 +535,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                         }
                         _ => bail_on!(pat, "unrecognized binding"),
                     };
-                    if self.has_name(&name) {
+                    if self.get_var_type(&name).is_some() {
                         bail_on!(pat, "name conflict");
                     }
 
@@ -297,7 +551,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     let parser = self.dup(vty);
                     let body_expr = parser.convert_expr(expr)?;
 
-                    // done
+                    // done, continue to next statement
                     self.new_vars.insert(name.clone(), body_expr.ty().clone());
                     self.bindings.push((name, body_expr));
                 }
@@ -340,6 +594,49 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
 
         // case on expression type
         let inst = match expr {
+            Exp::Path(expr_path) => {
+                let ExprPath {
+                    attrs: _,
+                    qself,
+                    path,
+                } = expr_path;
+
+                bail_if_exists!(qself.as_ref().map(|q| &q.ty));
+                let Path {
+                    leading_colon,
+                    segments,
+                } = path;
+                bail_if_exists!(leading_colon);
+
+                // get the variable name
+                let mut iter = segments.iter();
+                let name = match iter.next() {
+                    None => bail_on!(segments, "not a local variable name"),
+                    Some(segment) => {
+                        let PathSegment { ident, arguments } = segment;
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected path arguments");
+                        }
+                        ident.try_into()?
+                    }
+                };
+                if let Some(segment) = iter.next() {
+                    bail_on!(segment, "not a local variable name");
+                }
+
+                // look up the type
+                let ty = match self.get_var_type(&name) {
+                    None => bail_on!(expr_path, "unknown local variable"),
+                    Some(t) => t.clone(),
+                };
+
+                // construct and return the expression
+                let inst = Inst {
+                    op: Op::Var(name).into(),
+                    ty,
+                };
+                return Ok(Expr::Unit(inst));
+            }
             Exp::Block(expr_block) => {
                 let ExprBlock {
                     attrs: _,
@@ -353,6 +650,112 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
 
                 bail_if_exists!(label);
                 return self.convert_stmts(stmts);
+            }
+            Exp::Match(expr_match) => {
+                let ExprMatch {
+                    attrs: _,
+                    match_token: _,
+                    expr: base,
+                    brace_token: _,
+                    arms,
+                } = expr_match;
+
+                // collects heads of the match case
+                let mut is_tuple = false;
+                let mut heads = vec![];
+                match base.as_ref() {
+                    Exp::Tuple(expr_tuple) => {
+                        let ExprTuple {
+                            attrs: _,
+                            paren_token: _,
+                            elems,
+                        } = expr_tuple;
+                        for elem in elems {
+                            heads.push(self.dup(None).convert_expr(elem)?);
+                        }
+                        is_tuple = true;
+                    }
+                    _ => {
+                        heads.push(self.dup(None).convert_expr(base)?);
+                    }
+                };
+
+                // go over the arms
+                let mut parsed_arms = vec![];
+                for arm in arms {
+                    let Arm {
+                        attrs: _,
+                        pat,
+                        guard,
+                        fat_arrow_token: _,
+                        body,
+                        comma: _,
+                    } = arm;
+                    bail_if_exists!(guard.as_ref().map(|(if_token, _)| if_token));
+
+                    // find the bindings
+                    let (atoms, bindings) = if is_tuple {
+                        match pat {
+                            Pat::Tuple(pat_tuple) => {
+                                let PatTuple {
+                                    attrs: _,
+                                    paren_token: _,
+                                    elems,
+                                } = pat_tuple;
+
+                                let mut all_atoms = vec![];
+                                let mut all_bindings = BTreeMap::new();
+                                for elem in elems {
+                                    let (atom, partial) = self.analyze_pat_match_head(elem)?;
+                                    for (var_name, var_ty) in partial {
+                                        if all_bindings.insert(var_name, var_ty).is_some() {
+                                            bail_on!(elem, "duplicated variable name");
+                                        }
+                                    }
+                                    all_atoms.push(atom);
+                                }
+                                (all_atoms, all_bindings)
+                            }
+                            _ => bail_on!(pat, "expect tuple"),
+                        }
+                    } else {
+                        let (atom, bindings) = self.analyze_pat_match_head(pat)?;
+                        (vec![atom], bindings)
+                    };
+
+                    // use the new bindings to analyze the body
+                    let mut new_ctxt = self.dup(self.expected.clone());
+                    for (var_name, var_ty) in bindings {
+                        if new_ctxt.vars.insert(var_name, var_ty).is_some() {
+                            bail_on!(pat, "naming conflict");
+                        }
+                    }
+                    let body_expr = new_ctxt.convert_expr(body)?;
+
+                    // save the match arm
+                    parsed_arms.push(MatchArm {
+                        atoms,
+                        body: body_expr,
+                    });
+                }
+
+                // check that all arms share the same type
+                if parsed_arms.is_empty() {
+                    bail_on!(expr_match, "no arms in match");
+                }
+                let ref_ty = parsed_arms.first().unwrap().body.ty().clone();
+                for item in &parsed_arms {
+                    if item.body.ty() != &ref_ty {
+                        bail_on!(expr_match, "match arm type mismatch");
+                    }
+                }
+
+                // return the expression
+                let op = Op::Match(parsed_arms);
+                Inst {
+                    op: op.into(),
+                    ty: ref_ty,
+                }
             }
             Exp::Call(expr_call) => {
                 // extract the path
