@@ -170,14 +170,12 @@ impl Expr {
 
     /// Extract one from impl body
     pub fn from_impl<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        let mut parser = ExprParseCtxt::new(ctxt, Kind::Impl, sig);
-        parser.convert_stmts(stmt)
+        ExprParseCtxt::new(ctxt, Kind::Impl, sig).convert_stmts(stmt)
     }
 
     /// Extract one from spec body
     pub fn from_spec<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        let mut parser = ExprParseCtxt::new(ctxt, Kind::Spec, sig);
-        parser.convert_stmts(stmt)
+        ExprParseCtxt::new(ctxt, Kind::Spec, sig).convert_stmts(stmt)
     }
 }
 
@@ -250,13 +248,10 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
     }
 
     /// Consume the stream of statements
-    fn convert_stmts(&mut self, stmts: &[Stmt]) -> Result<Expr> {
+    fn convert_stmts(mut self, stmts: &[Stmt]) -> Result<Expr> {
         let mut expr_found = None;
-        for stmt in stmts {
-            // one and only one expression is expected
-            if expr_found.is_some() {
-                bail_on!(stmt, "expect one and only one expression");
-            }
+        let mut iter = stmts.iter();
+        for stmt in iter.by_ref() {
             // parse the statement
             match stmt {
                 Stmt::Local(binding) => {
@@ -299,7 +294,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     } = body;
                     bail_if_exists!(diverge.as_ref().map(|(_, div)| div));
 
-                    let mut parser = self.dup(vty);
+                    let parser = self.dup(vty);
                     let body_expr = parser.convert_expr(expr)?;
 
                     // done
@@ -312,12 +307,23 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
 
                     // convert the expression and mark that we have found it in the statements
                     expr_found = Some(self.convert_expr(expr)?);
+
+                    // end of loop
+                    break;
                 }
                 Stmt::Item(_) | Stmt::Macro(_) => bail_on!(stmt, "unexpected item"),
             }
         }
 
-        // check we have an expression
+        // bail if there are more statements
+        match iter.next() {
+            None => (),
+            Some(stmt) => {
+                bail_on!(stmt, "unexpected statement after the main expression");
+            }
+        }
+
+        // check that we have an expression
         match expr_found {
             None => bail_on!(
                 stmts.last().expect("at least one statement"),
@@ -328,11 +334,11 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
     }
 
     /// Convert an expression
-    fn convert_expr(&mut self, expr: &Exp) -> Result<Expr> {
+    fn convert_expr(self, expr: &Exp) -> Result<Expr> {
         use Intrinsic::*;
 
         // case on expression type
-        match expr {
+        let inst = match expr {
             Exp::Block(expr_block) => {
                 let ExprBlock {
                     attrs: _,
@@ -345,7 +351,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 } = expr_block;
 
                 bail_if_exists!(label);
-                self.convert_stmts(stmts)
+                return self.convert_stmts(stmts);
             }
             Exp::Call(expr_call) => {
                 // extract the path
@@ -439,11 +445,21 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 };
 
                 // pack into expression
-                let inst = Inst { op: op.into(), ty };
-                Ok(Expr::Unit(inst))
+                Inst { op: op.into(), ty }
             }
             _ => bail_on!(expr, "invalid expression"),
-        }
+        };
+
+        // decide to go with an instruction or a block
+        let converted = if self.bindings.is_empty() {
+            Expr::Unit(inst)
+        } else {
+            Expr::Block {
+                lets: self.bindings,
+                body: inst,
+            }
+        };
+        Ok(converted)
     }
 
     /// Convert an expression to a boolean literal
