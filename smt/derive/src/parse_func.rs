@@ -76,12 +76,22 @@ impl FuncSig {
         })
     }
 
-    /// Collect variables declared in the parameter list
+    /// Collect variables (in map) declared in the parameter list
     pub fn param_map(&self) -> BTreeMap<VarName, TypeTag> {
         self.params
             .iter()
             .map(|(name, ty)| (name.clone(), ty.clone()))
             .collect()
+    }
+
+    /// Collect variables (in vec) declared in the parameter list
+    pub fn param_vec(&self) -> &[(VarName, TypeTag)] {
+        &self.params
+    }
+
+    /// Get the return type
+    pub fn ret_ty(&self) -> &TypeTag {
+        &self.ret_ty
     }
 }
 
