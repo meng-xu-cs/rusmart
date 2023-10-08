@@ -204,7 +204,7 @@ impl<T: SMT> Seq<T> {
     }
 
     /// operation: `v[i]` with partial semantics (valid only when `i` is in bound)
-    pub fn get_unchecked(v: Self, i: Integer) -> T {
+    pub fn at_unchecked(v: Self, i: Integer) -> T {
         *v.inner
             .get(i.inner.to_usize().expect("index out of usize range"))
             .expect("index out of bound")

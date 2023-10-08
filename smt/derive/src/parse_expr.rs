@@ -411,13 +411,38 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     if args_len != expected {
                         bail_on!(
                             args,
-                            "argument number mismatch: expect {}, actual {}",
+                            "argument number mismatch: expect {} | actual {}",
                             args_len,
                             expected
                         );
                     }
                     Ok(())
                 };
+                let check_type = |ety: &TypeTag, aty: &TypeTag| {
+                    if ety != aty {
+                        bail_on!(expr_call, "type mismatch: expect {} | actual {}", ety, aty);
+                    }
+                    Ok(())
+                };
+
+                macro_rules! bail_on_type_mismatch {
+                    ($ety:expr, $aty:literal) => {
+                        bail_on!(
+                            expr_call,
+                            "type mismatch: expect {} | actual {}",
+                            $ety,
+                            $aty
+                        )
+                    };
+                    ($ety:literal, $aty:expr) => {
+                        bail_on!(
+                            expr_call,
+                            "type mismatch: expect {} | actual {}",
+                            $ety,
+                            $aty
+                        )
+                    };
+                }
 
                 let (op, ty) = if class.as_str() == "Self" {
                     // user-defined function
@@ -759,6 +784,95 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                             (StrLe(a1, a2), Boolean)
                         }
 
+                        // seq
+                        ("Seq", "empty") => {
+                            check_args_len(0)?;
+                            let rty = match &self.expected {
+                                None => bail_on!(path, "type annotation needed"),
+                                Some(Seq(inner)) => Seq(inner.clone()),
+                                Some(t) => bail_on_type_mismatch!(t, "Seq<?>"),
+                            };
+                            (SeqEmpty, rty)
+                        }
+                        ("Seq", "append") => {
+                            check_args_len(2)?;
+                            match &self.expected {
+                                None => {
+                                    let a1 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let a2 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let (t1, t2) = (a1.ty(), a2.ty());
+                                    let inferred = match t1 {
+                                        Seq(sub) => {
+                                            check_type(sub, t2)?;
+                                            t1.clone()
+                                        }
+                                        _ => bail_on_type_mismatch!("Seq<?>", t1),
+                                    };
+                                    (SeqAppend(a1, a2), inferred)
+                                }
+                                Some(t @ Seq(inner)) => {
+                                    let a1 = self
+                                        .dup(Some(t.clone()))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    let a2 = self
+                                        .dup(Some(inner.as_ref().clone()))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    (SeqAppend(a1, a2), t.clone())
+                                }
+                                Some(t) => bail_on_type_mismatch!(t, "Seq<?>"),
+                            }
+                        }
+                        ("Seq", "length") => {
+                            check_args_len(1)?;
+                            let a1 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let t1 = a1.ty();
+                            if !matches!(t1, Seq(_)) {
+                                bail_on_type_mismatch!("Seq<?>", t1);
+                            }
+                            (SeqLength(a1), Integer)
+                        }
+                        ("Seq", "contains") => {
+                            check_args_len(2)?;
+                            let a1 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let (t1, t2) = (a1.ty(), a2.ty());
+                            match t1 {
+                                Seq(sub) => {
+                                    check_type(sub, t2)?;
+                                }
+                                _ => bail_on_type_mismatch!("Seq<?>", t1),
+                            }
+                            (SeqContains(a1, a2), Boolean)
+                        }
+                        ("Seq", "at_unchecked") => {
+                            check_args_len(2)?;
+                            match &self.expected {
+                                None => {
+                                    let a1 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let a2 = self
+                                        .dup(Some(Integer))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    let inferred = match a1.ty() {
+                                        Seq(sub) => sub.as_ref().clone(),
+                                        t => bail_on_type_mismatch!("Seq<?>", t),
+                                    };
+                                    (SeqAt(a1, a2), inferred)
+                                }
+                                Some(t) => {
+                                    let a1 = self
+                                        .dup(Some(Seq(t.clone().into())))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    let a2 = self
+                                        .dup(Some(Integer))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    (SeqAt(a1, a2), t.clone())
+                                }
+                            }
+                        }
+
                         // others
                         _ => bail_on!(path, "unknown callee"),
                     };
@@ -767,9 +881,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
 
                 // type check
                 if let Some(ety) = self.expected.as_ref() {
-                    if ety != &ty {
-                        bail_on!(expr_call, "type mismatch");
-                    }
+                    check_type(ety, &ty)?;
                 }
 
                 // pack into expression

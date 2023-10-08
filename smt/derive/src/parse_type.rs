@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 
 use syn::{
     AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
@@ -164,6 +165,23 @@ impl TypeTag {
                 Self::from_path(ctxt, path)
             }
             _ => bail_on!(ty, "expect type path"),
+        }
+    }
+}
+
+impl Display for TypeTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Boolean => write!(f, "Boolean"),
+            Self::Integer => write!(f, "Integer"),
+            Self::Rational => write!(f, "Rational"),
+            Self::Text => write!(f, "Text"),
+            Self::Box(sub) => write!(f, "Box<{}>", sub),
+            Self::Seq(sub) => write!(f, "Seq<{}>", sub),
+            Self::Set(sub) => write!(f, "Set<{}>", sub),
+            Self::Map(key, val) => write!(f, "Map<{}, {}>", key, val),
+            Self::User(name) => write!(f, "{}", name),
+            Self::Error => write!(f, "Error"),
         }
     }
 }
