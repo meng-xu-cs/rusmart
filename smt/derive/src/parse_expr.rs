@@ -23,6 +23,7 @@ pub trait CtxtForExpr: CtxtForType {
 }
 
 /// Intrinsic procedure
+#[derive(Clone)]
 pub enum Intrinsic {
     /// `Boolean::new`
     BoolVal(bool),
@@ -125,12 +126,14 @@ pub enum Intrinsic {
 }
 
 /// Phi node, guarded by condition
+#[derive(Clone)]
 pub struct PhiNode {
     cond: Expr,
     body: Expr,
 }
 
 /// Bindings through unpacking
+#[derive(Clone)]
 pub enum Unpack {
     Unit,
     Tuple(BTreeMap<usize, VarName>),
@@ -139,29 +142,48 @@ pub enum Unpack {
 
 /// ADT variant identifier
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
-pub struct ADTBranch {
+struct ADTBranch {
     adt: TypeName,
     branch: String,
 }
 
-/// Match atom
-pub enum MatchAtom {
+/// Match atom for a specific variable in head
+enum MatchAtom {
     Default,
     Binding(BTreeMap<ADTBranch, Unpack>),
 }
 
-/// Match arm
-pub struct MatchArm {
+/// A full match arm for all variables in head
+struct MatchArm {
     atoms: Vec<MatchAtom>,
     body: Expr,
 }
 
+/// Marks how a variable of an ADT type is matched
+#[derive(Clone)]
+pub struct MatchVariant {
+    adt: TypeName,
+    branch: String,
+    unpack: Unpack,
+}
+
+/// Marks how all variables in head are matched
+#[derive(Clone)]
+pub struct MatchCombo {
+    variants: Vec<MatchVariant>,
+    body: Expr,
+}
+
 /// Operations
+#[derive(Clone)]
 pub enum Op {
     /// `<var>`
     Var(VarName),
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
-    Match(Vec<MatchArm>),
+    Match {
+        heads: Vec<Expr>,
+        combo: Vec<MatchCombo>,
+    },
     /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
     Phi { nodes: Vec<PhiNode>, default: Expr },
     /// `<class>::<method>(<a1>, <a2>, ...)`
@@ -171,12 +193,14 @@ pub enum Op {
 }
 
 /// Instructions (operations with type)
+#[derive(Clone)]
 pub struct Inst {
     op: Box<Op>,
     ty: TypeTag,
 }
 
 /// Expressions
+#[derive(Clone)]
 pub enum Expr {
     /// a single instruction
     Unit(Inst),
