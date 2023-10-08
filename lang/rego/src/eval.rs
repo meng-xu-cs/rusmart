@@ -33,19 +33,19 @@ impl SMT for State {}
 pub fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
     #[allow(clippy::if_same_then_else)]
     if Seq::length(r) == i {
-        false.into()
+        Boolean::from(false)
     } else if Seq::length(r) == i {
-        true.into()
+        Boolean::from(true)
     } else if *lt(Seq::at_unchecked(l, i), Seq::at_unchecked(r, i)) {
-        true.into()
+        Boolean::from(true)
     } else {
-        seq_lt_recursive(l, r, Integer::add(i, 1.into()))
+        seq_lt_recursive(l, r, Integer::add(i, Integer::from(1)))
     }
 }
 
 #[smt_impl]
 pub fn seq_lt(l: Seq<Value>, r: Seq<Value>) -> Boolean {
-    seq_lt_recursive(l, r, 0.into())
+    seq_lt_recursive(l, r, Integer::from(0))
 }
 
 #[smt_impl]
@@ -60,39 +60,39 @@ pub fn lt(lhs: Value, rhs: Value) -> Boolean {
             | Value::Seq(_)
             | Value::Map(_)
             | Value::Set(_),
-        ) => true.into(),
+        ) => Boolean::from(true),
 
         // boolean
         (Value::Boolean(v_lhs), Value::Boolean(v_rhs)) => Boolean::and(v_lhs, Boolean::not(v_rhs)),
         (
             Value::Boolean(_),
             Value::Number(_) | Value::String(_) | Value::Seq(_) | Value::Map(_) | Value::Set(_),
-        ) => true.into(),
+        ) => Boolean::from(true),
 
         // number
-        (Value::Number(v_lhs), Value::Number(v_rhs)) => (v_lhs < v_rhs).into(),
+        (Value::Number(v_lhs), Value::Number(v_rhs)) => Rational::lt(v_lhs, v_rhs),
         (Value::Number(_), Value::String(_) | Value::Seq(_) | Value::Map(_) | Value::Set(_)) => {
-            true.into()
+            Boolean::from(true)
         }
 
         // string
-        (Value::String(v_lhs), Value::String(v_rhs)) => (v_lhs < v_rhs).into(),
-        (Value::String(_), Value::Seq(_) | Value::Map(_) | Value::Set(_)) => true.into(),
+        (Value::String(v_lhs), Value::String(v_rhs)) => Text::lt(v_lhs, v_rhs),
+        (Value::String(_), Value::Seq(_) | Value::Map(_) | Value::Set(_)) => Boolean::from(true),
 
         // seq
         (Value::Seq(v_lhs), Value::Seq(v_rhs)) => seq_lt(v_lhs, v_rhs),
-        (Value::Seq(_), Value::Map(_) | Value::Set(_)) => true.into(),
+        (Value::Seq(_), Value::Map(_) | Value::Set(_)) => Boolean::from(true),
 
         // TODO (others)
 
         // default
-        _ => false.into(),
+        (_, _) => Boolean::from(false),
     }
 }
 
 #[smt_spec(lt)]
 pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
-    false.into()
+    Boolean::from(false)
 }
 
 #[smt_spec(seq_lt)]

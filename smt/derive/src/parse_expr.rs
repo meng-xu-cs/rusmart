@@ -145,8 +145,9 @@ pub struct ADTBranch {
 }
 
 /// Match atom
-pub struct MatchAtom {
-    cases: BTreeMap<ADTBranch, Unpack>,
+pub enum MatchAtom {
+    Default,
+    Binding(BTreeMap<ADTBranch, Unpack>),
 }
 
 /// Match arm
@@ -462,8 +463,8 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
 
     /// Analyze a pattern for: match arm -> head
     fn analyze_pat_match_head(&self, pat: &Pat) -> Result<(MatchAtom, BTreeMap<VarName, TypeTag>)> {
-        let mut variants = BTreeMap::new();
-        let bindings = match pat {
+        let (atom, bindings) = match pat {
+            Pat::Wild(_) => (MatchAtom::Default, BTreeMap::new()),
             Pat::Or(pat_or) => {
                 let PatOr {
                     attrs: _,
@@ -473,6 +474,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 bail_if_exists!(leading_vert);
 
                 let mut iter = cases.iter();
+                let mut variants = BTreeMap::new();
                 let (branch, unpack, ref_bindings) = match iter.next() {
                     None => bail_on!(cases, "no case patterns"),
                     Some(pat_case) => self.analyze_pat_match_case(pat_case)?,
@@ -490,15 +492,17 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                         bail_on!(case, "case patterns do not bind the same variable set");
                     }
                 }
-                ref_bindings
+                (MatchAtom::Binding(variants), ref_bindings)
             }
             _ => {
                 let (branch, unpack, bindings) = self.analyze_pat_match_case(pat)?;
-                variants.insert(branch, unpack);
-                bindings
+                (
+                    MatchAtom::Binding(std::iter::once((branch, unpack)).collect()),
+                    bindings,
+                )
             }
         };
-        Ok((MatchAtom { cases: variants }, bindings))
+        Ok((atom, bindings))
     }
 
     /// Consume the stream of statements
@@ -1347,7 +1351,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                                 Some(t @ Map(_, _)) => t.clone(),
                                 Some(t) => bail_on_type_mismatch!(t, "Set<?>"),
                             };
-                            (SetEmpty, rty)
+                            (MapEmpty, rty)
                         }
                         ("Map", "put_unchecked") => {
                             check_args_len(3)?;
