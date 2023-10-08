@@ -789,7 +789,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                             check_args_len(0)?;
                             let rty = match &self.expected {
                                 None => bail_on!(path, "type annotation needed"),
-                                Some(Seq(inner)) => Seq(inner.clone()),
+                                Some(t @ Seq(_)) => t.clone(),
                                 Some(t) => bail_on_type_mismatch!(t, "Seq<?>"),
                             };
                             (SeqEmpty, rty)
@@ -871,6 +871,187 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                                     (SeqAt(a1, a2), t.clone())
                                 }
                             }
+                        }
+
+                        // set
+                        ("Set", "empty") => {
+                            check_args_len(0)?;
+                            let rty = match &self.expected {
+                                None => bail_on!(path, "type annotation needed"),
+                                Some(t @ Set(_)) => t.clone(),
+                                Some(t) => bail_on_type_mismatch!(t, "Set<?>"),
+                            };
+                            (SetEmpty, rty)
+                        }
+                        ("Set", "insert") => {
+                            check_args_len(2)?;
+                            match &self.expected {
+                                None => {
+                                    let a1 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let a2 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let (t1, t2) = (a1.ty(), a2.ty());
+                                    let inferred = match t1 {
+                                        Set(sub) => {
+                                            check_type(sub, t2)?;
+                                            t1.clone()
+                                        }
+                                        _ => bail_on_type_mismatch!("Set<?>", t1),
+                                    };
+                                    (SetInsert(a1, a2), inferred)
+                                }
+                                Some(t @ Set(inner)) => {
+                                    let a1 = self
+                                        .dup(Some(t.clone()))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    let a2 = self
+                                        .dup(Some(inner.as_ref().clone()))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    (SetInsert(a1, a2), t.clone())
+                                }
+                                Some(t) => bail_on_type_mismatch!(t, "Set<?>"),
+                            }
+                        }
+                        ("Set", "length") => {
+                            check_args_len(1)?;
+                            let a1 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let t1 = a1.ty();
+                            if !matches!(t1, Set(_)) {
+                                bail_on_type_mismatch!("Set<?>", t1);
+                            }
+                            (SetLength(a1), Integer)
+                        }
+                        ("Set", "contains") => {
+                            check_args_len(2)?;
+                            let a1 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let (t1, t2) = (a1.ty(), a2.ty());
+                            match t1 {
+                                Set(sub) => {
+                                    check_type(sub, t2)?;
+                                }
+                                _ => bail_on_type_mismatch!("Set<?>", t1),
+                            }
+                            (SetContains(a1, a2), Boolean)
+                        }
+
+                        // map
+                        ("Map", "empty") => {
+                            check_args_len(0)?;
+                            let rty = match &self.expected {
+                                None => bail_on!(path, "type annotation needed"),
+                                Some(t @ Map(_, _)) => t.clone(),
+                                Some(t) => bail_on_type_mismatch!(t, "Set<?>"),
+                            };
+                            (SetEmpty, rty)
+                        }
+                        ("Map", "put_unchecked") => {
+                            check_args_len(3)?;
+                            match &self.expected {
+                                None => {
+                                    let a1 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let a2 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let a3 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let (t1, t2, t3) = (a1.ty(), a2.ty(), a3.ty());
+                                    let inferred = match t1 {
+                                        Map(key, val) => {
+                                            check_type(key, t2)?;
+                                            check_type(val, t3)?;
+                                            t1.clone()
+                                        }
+                                        _ => bail_on_type_mismatch!("Map<?, ?>", t1),
+                                    };
+                                    (MapPut(a1, a2, a3), inferred)
+                                }
+                                Some(t @ Map(key, val)) => {
+                                    let a1 = self
+                                        .dup(Some(t.clone()))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    let a2 = self
+                                        .dup(Some(key.as_ref().clone()))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    let a3 = self
+                                        .dup(Some(val.as_ref().clone()))
+                                        .convert_expr(args_iter.next().unwrap())?;
+                                    (MapPut(a1, a2, a3), t.clone())
+                                }
+                                Some(t) => bail_on_type_mismatch!(t, "Map<?, ?>"),
+                            }
+                        }
+                        ("Map", "get_unchecked") => {
+                            check_args_len(2)?;
+                            match &self.expected {
+                                None => {
+                                    let a1 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let a2 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let inferred = match a1.ty() {
+                                        Map(key, val) => {
+                                            check_type(key, a2.ty())?;
+                                            val.as_ref().clone()
+                                        }
+                                        t => bail_on_type_mismatch!("Map<?, ?>", t),
+                                    };
+                                    (MapGet(a1, a2), inferred)
+                                }
+                                Some(t) => {
+                                    let a1 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    let a2 =
+                                        self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                                    match a1.ty() {
+                                        Map(key, val) => {
+                                            check_type(key, a2.ty())?;
+                                            check_type(val, t)?;
+                                        }
+                                        t => bail_on_type_mismatch!("Map<?, ?>", t),
+                                    };
+                                    (MapGet(a1, a2), t.clone())
+                                }
+                            }
+                        }
+                        ("Map", "length") => {
+                            check_args_len(1)?;
+                            let a1 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let t1 = a1.ty();
+                            if !matches!(t1, Map(_, _)) {
+                                bail_on_type_mismatch!("Map<?, ?>", t1);
+                            }
+                            (MapLength(a1), Integer)
+                        }
+                        ("Map", "contains_key") => {
+                            check_args_len(2)?;
+                            let a1 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self.dup(None).convert_expr(args_iter.next().unwrap())?;
+                            let (t1, t2) = (a1.ty(), a2.ty());
+                            match t1 {
+                                Map(key, _) => {
+                                    check_type(key, t2)?;
+                                }
+                                _ => bail_on_type_mismatch!("Map<?, ?>", t1),
+                            }
+                            (MapContainsKey(a1, a2), Boolean)
+                        }
+
+                        // error
+                        ("Error", "fresh") => {
+                            check_args_len(0)?;
+                            (ErrFresh, Error)
+                        }
+                        ("Error", "merge") => {
+                            check_args_len(2)?;
+                            let a1 = self
+                                .dup(Some(Error))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            let a2 = self
+                                .dup(Some(Error))
+                                .convert_expr(args_iter.next().unwrap())?;
+                            (ErrMerge(a1, a2), Error)
                         }
 
                         // others
