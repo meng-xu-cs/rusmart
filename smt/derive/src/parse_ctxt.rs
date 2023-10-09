@@ -10,6 +10,7 @@ use syn::{
 };
 use walkdir::WalkDir;
 
+use crate::parse_expr::{CtxtForExpr, Expr};
 use crate::parse_func::{FuncDef, FuncSig};
 use crate::parse_type::{CtxtForType, TypeDef};
 
@@ -95,7 +96,6 @@ macro_rules! bail_if_missing {
         }
     };
 }
-use crate::parse_expr::{CtxtForExpr, Expr};
 pub(crate) use bail_if_missing;
 
 /// Test whether an identifier is a reserved keyword
