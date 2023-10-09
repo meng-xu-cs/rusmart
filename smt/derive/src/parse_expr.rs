@@ -1,10 +1,11 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use itertools::Itertools;
 use syn::{
     Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprLit, ExprMatch, ExprPath, ExprTuple,
     FieldPat, Lit, Local, LocalInit, Member, Pat, PatOr, PatStruct, PatTuple, PatTupleStruct,
     PatType, Path, PathArguments, PathSegment, Result, Stmt,
 };
-
-use std::collections::BTreeMap;
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, FuncName, TypeName, VarName};
 use crate::parse_func::FuncSig;
@@ -689,24 +690,37 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 } = expr_match;
 
                 // collects heads of the match case
-                let mut is_tuple = false;
-                let mut heads = vec![];
-                match base.as_ref() {
+                let (is_tuple, head_exprs) = match base.as_ref() {
                     Exp::Tuple(expr_tuple) => {
                         let ExprTuple {
                             attrs: _,
                             paren_token: _,
                             elems,
                         } = expr_tuple;
-                        for elem in elems {
-                            heads.push(self.dup(None).convert_expr(elem)?);
-                        }
-                        is_tuple = true;
+                        (true, elems.iter().collect::<Vec<_>>())
                     }
-                    _ => {
-                        heads.push(self.dup(None).convert_expr(base)?);
-                    }
+                    _ => (false, vec![base.as_ref()]),
                 };
+
+                let mut heads = vec![];
+                let mut heads_options = vec![];
+                for elem in head_exprs {
+                    let head = self.dup(None).convert_expr(elem)?;
+                    let (adt_name, adt_variants): (_, BTreeSet<_>) = match head.ty() {
+                        User(name) => match self.ctxt.get_type(name) {
+                            None => bail_on!(elem, "no such type"),
+                            Some(def) => match def {
+                                TypeDef::Algebraic(adt) => {
+                                    (name.clone(), adt.variants().keys().cloned().collect())
+                                }
+                                _ => bail_on!(elem, "not an ADT on match head"),
+                            },
+                        },
+                        _ => bail_on!(elem, "not a user-defined type"),
+                    };
+                    heads.push(head);
+                    heads_options.push((adt_name, adt_variants));
+                }
 
                 // go over the arms
                 let mut parsed_arms = vec![];
@@ -722,7 +736,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     bail_if_exists!(guard.as_ref().map(|(if_token, _)| if_token));
 
                     // find the bindings
-                    let (atoms, bindings) = if is_tuple {
+                    let elem_pats = if is_tuple {
                         match pat {
                             Pat::Tuple(pat_tuple) => {
                                 let PatTuple {
@@ -730,26 +744,25 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                                     paren_token: _,
                                     elems,
                                 } = pat_tuple;
-
-                                let mut all_atoms = vec![];
-                                let mut all_bindings = BTreeMap::new();
-                                for elem in elems {
-                                    let (atom, partial) = self.analyze_pat_match_head(elem)?;
-                                    for (var_name, var_ty) in partial {
-                                        if all_bindings.insert(var_name, var_ty).is_some() {
-                                            bail_on!(elem, "duplicated variable name");
-                                        }
-                                    }
-                                    all_atoms.push(atom);
-                                }
-                                (all_atoms, all_bindings)
+                                elems.iter().collect()
                             }
                             _ => bail_on!(pat, "expect tuple"),
                         }
                     } else {
-                        let (atom, bindings) = self.analyze_pat_match_head(pat)?;
-                        (vec![atom], bindings)
+                        vec![pat]
                     };
+
+                    let mut atoms = vec![];
+                    let mut bindings = BTreeMap::new();
+                    for elem in elem_pats {
+                        let (atom, partial) = self.analyze_pat_match_head(elem)?;
+                        for (var_name, var_ty) in partial {
+                            if bindings.insert(var_name, var_ty).is_some() {
+                                bail_on!(elem, "duplicated variable name");
+                            }
+                        }
+                        atoms.push(atom);
+                    }
 
                     // use the new bindings to analyze the body
                     let mut new_ctxt = self.dup(self.expected.clone());
@@ -779,7 +792,8 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 }
 
                 // return the expression
-                let op = Op::Match(parsed_arms);
+                let combo = self.organize_match_arms(expr_match, &heads_options, &parsed_arms)?;
+                let op = Op::Match { heads, combo };
                 Inst {
                     op: op.into(),
                     ty: ref_ty,
@@ -1512,6 +1526,111 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
             }
         };
         Ok(converted)
+    }
+
+    /// Organize the arms of the match statement by permutation
+    fn organize_match_arms(
+        &self,
+        expr: &ExprMatch,
+        heads: &[(TypeName, BTreeSet<String>)],
+        arms: &[MatchArm],
+    ) -> Result<Vec<MatchCombo>> {
+        // tracks how many combo are mapped to each arm
+        let mut map_arms = BTreeMap::new();
+
+        // sanity check, plus initialize the tracking
+        for (i, arm) in arms.iter().enumerate() {
+            map_arms.insert(i, 0_usize);
+            if arm.atoms.len() != heads.len() {
+                bail_on!(expr, "atoms and heads number mismatch");
+            }
+            for (atom, (adt_name, adt_variants)) in arm.atoms.iter().zip(heads.iter()) {
+                match atom {
+                    MatchAtom::Default => (),
+                    MatchAtom::Binding(binding) => {
+                        for branch in binding.keys() {
+                            if adt_name != &branch.adt {
+                                bail_on!(expr, "atoms and heads ADT name mismatch");
+                            }
+                            if !adt_variants.contains(&branch.branch) {
+                                bail_on!(expr, "atoms and heads ADT variant mismatch");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // list all the combo
+        let mut all_combinations = vec![];
+        for combo in heads
+            .iter()
+            .map(|(_, names)| names.iter())
+            .multi_cartesian_product()
+        {
+            // sanity check
+            assert_eq!(combo.len(), heads.len());
+
+            // conversion
+            let combo_as_branch: Vec<_> = combo
+                .into_iter()
+                .zip(heads.iter())
+                .map(|(variant_name, (type_name, _))| ADTBranch {
+                    adt: type_name.clone(),
+                    branch: variant_name.to_string(),
+                })
+                .collect();
+
+            // go over each arm and check which is the match
+            let mut found = false;
+            for (i, arm) in arms.iter().enumerate() {
+                let mut matched = true;
+                let mut variants = vec![];
+                for (combo_variant, arm_atom) in combo_as_branch.iter().zip(arm.atoms.iter()) {
+                    match arm_atom {
+                        MatchAtom::Default => (),
+                        MatchAtom::Binding(binding) => match binding.get(combo_variant) {
+                            None => {
+                                matched = false;
+                                break;
+                            }
+                            Some(unpack) => {
+                                let variant = MatchVariant {
+                                    adt: combo_variant.adt.clone(),
+                                    branch: combo_variant.branch.clone(),
+                                    unpack: unpack.clone(),
+                                };
+                                variants.push(variant);
+                            }
+                        },
+                    }
+                }
+
+                // check if everything matches
+                if !matched {
+                    continue;
+                }
+
+                // if two arms match to the same combo, raise an error
+                if found {
+                    bail_on!(expr, "two match arms handles the same combination");
+                }
+
+                // mark the finding with the body of the arm
+                all_combinations.push(MatchCombo {
+                    variants,
+                    body: arm.body.clone(),
+                });
+                map_arms.entry(i).and_modify(|c| *c += 1);
+                found = true;
+            }
+
+            // ensure that each combo is handled by one and only one match arm
+            if !found {
+                bail_on!(expr, "no match arms handles a combination");
+            }
+        }
+        Ok(all_combinations)
     }
 
     /// Convert an expression to a boolean literal
