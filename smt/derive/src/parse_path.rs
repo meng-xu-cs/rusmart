@@ -7,7 +7,7 @@ use syn::{
 use crate::err::{bail_if_exists, bail_on};
 
 /// Test whether an identifier is a reserved keyword
-fn validate_identifier(ident: &Ident) -> Result<String> {
+fn validate_usr_ident(ident: &Ident) -> Result<String> {
     let name = ident.to_string();
     match name.as_str() {
         "Boolean" | "Integer" | "Rational" | "Text" | "Box" | "Seq" | "Set" | "Map" | "Error" => {
@@ -33,7 +33,7 @@ impl TryFrom<&Ident> for TypeName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        validate_identifier(value).map(|ident| Self { ident })
+        validate_usr_ident(value).map(|ident| Self { ident })
     }
 }
 
@@ -71,7 +71,56 @@ impl TryFrom<&Ident> for FuncName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        validate_identifier(value).map(|ident| Self { ident })
+        validate_usr_ident(value).map(|ident| Self { ident })
+    }
+}
+
+/// Identifier for a reserved macro
+pub enum QuantifierMacro {
+    Exists,
+    Forall,
+}
+
+impl TryFrom<&Ident> for QuantifierMacro {
+    type Error = Error;
+
+    fn try_from(value: &Ident) -> Result<Self> {
+        let name = match value.to_string().as_str() {
+            "forall" => Self::Forall,
+            "exists" => Self::Exists,
+            _ => bail_on!(value, "unknown macro"),
+        };
+        Ok(name)
+    }
+}
+
+impl QuantifierMacro {
+    /// Extract a macro name from a path
+    pub fn from_path(path: &Path) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        let mut iter = segments.iter().rev();
+        let name = match iter.next() {
+            None => bail_on!(segments, "invalid path"),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected arguments");
+                }
+                ident.try_into()?
+            }
+        };
+
+        // ensure that there are no more segments
+        match iter.next() {
+            None => (),
+            Some(seg) => bail_on!(seg, "unexpected segment"),
+        }
+        Ok(name)
     }
 }
 
@@ -97,7 +146,7 @@ impl TryFrom<&Ident> for VarName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        validate_identifier(value).map(|ident| Self { ident })
+        validate_usr_ident(value).map(|ident| Self { ident })
     }
 }
 
@@ -163,14 +212,6 @@ impl VarName {
         } = expr_path;
         bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
         Self::from_path(path)
-    }
-
-    /// Extract a variable name from an expression
-    pub fn from_expr(expr: &Exp) -> Result<Self> {
-        match expr {
-            Exp::Path(p) => Self::from_expr_path(p),
-            _ => bail_on!(expr, "invalid call target"),
-        }
     }
 }
 

@@ -4,14 +4,16 @@ use proc_macro2::TokenStream;
 use syn::{
     parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprMacro,
     ExprMatch, ExprTuple, ExprUnary, Local, LocalInit, Macro, MacroDelimiter, Pat, PatTuple,
-    PatType, Path, PathArguments, PathSegment, Result, ReturnType, Stmt, UnOp,
+    PatType, Result, ReturnType, Stmt, UnOp,
 };
 
 use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parse_expr_intrinsic::Intrinsic;
 use crate::parse_expr_match::{MatchAnalyzer, MatchCombo};
 use crate::parse_func::FuncSig;
-use crate::parse_path::{CallTarget, CallTargetGuess, FuncName, TypeName, VarName};
+use crate::parse_path::{
+    CallTarget, CallTargetGuess, FuncName, QuantifierMacro, TypeName, VarName,
+};
 use crate::parse_type::{CtxtForType, TypeDef, TypeTag};
 
 /// A context suitable for expression analysis
@@ -530,36 +532,15 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 if !matches!(delimiter, MacroDelimiter::Paren(_)) {
                     bail_on!(expr_macro, "expect macro invocation with parenthesis");
                 }
-                let Path {
-                    leading_colon,
-                    segments,
-                } = path;
-                bail_if_exists!(leading_colon);
 
-                let mut iter = segments.iter().rev();
-                let macro_name = match iter.next() {
-                    None => bail_on!(path, "invalid path"),
-                    Some(segment) => {
-                        let PathSegment { ident, arguments } = segment;
-                        if !matches!(arguments, PathArguments::None) {
-                            bail_on!(arguments, "unexpected path arguments");
-                        }
-                        ident.to_string()
-                    }
-                };
-                let op = match macro_name.as_str() {
-                    "forall" => {
-                        let (vars, body) = self.expert_expr_quant_def(tokens)?;
-                        Op::Forall { vars, body }
-                    }
-                    "exists" => {
-                        let (vars, body) = self.expert_expr_quant_def(tokens)?;
-                        Op::Exists { vars, body }
-                    }
-                    _ => bail_on!(path, "unknown macro"),
-                };
+                let quant = QuantifierMacro::from_path(path)?;
+                let (vars, body) = self.expert_expr_quant_def(tokens)?;
 
                 // pack into expression
+                let op = match quant {
+                    QuantifierMacro::Exists => Op::Exists { vars, body },
+                    QuantifierMacro::Forall => Op::Forall { vars, body },
+                };
                 Inst {
                     op: op.into(),
                     ty: TypeTag::Boolean,
