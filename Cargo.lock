@@ -274,13 +274,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusmart-smt-remark"
-version = "0.1.0"
-dependencies = [
- "syn",
-]
-
-[[package]]
 name = "rusmart-smt-stdlib"
 version = "0.1.0"
 dependencies = [
