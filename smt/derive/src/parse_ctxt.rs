@@ -182,7 +182,7 @@ impl Context {
     }
 
     /// Parse types
-    pub fn next(self) -> Result<ContextWithType> {
+    pub fn analyze_type(self) -> Result<ContextWithType> {
         let mut parsed_types = BTreeMap::new();
         for (name, marked) in &self.types {
             trace!("handling type: {}", name);
@@ -219,7 +219,7 @@ pub struct ContextWithType {
 
 impl ContextWithType {
     /// Parse signatures
-    pub fn next(self) -> Result<ContextWithTypeAndSig> {
+    pub fn analyze_func_sig(self) -> Result<ContextWithTypeAndSig> {
         // impl
         let mut sig_impls = BTreeMap::new();
         for (name, marked) in &self.impls {
@@ -297,8 +297,8 @@ pub struct ContextWithTypeAndSig {
 }
 
 impl ContextWithTypeAndSig {
-    /// Parse signatures
-    pub fn next(self) -> Result<ContextWithTypeAndFunc> {
+    /// Parse function body
+    pub fn analyze_func_body(self) -> Result<ContextWithTypeAndFunc> {
         // impl
         let mut body_impls = BTreeMap::new();
         for (name, (sig, stmt)) in &self.impls {
