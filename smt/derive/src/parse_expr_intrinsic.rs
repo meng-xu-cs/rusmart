@@ -118,8 +118,8 @@ macro_rules! bail_on_type_mismatch {
 
 impl Intrinsic {
     /// Convert an unpacked expression into intrinsics
-    pub fn convert_and_infer_type<'a, T: CtxtForExpr>(
-        parser: &ExprParseCtxt<'a, T>,
+    pub fn convert_and_infer_type<T: CtxtForExpr>(
+        parser: &ExprParseCtxt<'_, T>,
         class: &str,
         method: &str,
         func: &Exp,
@@ -522,8 +522,8 @@ impl Intrinsic {
     }
 
     /// Unpack 1 arguments
-    fn unpack_arg_1<'a, T: CtxtForExpr>(
-        parser: &ExprParseCtxt<'a, T>,
+    fn unpack_arg_1<T: CtxtForExpr>(
+        parser: &ExprParseCtxt<'_, T>,
         args: &Punctuated<Exp, Comma>,
         p1: Option<TypeTag>,
     ) -> Result<Expr> {
@@ -539,8 +539,8 @@ impl Intrinsic {
     }
 
     /// Unpack 2 arguments
-    fn unpack_arg_2<'a, T: CtxtForExpr>(
-        parser: &ExprParseCtxt<'a, T>,
+    fn unpack_arg_2<T: CtxtForExpr>(
+        parser: &ExprParseCtxt<'_, T>,
         args: &Punctuated<Exp, Comma>,
         p1: Option<TypeTag>,
         p2: Option<TypeTag>,
@@ -561,8 +561,8 @@ impl Intrinsic {
     }
 
     /// Unpack 3 arguments
-    fn unpack_arg_3<'a, T: CtxtForExpr>(
-        parser: &ExprParseCtxt<'a, T>,
+    fn unpack_arg_3<T: CtxtForExpr>(
+        parser: &ExprParseCtxt<'_, T>,
         args: &Punctuated<Exp, Comma>,
         p1: Option<TypeTag>,
         p2: Option<TypeTag>,
