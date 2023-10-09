@@ -1,6 +1,8 @@
 use std::fmt::{Display, Formatter};
 
-use syn::{Error, Ident, Pat, PatIdent, PathArguments, PathSegment, Result};
+use syn::{
+    Error, Expr as Exp, ExprPath, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result,
+};
 
 use crate::err::{bail_if_exists, bail_on};
 
@@ -100,6 +102,7 @@ impl TryFrom<&Ident> for VarName {
 }
 
 impl VarName {
+    /// Extract a variable name from a pattern
     pub fn from_pat(pat: &Pat) -> Result<Self> {
         match pat {
             Pat::Ident(decl) => {
@@ -122,31 +125,196 @@ impl VarName {
             _ => bail_on!(pat, "not an ident"),
         }
     }
+
+    /// Extract a variable name from a path
+    pub fn from_path(path: &Path) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        let mut iter = segments.iter().rev();
+        let name = match iter.next() {
+            None => bail_on!(segments, "invalid path"),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected arguments");
+                }
+                ident.try_into()?
+            }
+        };
+
+        // ensure that there are no more segments
+        match iter.next() {
+            None => (),
+            Some(seg) => bail_on!(seg, "unexpected segment"),
+        }
+        Ok(name)
+    }
+
+    /// Extract a variable name from an expression path
+    pub fn from_expr_path(expr_path: &ExprPath) -> Result<Self> {
+        let ExprPath {
+            attrs: _,
+            qself,
+            path,
+        } = expr_path;
+        bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+        Self::from_path(path)
+    }
+
+    /// Extract a variable name from an expression
+    pub fn from_expr(expr: &Exp) -> Result<Self> {
+        match expr {
+            Exp::Path(p) => Self::from_expr_path(p),
+            _ => bail_on!(expr, "invalid call target"),
+        }
+    }
 }
 
-/// Represents a namespace in the language
-pub struct Namespace;
+/// An identifier for a ADT variant
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+pub struct ADTBranch {
+    adt: TypeName,
+    branch: String,
+}
 
-impl Namespace {
-    pub fn consume_prefix<'a, I: Iterator<Item = &'a PathSegment>>(
-        mut iter: I,
-        expected: &[&'static str],
-    ) -> Result<()> {
-        let mut toks = expected.iter();
-        loop {
-            match (iter.next(), toks.next()) {
-                (None, _) => return Ok(()),
-                (Some(segment), None) => bail_on!(segment, "unexpected segment"),
-                (Some(segment), Some(token)) => {
-                    let PathSegment { ident, arguments } = segment;
-                    if ident.to_string().as_str() != *token {
-                        bail_on!(ident, "unknown path");
-                    }
-                    if !matches!(arguments, PathArguments::None) {
-                        bail_on!(arguments, "unexpected path arguments");
-                    }
+impl ADTBranch {
+    /// Build manually
+    pub fn new(adt: TypeName, branch: String) -> Self {
+        Self { adt, branch }
+    }
+
+    /// Extract a call target from a path
+    pub fn from_path(path: &Path) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        let mut iter = segments.iter().rev();
+        let variant_name = match iter.next() {
+            None => bail_on!(segments, "invalid path"),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected arguments");
                 }
+                ident.to_string()
             }
+        };
+        let type_name = match iter.next() {
+            None => bail_on!(segments, "invalid path"),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected arguments");
+                }
+                ident.try_into()?
+            }
+        };
+
+        // ensure that there are no more segments
+        match iter.next() {
+            None => (),
+            Some(seg) => bail_on!(seg, "unexpected segment"),
+        }
+        Ok(Self {
+            adt: type_name,
+            branch: variant_name,
+        })
+    }
+
+    /// Getter to type name
+    pub fn type_name(&self) -> &TypeName {
+        &self.adt
+    }
+
+    /// Getter to branch name
+    pub fn variant_name(&self) -> &str {
+        &self.branch
+    }
+}
+
+/// Represent a classification of a call target
+pub enum CallTargetGuess<'a> {
+    Usr(&'a FuncName),
+    Sys(&'a str, &'a str),
+}
+
+/// Represent a call target
+pub struct CallTarget {
+    class: String,
+    method: FuncName,
+}
+
+impl CallTarget {
+    /// Extract a call target from a path
+    pub fn from_path(path: &Path) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        let mut iter = segments.iter().rev();
+        let method = match iter.next() {
+            None => bail_on!(segments, "invalid path"),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected arguments");
+                }
+                ident.try_into()?
+            }
+        };
+        let class = match iter.next() {
+            None => "Self".to_string(),
+            Some(segment) => {
+                let PathSegment { ident, arguments } = segment;
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected arguments");
+                }
+                ident.to_string()
+            }
+        };
+
+        // ensure that there are no more segments
+        match iter.next() {
+            None => (),
+            Some(seg) => bail_on!(seg, "unexpected segment"),
+        }
+        Ok(Self { class, method })
+    }
+
+    /// Extract a call target from an expression path
+    pub fn from_expr_path(expr_path: &ExprPath) -> Result<Self> {
+        let ExprPath {
+            attrs: _,
+            qself,
+            path,
+        } = expr_path;
+        bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+        Self::from_path(path)
+    }
+
+    /// Extract a call target from an expression
+    pub fn from_expr(expr: &Exp) -> Result<Self> {
+        match expr {
+            Exp::Path(p) => Self::from_expr_path(p),
+            _ => bail_on!(expr, "invalid call target"),
+        }
+    }
+
+    /// Try to guess whether this target is user-defined or intrinsic
+    pub fn as_guess(&self) -> CallTargetGuess {
+        if self.class.as_str() == "Self" {
+            CallTargetGuess::Usr(&self.method)
+        } else {
+            CallTargetGuess::Sys(&self.class, &self.method.ident)
         }
     }
 }

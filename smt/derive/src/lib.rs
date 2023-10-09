@@ -4,6 +4,8 @@ mod err;
 
 mod parse_ctxt;
 mod parse_expr;
+mod parse_expr_intrinsic;
+mod parse_expr_match;
 mod parse_func;
 mod parse_path;
 mod parse_type;
