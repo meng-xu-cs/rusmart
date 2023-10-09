@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 use syn::{
-    Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprLit, ExprMatch, ExprPath, ExprTuple,
-    FieldPat, Lit, Local, LocalInit, Member, Pat, PatOr, PatStruct, PatTuple, PatTupleStruct,
-    PatType, Path, PathArguments, PathSegment, Result, Stmt,
+    Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprIf, ExprLit, ExprMatch, ExprPath, ExprTuple,
+    ExprUnary, FieldPat, Lit, Local, LocalInit, Member, Pat, PatOr, PatStruct, PatTuple,
+    PatTupleStruct, PatType, Path, PathArguments, PathSegment, Result, Stmt, UnOp,
 };
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, FuncName, TypeName, VarName};
@@ -679,6 +679,76 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
 
                 bail_if_exists!(label);
                 return self.convert_stmts(stmts);
+            }
+            Exp::If(expr_if) => {
+                let mut phi_nodes = vec![];
+                let mut cursor = expr_if;
+                let default_expr = loop {
+                    let ExprIf {
+                        attrs: _,
+                        if_token: _,
+                        cond,
+                        then_branch,
+                        else_branch,
+                    } = cursor;
+
+                    // convert the condition
+                    let new_cond = match cond.as_ref() {
+                        Exp::Unary(expr_unary) => {
+                            let ExprUnary { attrs: _, op, expr } = expr_unary;
+                            if !matches!(op, UnOp::Deref(_)) {
+                                bail_on!(cond, "not a Boolean deref");
+                            }
+                            self.dup(Some(Boolean)).convert_expr(expr)?
+                        }
+                        _ => bail_on!(cond, "not a Boolean deref"),
+                    };
+
+                    // convert the then block
+                    let new_then = self
+                        .dup(self.expected.clone())
+                        .convert_stmts(&then_branch.stmts)?;
+
+                    // now we have a node
+                    phi_nodes.push(PhiNode {
+                        cond: new_cond,
+                        body: new_then,
+                    });
+
+                    // convert the else block
+                    let else_expr = bail_if_missing!(
+                        else_branch.as_ref().map(|(_, e)| e.as_ref()),
+                        expr_if,
+                        "expect else branch"
+                    );
+
+                    match else_expr {
+                        Exp::If(elseif_expr) => {
+                            cursor = elseif_expr;
+                        }
+                        _ => {
+                            break self.dup(self.expected.clone()).convert_expr(else_expr)?;
+                        }
+                    }
+                };
+
+                // check consistency of body type
+                let ref_ty = default_expr.ty().clone();
+                for item in &phi_nodes {
+                    if item.body.ty() != &ref_ty {
+                        bail_on!(expr_if, "phi node type mismatch");
+                    }
+                }
+
+                // construct the operator
+                let op = Op::Phi {
+                    nodes: phi_nodes,
+                    default: default_expr,
+                };
+                Inst {
+                    op: op.into(),
+                    ty: ref_ty,
+                }
             }
             Exp::Match(expr_match) => {
                 let ExprMatch {
