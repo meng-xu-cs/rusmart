@@ -1,4 +1,4 @@
-use rusmart_smt_remark::{smt_impl, smt_spec, smt_type};
+use rusmart_smt_derive::{smt_impl, smt_spec, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Map, Rational, Seq, Set, Text, SMT};
 use rusmart_smt_stdlib::exp::forall;
 
