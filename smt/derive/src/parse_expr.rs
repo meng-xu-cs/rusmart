@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
+use proc_macro2::TokenStream;
 use syn::{
-    Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprIf, ExprLit, ExprMatch, ExprPath, ExprTuple,
-    ExprUnary, FieldPat, Lit, Local, LocalInit, Member, Pat, PatOr, PatStruct, PatTuple,
-    PatTupleStruct, PatType, Path, PathArguments, PathSegment, Result, Stmt, UnOp,
+    parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprLit, ExprMacro,
+    ExprMatch, ExprPath, ExprTuple, ExprUnary, FieldPat, Lit, Local, LocalInit, Macro,
+    MacroDelimiter, Member, Pat, PatOr, PatStruct, PatTuple, PatTupleStruct, PatType, Path,
+    PathArguments, PathSegment, Result, ReturnType, Stmt, UnOp,
 };
 
 use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, FuncName, TypeName, VarName};
@@ -187,6 +189,16 @@ pub enum Op {
     },
     /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
     Phi { nodes: Vec<PhiNode>, default: Expr },
+    /// `forall(|<v>: <t>| {<expr>})`
+    Forall {
+        vars: BTreeMap<VarName, TypeTag>,
+        body: Expr,
+    },
+    /// `exists(|<v>: <t>| {<expr>})`
+    Exists {
+        vars: BTreeMap<VarName, TypeTag>,
+        body: Expr,
+    },
     /// `<class>::<method>(<a1>, <a2>, ...)`
     Intrinsic(Intrinsic),
     /// `<function>(<a1>, <a2>, ...)`
@@ -1583,6 +1595,56 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 // pack into expression
                 Inst { op: op.into(), ty }
             }
+            // smt-specific expressions
+            Exp::Macro(expr_macro) => {
+                let ExprMacro {
+                    attrs: _,
+                    mac:
+                        Macro {
+                            path,
+                            bang_token: _,
+                            delimiter,
+                            tokens,
+                        },
+                } = expr_macro;
+                if !matches!(delimiter, MacroDelimiter::Paren(_)) {
+                    bail_on!(expr_macro, "expect macro invocation with parenthesis");
+                }
+                let Path {
+                    leading_colon,
+                    segments,
+                } = path;
+                bail_if_exists!(leading_colon);
+
+                let mut iter = segments.iter().rev();
+                let macro_name = match iter.next() {
+                    None => bail_on!(path, "invalid path"),
+                    Some(segment) => {
+                        let PathSegment { ident, arguments } = segment;
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected path arguments");
+                        }
+                        ident.to_string()
+                    }
+                };
+                let op = match macro_name.as_str() {
+                    "forall" => {
+                        let (vars, body) = self.expert_expr_quant_def(tokens)?;
+                        Op::Forall { vars, body }
+                    }
+                    "exists" => {
+                        let (vars, body) = self.expert_expr_quant_def(tokens)?;
+                        Op::Exists { vars, body }
+                    }
+                    _ => bail_on!(path, "unknown macro"),
+                };
+
+                // pack into expression
+                Inst {
+                    op: op.into(),
+                    ty: TypeTag::Boolean,
+                }
+            }
             _ => bail_on!(expr, "invalid expression"),
         };
 
@@ -1789,5 +1851,72 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
             }
             _ => bail_on!(expr, "not a literal"),
         }
+    }
+
+    /// Convert an expression to a quantifier body
+    fn expert_expr_quant_def(
+        &self,
+        raw: &TokenStream,
+    ) -> Result<(BTreeMap<VarName, TypeTag>, Expr)> {
+        let stream = raw.clone();
+        let closure = parse2::<ExprClosure>(stream)?;
+        let ExprClosure {
+            attrs: _,
+            lifetimes,
+            constness,
+            movability,
+            asyncness,
+            capture,
+            or1_token: _,
+            inputs,
+            or2_token: _,
+            output,
+            body,
+        } = &closure;
+        bail_if_exists!(lifetimes);
+        bail_if_exists!(constness);
+        bail_if_exists!(movability);
+        bail_if_exists!(asyncness);
+        bail_if_exists!(capture);
+
+        // parameters
+        let mut param_decls = BTreeMap::new();
+        for param in inputs {
+            match param {
+                Pat::Type(typed) => {
+                    let PatType {
+                        attrs: _,
+                        pat,
+                        colon_token: _,
+                        ty,
+                    } = typed;
+
+                    let name = VarName::from_pat(pat)?;
+                    if self.get_var_type(&name).is_some() || param_decls.contains_key(&name) {
+                        bail_on!(pat, "conflicting quantifier variable name");
+                    }
+
+                    let ty = TypeTag::from_type(self.ctxt, ty)?;
+                    param_decls.insert(name, ty);
+                }
+                _ => bail_on!(param, "invalid quantifier variable declaration"),
+            }
+        }
+
+        // expect no return type
+        match output {
+            ReturnType::Default => (),
+            ReturnType::Type(_, rty) => bail_on!(rty, "unexpected return type"),
+        };
+
+        // analyze the body
+        let mut parser = self.dup(Some(TypeTag::Boolean));
+        parser
+            .vars
+            .extend(param_decls.iter().map(|(k, v)| (k.clone(), v.clone())));
+        let body_expr = parser.convert_expr(body)?;
+
+        // return the parsed result
+        Ok((param_decls, body_expr))
     }
 }

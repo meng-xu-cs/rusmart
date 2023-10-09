@@ -1,5 +1,6 @@
 use rusmart_smt_remark::{smt_impl, smt_spec, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Map, Rational, Seq, Set, Text, SMT};
+use rusmart_smt_stdlib::exp::forall;
 
 /// A term *in its valid state* is defined by the following ADT
 #[smt_type]
@@ -97,16 +98,5 @@ pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
 
 #[smt_spec(seq_lt)]
 pub fn spec_seq_lt(lhs: Seq<Value>, rhs: Seq<Value>) -> Boolean {
-    /*
-    (|k: Integer| {
-        Boolean::from(k >= 0.into())
-            & (k < Seq::length(rhs)).into()
-            & (|i: Integer| {
-                Boolean::from(i >= 0.into())
-                    & (i < k).into()
-                    & spec_lt(Seq::at_unchecked(lhs, i), Seq::at_unchecked(rhs, k))
-            })(Integer::forall())
-    })(Integer::exists())
-     */
-    todo!()
+    forall!(|k: Integer| Integer::ge(k, Integer::from(0)))
 }

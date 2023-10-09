@@ -563,7 +563,7 @@ impl ContextWithTypeAndSig {
         let unpacked_specs = specs
             .into_iter()
             .map(|(name, (sig, _))| {
-                let body = body_impls.remove(&name).unwrap();
+                let body = body_specs.remove(&name).unwrap();
                 (name, FuncDef::new(sig, body))
             })
             .collect();
