@@ -646,4 +646,44 @@ impl Intrinsic {
             _ => bail_on!(expr, "not a literal"),
         }
     }
+
+    /// Convert an expression to a literal
+    pub fn expect_literal_into(receiver: &Exp, ety: Option<&TypeTag>) -> Result<(Self, TypeTag)> {
+        let (intrinsic, ty) = match receiver {
+            Exp::Lit(expr_lit) => {
+                let ExprLit { attrs: _, lit } = expr_lit;
+                match lit {
+                    Lit::Bool(val) => {
+                        match ety {
+                            None | Some(TypeTag::Boolean) => (),
+                            Some(_) => bail_on!(receiver, "type mismatch"),
+                        }
+                        (Self::BoolVal(val.value), TypeTag::Boolean)
+                    }
+                    Lit::Int(val) => {
+                        let parsed: i128 = match val.token().to_string().parse() {
+                            Ok(v) => v,
+                            Err(_) => bail_on!(val, "unable to parse"),
+                        };
+                        match ety {
+                            None => bail_on!(receiver, "need type annotation"),
+                            Some(TypeTag::Integer) => (Self::IntVal(parsed), TypeTag::Integer),
+                            Some(TypeTag::Rational) => (Self::NumVal(parsed), TypeTag::Rational),
+                            Some(_) => bail_on!(receiver, "type mismatch"),
+                        }
+                    }
+                    Lit::Str(val) => {
+                        match ety {
+                            None | Some(TypeTag::Text) => (),
+                            Some(_) => bail_on!(receiver, "type mismatch"),
+                        }
+                        (Self::StrVal(val.token().to_string()), TypeTag::Text)
+                    }
+                    _ => bail_on!(lit, "not an expected literal"),
+                }
+            }
+            _ => bail_on!(receiver, "not a literal"),
+        };
+        Ok((intrinsic, ty))
+    }
 }

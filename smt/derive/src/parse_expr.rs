@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use proc_macro2::TokenStream;
 use syn::{
     parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprMacro,
-    ExprMatch, ExprTuple, ExprUnary, Local, LocalInit, Macro, MacroDelimiter, Pat, PatTuple,
-    PatType, Result, ReturnType, Stmt, UnOp,
+    ExprMatch, ExprMethodCall, ExprTuple, ExprUnary, Local, LocalInit, Macro, MacroDelimiter, Pat,
+    PatTuple, PatType, Result, ReturnType, Stmt, UnOp,
 };
 
 use crate::err::{bail_if_exists, bail_if_missing, bail_on};
@@ -517,6 +517,34 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 // pack into expression
                 Inst { op: op.into(), ty }
             }
+            Exp::MethodCall(expr_method) => {
+                let ExprMethodCall {
+                    attrs: _,
+                    receiver,
+                    dot_token: _,
+                    method,
+                    turbofish,
+                    paren_token: _,
+                    args,
+                } = expr_method;
+                bail_if_exists!(turbofish);
+                let name: FuncName = method.try_into()?;
+
+                // check if this is literal conversion
+                if name.as_ref() == "into" {
+                    if !args.is_empty() {
+                        bail_on!(args, "unexpected arguments");
+                    }
+                    let (intrinsic, ty) =
+                        Intrinsic::expect_literal_into(receiver, self.expected_type())?;
+                    Inst {
+                        op: Op::Intrinsic(intrinsic).into(),
+                        ty,
+                    }
+                } else {
+                    todo!()
+                }
+            }
             // smt-specific expressions
             Exp::Macro(expr_macro) => {
                 let ExprMacro {
@@ -534,7 +562,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 }
 
                 let quant = QuantifierMacro::from_path(path)?;
-                let (vars, body) = self.expert_expr_quant_def(tokens)?;
+                let (vars, body) = self.expect_expr_quant_def(tokens)?;
 
                 // pack into expression
                 let op = match quant {
@@ -562,7 +590,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
     }
 
     /// Convert an expression to a quantifier body
-    fn expert_expr_quant_def(
+    fn expect_expr_quant_def(
         &self,
         raw: &TokenStream,
     ) -> Result<(BTreeMap<VarName, TypeTag>, Expr)> {
