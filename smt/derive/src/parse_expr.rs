@@ -528,21 +528,11 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     args,
                 } = expr_method;
                 bail_if_exists!(turbofish);
-                let name: FuncName = method.try_into()?;
-
-                // check if this is literal conversion
-                if name.as_ref() == "into" {
-                    if !args.is_empty() {
-                        bail_on!(args, "unexpected arguments");
-                    }
-                    let (intrinsic, ty) =
-                        Intrinsic::expect_literal_into(receiver, self.expected_type())?;
-                    Inst {
-                        op: Op::Intrinsic(intrinsic).into(),
-                        ty,
-                    }
-                } else {
-                    todo!()
+                let (intrinsic, ty) =
+                    Intrinsic::convert_and_infer_type_for_method(&self, receiver, method, args)?;
+                Inst {
+                    op: Op::Intrinsic(intrinsic).into(),
+                    ty,
                 }
             }
             // smt-specific expressions

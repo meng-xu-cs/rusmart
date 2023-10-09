@@ -1,9 +1,11 @@
+use proc_macro2::Ident;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::{Expr as Exp, ExprLit, Lit, Result};
 
 use crate::err::bail_on;
 use crate::parse_expr::{CtxtForExpr, Expr, ExprParseCtxt};
+use crate::parse_path::FuncName;
 use crate::parse_type::TypeTag;
 
 /// Intrinsic procedure
@@ -644,6 +646,28 @@ impl Intrinsic {
                 }
             }
             _ => bail_on!(expr, "not a literal"),
+        }
+    }
+
+    /// Convert an unpacked expression into intrinsics
+    pub fn convert_and_infer_type_for_method<T: CtxtForExpr>(
+        parser: &ExprParseCtxt<'_, T>,
+        receiver: &Exp,
+        method: &Ident,
+        args: &Punctuated<Exp, Comma>,
+    ) -> Result<(Self, TypeTag)> {
+        let name: FuncName = method.try_into()?;
+        match name.as_ref() {
+            // literal conversion
+            "into" => {
+                if !args.is_empty() {
+                    bail_on!(args, "unexpected arguments");
+                }
+                Intrinsic::expect_literal_into(receiver, parser.expected_type())
+            }
+
+            // numerical
+            _ => bail_on!(method, "unknown method"),
         }
     }
 
