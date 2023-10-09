@@ -1535,6 +1535,13 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
         heads: &[(TypeName, BTreeSet<String>)],
         arms: &[MatchArm],
     ) -> Result<Vec<MatchCombo>> {
+        // utility enum to indicate whether a match combo is concrete or abstract
+        enum MatchComboStatus {
+            None,
+            Abstract(Vec<(usize, MatchCombo)>),
+            Concrete(usize, MatchCombo),
+        }
+
         // tracks how many combo are mapped to each arm
         let mut map_arms = BTreeMap::new();
 
@@ -1582,16 +1589,19 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 .collect();
 
             // go over each arm and check which is the match
-            let mut found = false;
+            let mut found = MatchComboStatus::None;
             for (i, arm) in arms.iter().enumerate() {
-                let mut matched = true;
                 let mut variants = vec![];
+                let mut is_matched = true;
+                let mut is_abstract = false;
                 for (combo_variant, arm_atom) in combo_as_branch.iter().zip(arm.atoms.iter()) {
                     match arm_atom {
-                        MatchAtom::Default => (),
+                        MatchAtom::Default => {
+                            is_abstract = true;
+                        }
                         MatchAtom::Binding(binding) => match binding.get(combo_variant) {
                             None => {
-                                matched = false;
+                                is_matched = false;
                                 break;
                             }
                             Some(unpack) => {
@@ -1607,29 +1617,62 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                 }
 
                 // check if everything matches
-                if !matched {
+                if !is_matched {
                     continue;
                 }
 
-                // if two arms match to the same combo, raise an error
-                if found {
-                    bail_on!(expr, "two match arms handles the same combination");
-                }
-
-                // mark the finding with the body of the arm
-                all_combinations.push(MatchCombo {
+                // assign the combo
+                let combo = MatchCombo {
                     variants,
                     body: arm.body.clone(),
-                });
-                map_arms.entry(i).and_modify(|c| *c += 1);
-                found = true;
+                };
+                if is_abstract {
+                    match found {
+                        MatchComboStatus::None => {
+                            found = MatchComboStatus::Abstract(vec![(i, combo)]);
+                        }
+                        MatchComboStatus::Abstract(existing) => {
+                            found = MatchComboStatus::Abstract(
+                                existing
+                                    .into_iter()
+                                    .chain(std::iter::once((i, combo)))
+                                    .collect(),
+                            )
+                        }
+                        MatchComboStatus::Concrete(..) => {
+                            // do nothing, a concrete match takes priority
+                        }
+                    }
+                } else {
+                    // if two concrete arms match to the same combo, raise an error
+                    if matches!(found, MatchComboStatus::Concrete(..)) {
+                        bail_on!(expr, "two concrete match arms handles the same combination");
+                    }
+                    found = MatchComboStatus::Concrete(i, combo);
+                }
             }
 
             // ensure that each combo is handled by one and only one match arm
-            if !found {
-                bail_on!(expr, "no match arms handles a combination");
-            }
+            let (i, combo) = match found {
+                MatchComboStatus::None => bail_on!(expr, "no match arms handles a combination"),
+                MatchComboStatus::Abstract(candidates) => {
+                    if candidates.len() != 1 {
+                        bail_on!(expr, "ambiguous abstract match arms");
+                    }
+                    candidates.into_iter().next().unwrap()
+                }
+                MatchComboStatus::Concrete(i, combo) => (i, combo),
+            };
+
+            all_combinations.push(combo);
+            map_arms.entry(i).and_modify(|c| *c += 1);
         }
+
+        // check that every match arm is useful
+        if map_arms.values().any(|v| *v == 0) {
+            bail_on!(expr, "unused match arms");
+        }
+
         Ok(all_combinations)
     }
 
