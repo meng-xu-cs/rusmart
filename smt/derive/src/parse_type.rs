@@ -6,9 +6,9 @@ use syn::{
     ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
 };
 
-use crate::parse_ctxt::{
-    bail_if_exists, bail_if_missing, bail_on, MarkedType, Namespace, TypeName,
-};
+use crate::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::parse_ctxt::MarkedType;
+use crate::parse_path::TypeName;
 
 /// A context suitable for type analysis
 pub trait CtxtForType {
@@ -152,8 +152,11 @@ impl TypeTag {
             }
         };
 
-        // check the entire path
-        Namespace::consume_prefix(iter, &["dt", "rusmart_smt_stdlib"])?;
+        // disallow more items in the match
+        match iter.next() {
+            None => (),
+            Some(segment) => bail_on!(segment, "unexpected segment"),
+        }
         Ok(tag)
     }
 

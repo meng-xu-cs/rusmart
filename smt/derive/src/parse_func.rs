@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use syn::{FnArg, PatType, Result, ReturnType, Signature};
 
-use crate::parse_ctxt::{bail_if_exists, bail_on, VarName};
+use crate::err::{bail_if_exists, bail_on};
 use crate::parse_expr::Expr;
+use crate::parse_path::VarName;
 use crate::parse_type::{CtxtForType, TypeTag};
 
 /// Function signature

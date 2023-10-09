@@ -9,8 +9,9 @@ use syn::{
     PathArguments, PathSegment, Result, ReturnType, Stmt, UnOp,
 };
 
-use crate::parse_ctxt::{bail_if_exists, bail_if_missing, bail_on, FuncName, TypeName, VarName};
+use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parse_func::FuncSig;
+use crate::parse_path::{FuncName, TypeName, VarName};
 use crate::parse_type::{ADTVariant, CtxtForType, TypeDef, TypeTag};
 
 /// A context suitable for expression analysis
