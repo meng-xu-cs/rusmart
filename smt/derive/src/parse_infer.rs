@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::parse_func::FuncSig;
-use crate::parse_infer::TypeVar::Boolean;
 use crate::parse_path::{FuncName, TypeName};
 use crate::parse_type::TypeTag;
 
@@ -310,7 +309,7 @@ impl FuncTypeDatabase {
         let func_eq = TypeFn {
             qualifier: Some(name.to_string()),
             params: vec![TypeVar::User(name.clone()), TypeVar::User(name.clone())],
-            ret_ty: Boolean,
+            ret_ty: TypeVar::Boolean,
         };
         let inserted = self
             .db
@@ -324,7 +323,7 @@ impl FuncTypeDatabase {
         let func_ne = TypeFn {
             qualifier: Some(name.to_string()),
             params: vec![TypeVar::User(name.clone()), TypeVar::User(name.clone())],
-            ret_ty: Boolean,
+            ret_ty: TypeVar::Boolean,
         };
         let inserted = self
             .db
