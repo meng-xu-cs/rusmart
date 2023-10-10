@@ -145,7 +145,7 @@ impl Context {
                 "duplicated type name"
             );
         }
-        trace!("type added to context: {}", name);
+        trace!("type found: {}", name);
         self.types.insert(name, item);
         Ok(())
     }
@@ -161,7 +161,7 @@ impl Context {
                 "duplicated impl name"
             );
         }
-        trace!("impl added to context: {}", name);
+        trace!("impl found: {}", name);
         self.impls.insert(name, item);
         Ok(())
     }
@@ -177,7 +177,7 @@ impl Context {
                 "duplicated impl name"
             );
         }
-        trace!("spec added to context: {}", name);
+        trace!("spec found: {}", name);
         self.specs.insert(name, item);
         Ok(())
     }
@@ -260,7 +260,7 @@ impl ContextWithType {
             specs,
         } = self;
 
-        let unpacked_impls = impls
+        let unpacked_impls: BTreeMap<_, _> = impls
             .into_iter()
             .map(|(name, marked)| {
                 let sig = sig_impls.remove(&name).unwrap();
@@ -268,7 +268,7 @@ impl ContextWithType {
                 (name, (sig, stmts))
             })
             .collect();
-        let unpacked_specs = specs
+        let unpacked_specs: BTreeMap<_, _> = specs
             .into_iter()
             .map(|(name, marked)| {
                 let sig = sig_specs.remove(&name).unwrap();
@@ -277,14 +277,27 @@ impl ContextWithType {
             })
             .collect();
 
+        // populate the function database
+        let mut fn_db = FuncTypeDatabase::with_intrinsics();
+
+        // register SMT types as they all implement the SMT trait
+        for ty in types.keys() {
+            fn_db.register_user_type(ty);
+        }
+        // register user-implemented functions
+        for (name, (sig, _)) in unpacked_impls.iter() {
+            fn_db.register_user_func(name, sig);
+        }
+
+        trace!("function database populated with {} entries", fn_db.size());
+
+        // done
         let ctxt = ContextWithTypeAndSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
-            fn_db: FuncTypeDatabase::with_intrinsics(),
+            fn_db,
         };
-
-        // done
         Ok(ctxt)
     }
 }

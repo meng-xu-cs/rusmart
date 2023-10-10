@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::parse_func::FuncSig;
+use crate::parse_infer::TypeVar::Boolean;
 use crate::parse_path::{FuncName, TypeName};
+use crate::parse_type::TypeTag;
 
 /// A type variable representing either a concrete type or a symbolic (i.e., to be inferred) one
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -27,6 +30,25 @@ enum TypeVar {
     Error,
     /// user-defined type
     User(TypeName),
+}
+
+impl From<&TypeTag> for TypeVar {
+    fn from(ty: &TypeTag) -> Self {
+        match ty {
+            TypeTag::Boolean => Self::Boolean,
+            TypeTag::Integer => Self::Integer,
+            TypeTag::Rational => Self::Rational,
+            TypeTag::Text => Self::Text,
+            TypeTag::Cloak(sub) => Self::Cloak(Box::new(sub.as_ref().into())),
+            TypeTag::Seq(sub) => Self::Seq(Box::new(sub.as_ref().into())),
+            TypeTag::Set(sub) => Self::Set(Box::new(sub.as_ref().into())),
+            TypeTag::Map(key, val) => {
+                Self::Map(Box::new(key.as_ref().into()), Box::new(val.as_ref().into()))
+            }
+            TypeTag::Error => Self::Error,
+            TypeTag::User(name) => Self::User(name.clone()),
+        }
+    }
 }
 
 /// A function type, with inference allowed
@@ -281,5 +303,63 @@ impl FuncTypeDatabase {
 
         // done
         db
+    }
+
+    /// Register a user-defined SMT type
+    pub fn register_user_type(&mut self, name: &TypeName) {
+        let func_eq = TypeFn {
+            qualifier: Some(name.to_string()),
+            params: vec![TypeVar::User(name.clone()), TypeVar::User(name.clone())],
+            ret_ty: Boolean,
+        };
+        let inserted = self
+            .db
+            .entry(FuncName::for_intrinsic("eq"))
+            .or_default()
+            .insert(func_eq);
+        if !inserted {
+            panic!("duplicated registration of smt type: {}::eq", name);
+        }
+
+        let func_ne = TypeFn {
+            qualifier: Some(name.to_string()),
+            params: vec![TypeVar::User(name.clone()), TypeVar::User(name.clone())],
+            ret_ty: Boolean,
+        };
+        let inserted = self
+            .db
+            .entry(FuncName::for_intrinsic("ne"))
+            .or_default()
+            .insert(func_ne);
+        if !inserted {
+            panic!("duplicated registration of smt type: {}::ne", name);
+        }
+    }
+
+    /// Register a user-defined function (spec or impl)
+    pub fn register_user_func(&mut self, name: &FuncName, sig: &FuncSig) {
+        let params = sig.param_vec().iter().map(|(_, ty)| ty.into()).collect();
+        let ret_ty = sig.ret_ty().into();
+
+        // if the first parameter is a user-defined type, mark it as a qualifier
+        let qualifier = match sig.param_vec().first() {
+            Some((_, TypeTag::User(tn))) => Some(tn.to_string()),
+            _ => None,
+        };
+
+        let func = TypeFn {
+            qualifier,
+            params,
+            ret_ty,
+        };
+        let inserted = self.db.entry(name.clone()).or_default().insert(func);
+        if !inserted {
+            panic!("duplicated registration of smt func: {}", name);
+        }
+    }
+
+    /// Report number of entries in the database
+    pub fn size(&self) -> usize {
+        self.db.len()
     }
 }
