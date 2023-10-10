@@ -1,11 +1,9 @@
-use proc_macro2::Ident;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::{Expr as Exp, ExprLit, Lit, Result};
 
 use crate::err::bail_on;
 use crate::parse_expr::{CtxtForExpr, Expr, ExprParseCtxt};
-use crate::parse_path::FuncName;
 use crate::parse_type::TypeTag;
 
 /// Intrinsic procedure
@@ -46,7 +44,7 @@ pub enum Intrinsic {
     /// `Integer::rem`
     IntRem(Expr, Expr),
     /// `Rational::from`
-    NumVal(i128),
+    NumVal(f64),
     /// `Rational::eq`
     NumEq(Expr, Expr),
     /// `Rational::ne`
@@ -215,7 +213,7 @@ impl Intrinsic {
             // rational
             ("Rational", "from") => {
                 // argument must be a literal
-                let val = Self::unpack_lit_int(args)?;
+                let val = Self::unpack_lit_float(args)?;
                 (NumVal(val), Rational)
             }
             ("Rational", "add") => {
@@ -630,6 +628,28 @@ impl Intrinsic {
         }
     }
 
+    /// Convert an argument list to a floating-point literal
+    fn unpack_lit_float(args: &Punctuated<Exp, Comma>) -> Result<f64> {
+        let mut iter = args.iter();
+        let expr = match iter.next() {
+            None => bail_on!(args, "expect more arguments"),
+            Some(arg) => arg,
+        };
+        match expr {
+            Exp::Lit(expr_lit) => {
+                let ExprLit { attrs: _, lit } = expr_lit;
+                match lit {
+                    Lit::Float(val) => match val.token().to_string().parse() {
+                        Ok(v) => Ok(v),
+                        Err(_) => bail_on!(val, "unable to parse"),
+                    },
+                    _ => bail_on!(lit, "not a float literal"),
+                }
+            }
+            _ => bail_on!(expr, "not a literal"),
+        }
+    }
+
     /// Convert an argument list to a string literal
     fn unpack_lit_str(args: &Punctuated<Exp, Comma>) -> Result<String> {
         let mut iter = args.iter();
@@ -649,28 +669,6 @@ impl Intrinsic {
         }
     }
 
-    /// Convert an unpacked expression into intrinsics
-    pub fn convert_and_infer_type_for_method<T: CtxtForExpr>(
-        parser: &ExprParseCtxt<'_, T>,
-        receiver: &Exp,
-        method: &Ident,
-        args: &Punctuated<Exp, Comma>,
-    ) -> Result<(Self, TypeTag)> {
-        let name: FuncName = method.try_into()?;
-        match name.as_ref() {
-            // literal conversion
-            "into" => {
-                if !args.is_empty() {
-                    bail_on!(args, "unexpected arguments");
-                }
-                Intrinsic::expect_literal_into(receiver, parser.expected_type())
-            }
-
-            // numerical
-            _ => bail_on!(method, "unknown method"),
-        }
-    }
-
     /// Convert an expression to a literal
     pub fn expect_literal_into(receiver: &Exp, ety: Option<&TypeTag>) -> Result<(Self, TypeTag)> {
         let (intrinsic, ty) = match receiver {
@@ -685,14 +683,26 @@ impl Intrinsic {
                         (Self::BoolVal(val.value), TypeTag::Boolean)
                     }
                     Lit::Int(val) => {
-                        let parsed: i128 = match val.token().to_string().parse() {
+                        let parsed = match val.token().to_string().parse() {
                             Ok(v) => v,
                             Err(_) => bail_on!(val, "unable to parse"),
                         };
                         match ety {
-                            None => bail_on!(receiver, "need type annotation"),
-                            Some(TypeTag::Integer) => (Self::IntVal(parsed), TypeTag::Integer),
-                            Some(TypeTag::Rational) => (Self::NumVal(parsed), TypeTag::Rational),
+                            None | Some(TypeTag::Integer) => {
+                                (Self::IntVal(parsed), TypeTag::Integer)
+                            }
+                            Some(_) => bail_on!(receiver, "type mismatch"),
+                        }
+                    }
+                    Lit::Float(val) => {
+                        let parsed = match val.token().to_string().parse() {
+                            Ok(v) => v,
+                            Err(_) => bail_on!(val, "unable to parse"),
+                        };
+                        match ety {
+                            None | Some(TypeTag::Rational) => {
+                                (Self::NumVal(parsed), TypeTag::Rational)
+                            }
                             Some(_) => bail_on!(receiver, "type mismatch"),
                         }
                     }

@@ -40,7 +40,7 @@ pub fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
     } else if *lt(Seq::at_unchecked(l, i), Seq::at_unchecked(r, i)) {
         Boolean::from(true)
     } else {
-        seq_lt_recursive(l, r, Integer::add(i, Integer::from(1)))
+        seq_lt_recursive(l, r, Integer::add(i, 1.into()))
     }
 }
 

@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::TokenStream;
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
 use syn::{
     parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprMacro,
     ExprMatch, ExprMethodCall, ExprTuple, ExprUnary, Local, LocalInit, Macro, MacroDelimiter, Pat,
@@ -528,11 +530,21 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
                     args,
                 } = expr_method;
                 bail_if_exists!(turbofish);
-                let (intrinsic, ty) =
-                    Intrinsic::convert_and_infer_type_for_method(&self, receiver, method, args)?;
-                Inst {
-                    op: Op::Intrinsic(intrinsic).into(),
-                    ty,
+
+                // first check whether this is literal conversion
+                if method.to_string().as_str() == "into" {
+                    if !args.is_empty() {
+                        bail_on!(args, "unexpected arguments");
+                    }
+                    let (intrinsic, ty) =
+                        Intrinsic::expect_literal_into(receiver, self.expected_type())?;
+                    Inst {
+                        op: Op::Intrinsic(intrinsic).into(),
+                        ty,
+                    }
+                } else {
+                    let name = method.try_into()?;
+                    self.expect_expr_method_call(receiver, &name, args, expr_method)?
                 }
             }
             // smt-specific expressions

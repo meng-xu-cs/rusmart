@@ -14,7 +14,10 @@ fn validate_usr_ident(ident: &Ident) -> Result<String> {
             bail_on!(ident, "reserved type name");
         }
         "forall" | "exists" => {
-            bail_on!(ident, "reserved function name");
+            bail_on!(ident, "reserved macro name");
+        }
+        "into" => {
+            bail_on!(ident, "reserved method name");
         }
         "_" => {
             bail_on!(ident, "underscore not allowed");
