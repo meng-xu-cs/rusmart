@@ -182,6 +182,28 @@ order_operator!(Text, eq, ne, lt, le);
 
 impl SMT for Text {}
 
+/// SMT cloak (for breaking cyclic dependency in ADT)
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+pub struct Cloak<T: SMT> {
+    inner: Intern<Box<T>>,
+}
+
+impl<T: SMT> Cloak<T> {
+    /// shield an object behind a cloak
+    pub fn shield(t: T) -> Self {
+        Self {
+            inner: Intern::new(Box::new(t)),
+        }
+    }
+
+    /// reveal an object behind a cloak
+    pub fn reveal(self) -> T {
+        *(*self.inner).as_ref()
+    }
+}
+
+impl<T: SMT> SMT for Cloak<T> {}
+
 /// SMT sequence
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct Seq<T: SMT> {
@@ -196,6 +218,11 @@ impl<T: SMT> Seq<T> {
         }
     }
 
+    /// operation: `v.length()`
+    pub fn length(v: Self) -> Integer {
+        v.inner.len().into()
+    }
+
     /// operation: `v.append(e)`
     pub fn append(v: Self, e: T) -> Self {
         Self {
@@ -203,21 +230,16 @@ impl<T: SMT> Seq<T> {
         }
     }
 
-    /// operation: `v.length()`
-    pub fn length(v: Self) -> Integer {
-        v.inner.len().into()
-    }
-
-    /// operation: `v.contains(e)`
-    pub fn contains(v: Self, e: T) -> Boolean {
-        v.inner.contains(&e).into()
-    }
-
     /// operation: `v[i]` with partial semantics (valid only when `i` is in bound)
     pub fn at_unchecked(v: Self, i: Integer) -> T {
         *v.inner
             .get(i.inner.to_usize().expect("index out of usize range"))
             .expect("index out of bound")
+    }
+
+    /// operation: `v.includes(e)`
+    pub fn includes(v: Self, e: T) -> Boolean {
+        v.inner.contains(&e).into()
     }
 }
 
@@ -237,16 +259,16 @@ impl<T: SMT> Set<T> {
         }
     }
 
+    /// operation: `s.length()`
+    pub fn length(s: Self) -> Integer {
+        s.inner.len().into()
+    }
+
     /// operation: `s.insert(e)`
     pub fn insert(s: Self, e: T) -> Self {
         Self {
             inner: Intern::new(s.inner.iter().copied().chain(std::iter::once(e)).collect()),
         }
-    }
-
-    /// operation: `s.length()`
-    pub fn length(s: Self) -> Integer {
-        s.inner.len().into()
     }
 
     /// operation: `v.contains(e)`
@@ -271,6 +293,11 @@ impl<K: SMT, V: SMT> Map<K, V> {
         }
     }
 
+    /// operation: `m.length()`
+    pub fn length(m: Self) -> Integer {
+        m.inner.len().into()
+    }
+
     /// operation: `m.put(k, v)`, will override `v` if `k` already exists
     pub fn put_unchecked(m: Self, k: K, v: V) -> Self {
         Self {
@@ -287,11 +314,6 @@ impl<K: SMT, V: SMT> Map<K, V> {
     /// operation: `m.get(k)` with partial semantics (valid only when `k` exists)
     pub fn get_unchecked(m: Self, k: K) -> V {
         *m.inner.get(&k).expect("key does not exist")
-    }
-
-    /// operation: `m.length()`
-    pub fn length(m: Self) -> Integer {
-        m.inner.len().into()
     }
 
     /// operation: `v.contains_key(e)`

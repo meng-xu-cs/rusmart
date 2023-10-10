@@ -27,7 +27,7 @@ pub enum TypeTag {
     /// string
     Text,
     /// inductively defined type
-    Box(Box<TypeTag>),
+    Cloak(Box<TypeTag>),
     /// SMT-sequence
     Seq(Box<TypeTag>),
     /// SMT-set
@@ -121,9 +121,9 @@ impl TypeTag {
                     ("Integer", PathArguments::None) => Self::Integer,
                     ("Rational", PathArguments::None) => Self::Rational,
                     ("Text", PathArguments::None) => Self::Text,
-                    ("Box", PathArguments::AngleBracketed(pack)) => {
+                    ("Cloak", PathArguments::AngleBracketed(pack)) => {
                         let sub = Self::from_args_expect_1(ctxt, pack)?;
-                        Self::Box(sub.into())
+                        Self::Cloak(sub.into())
                     }
                     ("Seq", PathArguments::AngleBracketed(pack)) => {
                         let sub = Self::from_args_expect_1(ctxt, pack)?;
@@ -179,7 +179,7 @@ impl Display for TypeTag {
             Self::Integer => write!(f, "Integer"),
             Self::Rational => write!(f, "Rational"),
             Self::Text => write!(f, "Text"),
-            Self::Box(sub) => write!(f, "Box<{}>", sub),
+            Self::Cloak(sub) => write!(f, "Cloak<{}>", sub),
             Self::Seq(sub) => write!(f, "Seq<{}>", sub),
             Self::Set(sub) => write!(f, "Set<{}>", sub),
             Self::Map(key, val) => write!(f, "Map<{}, {}>", key, val),

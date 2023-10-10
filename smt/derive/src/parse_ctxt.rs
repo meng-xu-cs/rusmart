@@ -8,10 +8,10 @@ use walkdir::WalkDir;
 
 use crate::err::{bail_on, bail_on_with_note};
 use crate::parse_expr::{CtxtForExpr, Expr};
-use crate::parse_expr_method::TypeFn;
 use crate::parse_func::{FuncDef, FuncSig};
+use crate::parse_infer::FuncTypeDatabase;
 use crate::parse_path::{FuncName, TypeName};
-use crate::parse_type::{CtxtForType, TypeDef, TypeTag};
+use crate::parse_type::{CtxtForType, TypeDef};
 
 /// SMT-marked type
 pub enum MarkedType {
@@ -281,7 +281,7 @@ impl ContextWithType {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
-            fn_type_db: BTreeMap::new(),
+            fn_db: FuncTypeDatabase::with_intrinsics(),
         };
 
         // done
@@ -300,8 +300,8 @@ pub struct ContextWithTypeAndSig {
     types: BTreeMap<TypeName, TypeDef>,
     impls: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
-    /// function signature database
-    fn_type_db: BTreeMap<FuncName, BTreeSet<TypeFn>>,
+    /// a database of all functions available in the system
+    fn_db: FuncTypeDatabase,
 }
 
 impl ContextWithTypeAndSig {
@@ -329,7 +329,7 @@ impl ContextWithTypeAndSig {
             types,
             impls,
             specs,
-            fn_type_db: _,
+            fn_db: _,
         } = self;
 
         let unpacked_impls = impls

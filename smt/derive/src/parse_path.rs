@@ -89,13 +89,15 @@ impl FuncName {
             // comparison
             | "eq" | "ne" | "lt" | "le" | "ge" | "gt"
             // error
-            | "merge"
+            | "fresh" | "merge"
+            // cloak
+            | "shield" | "reveal"
             // collections (common)
-            | "length" | "contains"
+            | "empty" | "length"
             // seq
-            | "append" | "at_unchecked"
+            | "append" | "at_unchecked" | "includes"
             // set
-            | "insert"
+            | "insert" | "contains"
             // map
             | "put_unchecked" | "get_unchecked" | "contains_key"
             // done
