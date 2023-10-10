@@ -277,15 +277,12 @@ impl ContextWithType {
             })
             .collect();
 
-        let mut ctxt = ContextWithTypeAndSig {
+        let ctxt = ContextWithTypeAndSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
             fn_type_db: BTreeMap::new(),
         };
-
-        // construct the function type database
-        ctxt.register_fn_type("not".try_into()?, vec![TypeTag::Boolean], TypeTag::Boolean);
 
         // done
         Ok(ctxt)

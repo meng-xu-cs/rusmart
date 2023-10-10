@@ -13,7 +13,7 @@ use crate::parse_type::TypeTag;
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum TypeVar {
     /// to be inferred
-    Unknown,
+    Unknown(usize),
     /// boolean
     Boolean,
     /// integer (unlimited precision)
@@ -46,7 +46,72 @@ pub struct TypeFn {
 impl TypeFn {
     /// Populate database for intrinsics
     pub fn populate_db_with_intrinsics() -> BTreeMap<FuncName, BTreeSet<TypeFn>> {
-        let mut db = BTreeMap::new();
+        use TypeVar::*;
+
+        let mut db: BTreeMap<FuncName, BTreeSet<TypeFn>> = BTreeMap::new();
+
+        // utility
+        let mut register = |ident, params, ret_ty| {
+            let name = FuncName::for_intrinsic(ident);
+            let func = TypeFn { params, ret_ty };
+            db.entry(name).or_default().insert(func);
+        };
+
+        // logical operators
+        register("not", vec![Boolean], Boolean);
+        register("and", vec![Boolean, Boolean], Boolean);
+        register("or", vec![Boolean, Boolean], Boolean);
+        register("xor", vec![Boolean, Boolean], Boolean);
+        // arithmetic operators
+        register("add", vec![Integer, Integer], Integer);
+        register("add", vec![Rational, Rational], Rational);
+        register("sub", vec![Integer, Integer], Integer);
+        register("sub", vec![Rational, Rational], Rational);
+        register("mul", vec![Integer, Integer], Integer);
+        register("mul", vec![Rational, Rational], Rational);
+        register("div", vec![Integer, Integer], Integer);
+        register("div", vec![Rational, Rational], Rational);
+        register("rem", vec![Integer, Integer], Integer);
+        // comparison operators
+        register("eq", vec![Integer, Integer], Boolean);
+        register("eq", vec![Rational, Rational], Boolean);
+        register("eq", vec![Text, Text], Boolean);
+        register(
+            "eq",
+            vec![Box(Unknown(0).into()), Box(Unknown(0).into())],
+            Boolean,
+        );
+        register(
+            "eq",
+            vec![Seq(Unknown(0).into()), Seq(Unknown(0).into())],
+            Boolean,
+        );
+        register(
+            "eq",
+            vec![Set(Unknown(0).into()), Set(Unknown(0).into())],
+            Boolean,
+        );
+        register(
+            "eq",
+            vec![
+                Map(Unknown(0).into(), Unknown(1).into()),
+                Map(Unknown(0).into(), Unknown(1).into()),
+            ],
+            Boolean,
+        );
+        register(
+            "eq",
+            vec![
+                Map(Unknown(0).into(), Unknown(1).into()),
+                Map(Unknown(0).into(), Unknown(1).into()),
+            ],
+            Boolean,
+        );
+        register("ne", vec![Integer, Integer], Boolean);
+        register("ne", vec![Rational, Rational], Boolean);
+        register("ne", vec![Text, Text], Boolean);
+
+        // done
         db
     }
 }
@@ -90,17 +155,6 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
         }
 
         // all other cases are function calls
-        todo!()
-    }
-
-    /// Handle arithmetic operator
-    fn handle_op_arith(
-        &self,
-        op: OpArith,
-        receiver: ExprStatus,
-        args: Vec<ExprStatus>,
-        spanned: &ExprMethodCall,
-    ) -> Result<()> {
         todo!()
     }
 }

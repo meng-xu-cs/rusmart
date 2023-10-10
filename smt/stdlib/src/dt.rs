@@ -39,7 +39,17 @@ macro_rules! arith_operator {
 }
 
 /// Marks that this type is an SMT-enabled type
-pub trait SMT: 'static + Copy + Ord + Hash + Default + Sync + Send {}
+pub trait SMT: 'static + Copy + Ord + Hash + Default + Sync + Send {
+    /// SMT values of the same type are subject to equality testing
+    fn eq(self, rhs: Self) -> Boolean {
+        (self == rhs).into()
+    }
+
+    /// SMT values of the same type are subject to inequality testing
+    fn ne(self, rhs: Self) -> Boolean {
+        (self != rhs).into()
+    }
+}
 
 /// SMT boolean
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
