@@ -1,11 +1,55 @@
-use crate::err::bail_on;
+use std::collections::{BTreeMap, BTreeSet};
+
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::{Expr as Exp, ExprMethodCall, Result};
 
+use crate::err::bail_on;
 use crate::parse_expr::{CtxtForExpr, Expr, ExprParseCtxt, Inst};
-use crate::parse_path::FuncName;
+use crate::parse_path::{FuncName, TypeName};
 use crate::parse_type::TypeTag;
+
+/// A type variable representing either a concrete type or a symbolic (to be inferred) one
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub enum TypeVar {
+    /// to be inferred
+    Unknown,
+    /// boolean
+    Boolean,
+    /// integer (unlimited precision)
+    Integer,
+    /// rational numbers (unlimited precision)
+    Rational,
+    /// string
+    Text,
+    /// inductively defined type
+    Box(Box<TypeVar>),
+    /// SMT-sequence
+    Seq(Box<TypeVar>),
+    /// SMT-set
+    Set(Box<TypeVar>),
+    /// SMT-array
+    Map(Box<TypeVar>, Box<TypeVar>),
+    /// dynamic error type
+    Error,
+    /// user-defined type
+    User(TypeName),
+}
+
+/// A function type, with inference allowed
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+pub struct TypeFn {
+    params: Vec<TypeVar>,
+    ret_ty: TypeVar,
+}
+
+impl TypeFn {
+    /// Populate database for intrinsics
+    pub fn populate_db_with_intrinsics() -> BTreeMap<FuncName, BTreeSet<TypeFn>> {
+        let mut db = BTreeMap::new();
+        db
+    }
+}
 
 /// Helper on expr status
 enum ExprStatus<'a> {
@@ -19,47 +63,6 @@ impl ExprStatus<'_> {
             Self::Typed(e) => Some(e.ty()),
         }
     }
-}
-
-/// Helper on known logical operators
-enum OpLogic {
-    Not,
-    And,
-    Or,
-    Xor,
-}
-
-/// Helper on known arithmetic operators
-enum OpArith {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-}
-
-/// Helper on known comparison operators
-enum OpCmp {
-    Eq,
-    Ne,
-    Lt,
-    Le,
-    Ge,
-    Gt,
-}
-
-enum PrimitiveOperator {
-    // error
-    Merge,
-    // collection
-    Length,
-    Contains,
-    ContainsKey,
-    Append,
-    Insert,
-    AtUnchecked,
-    PutUnchecked,
-    GetUnchecked,
 }
 
 impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
@@ -87,19 +90,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
         }
 
         // all other cases are function calls
-        match method.as_ref() {
-            // arithmetics
-            "add" => match parser.expected_type() {
-                None => (),
-                Some(ety) => match ety {
-                    TypeTag::Integer | TypeTag::Rational => {}
-                    _ => bail_on!(method, "unexpected type"),
-                },
-            },
-
-            // numerical
-            _ => bail_on!(method, "unknown method"),
-        }
+        todo!()
     }
 
     /// Handle arithmetic operator
@@ -110,8 +101,7 @@ impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
         args: Vec<ExprStatus>,
         spanned: &ExprMethodCall,
     ) -> Result<()> {
-        let a1 = unpack_status_1(args, spanned)?;
-        match (self.expected_type(), receiver.ty(), a1.ty()) {}
+        todo!()
     }
 }
 

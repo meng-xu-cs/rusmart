@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -8,9 +8,10 @@ use walkdir::WalkDir;
 
 use crate::err::{bail_on, bail_on_with_note};
 use crate::parse_expr::{CtxtForExpr, Expr};
+use crate::parse_expr_method::TypeFn;
 use crate::parse_func::{FuncDef, FuncSig};
 use crate::parse_path::{FuncName, TypeName};
-use crate::parse_type::{CtxtForType, TypeDef};
+use crate::parse_type::{CtxtForType, TypeDef, TypeTag};
 
 /// SMT-marked type
 pub enum MarkedType {
@@ -252,6 +253,7 @@ impl ContextWithType {
             sig_specs.insert(name.clone(), sig);
         }
 
+        // re-packing
         let Self {
             types,
             impls,
@@ -275,11 +277,18 @@ impl ContextWithType {
             })
             .collect();
 
-        Ok(ContextWithTypeAndSig {
+        let mut ctxt = ContextWithTypeAndSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
-        })
+            fn_type_db: BTreeMap::new(),
+        };
+
+        // construct the function type database
+        ctxt.register_fn_type("not".try_into()?, vec![TypeTag::Boolean], TypeTag::Boolean);
+
+        // done
+        Ok(ctxt)
     }
 }
 
@@ -294,6 +303,8 @@ pub struct ContextWithTypeAndSig {
     types: BTreeMap<TypeName, TypeDef>,
     impls: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
+    /// function signature database
+    fn_type_db: BTreeMap<FuncName, BTreeSet<TypeFn>>,
 }
 
 impl ContextWithTypeAndSig {
@@ -321,6 +332,7 @@ impl ContextWithTypeAndSig {
             types,
             impls,
             specs,
+            fn_type_db: _,
         } = self;
 
         let unpacked_impls = impls

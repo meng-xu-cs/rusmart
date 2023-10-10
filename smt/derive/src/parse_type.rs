@@ -15,8 +15,8 @@ pub trait CtxtForType {
     fn has_type(&self, name: &TypeName) -> bool;
 }
 
-#[derive(Clone, Eq, PartialEq)]
 /// A unique and complete reference to an SMT-related type
+#[derive(Clone, Eq, PartialEq)]
 pub enum TypeTag {
     /// boolean
     Boolean,

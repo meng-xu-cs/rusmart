@@ -78,6 +78,34 @@ impl TryFrom<&Ident> for FuncName {
     }
 }
 
+impl FuncName {
+    /// Make a function name for primitive methods
+    pub fn for_intrinsic(name: &str) -> Self {
+        match name {
+            // logical
+            "not" | "and" | "or" | "xor" 
+            // arithmetic
+            | "add" | "sub" | "mul" | "div" | "rem"
+            // comparison
+            | "eq" | "ne" | "lt" | "le" | "ge" | "gt"
+            // error
+            | "merge"
+            // collections (common)
+            | "length" | "contains"
+            // seq
+            | "append" | "at_unchecked"
+            // set
+            | "insert"
+            // map
+            | "put_unchecked" | "get_unchecked" | "contains_key"
+            // done
+            => Self { ident: name.to_string() },
+            // all other names are invalid
+            _ => panic!("not a primitive method: {}", name),
+        }
+    }
+}
+
 /// Identifier for a reserved macro
 pub enum QuantifierMacro {
     Exists,
