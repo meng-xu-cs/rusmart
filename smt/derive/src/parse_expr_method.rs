@@ -3,7 +3,8 @@ use syn::token::Comma;
 use syn::{Expr as Exp, ExprMethodCall, Result};
 
 use crate::err::bail_on;
-use crate::parse_expr::{CtxtForExpr, Expr, ExprParser, Inst};
+use crate::parse_expr::{Expr, ExprParser, Inst};
+use crate::parse_infer_expr::CtxtForExpr;
 use crate::parse_path::FuncName;
 use crate::parse_type::TypeTag;
 

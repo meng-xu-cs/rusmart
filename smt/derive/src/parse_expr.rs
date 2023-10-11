@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::TokenStream;
-use quote::quote;
 use syn::{
     parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprMacro,
     ExprMatch, ExprMethodCall, ExprTuple, ExprUnary, Local, LocalInit, Macro, MacroDelimiter, Pat,
@@ -12,23 +11,10 @@ use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parse_expr_intrinsic::Intrinsic;
 use crate::parse_expr_match::{MatchAnalyzer, MatchCombo};
 use crate::parse_func::FuncSig;
-use crate::parse_infer::{TypeUnifier, TypeVar};
-use crate::parse_path::{
-    CallTarget, CallTargetGuess, FuncName, QuantifierMacro, TypeName, VarName,
-};
-use crate::parse_type::{CtxtForType, TypeDef, TypeTag};
-
-/// A context suitable for expression analysis
-pub trait CtxtForExpr: CtxtForType {
-    /// Retrieve the type definition
-    fn get_type(&self, name: &TypeName) -> Option<&TypeDef>;
-
-    /// Retrieve the function signature for impl
-    fn get_impl_sig(&self, name: &FuncName) -> Option<&FuncSig>;
-
-    /// Retrieve the function signature for spec
-    fn get_spec_sig(&self, name: &FuncName) -> Option<&FuncSig>;
-}
+use crate::parse_infer::TypeUnifier;
+use crate::parse_infer_expr::{CtxtForExpr, ExprParserRoot, Kind};
+use crate::parse_path::{CallTarget, CallTargetGuess, FuncName, QuantifierMacro, VarName};
+use crate::parse_type::{TypeDef, TypeTag};
 
 /// Phi node, guarded by condition
 #[derive(Clone)]
@@ -98,110 +84,20 @@ impl Expr {
     pub fn from_impl<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmts: &[Stmt]) -> Result<Self> {
         let mut unifier = TypeUnifier::new();
         let root = ExprParserRoot::new(ctxt, &mut unifier, Kind::Impl, sig);
+        root.parse(stmts)?;
 
-        // create an artificial expression
-        let quoted_stmts: TokenStream = stmts.iter().map(|i| quote!(i)).collect();
-        let target: Exp = syn::parse_quote!( { #quoted_stmts } );
-
-        // parse the artificial expression
-        let parser = root.derive(&target, (&root.ret_ty).into());
-        parser.parse()?;
-
+        // TODO: remove
         ExprParser::new(ctxt, Kind::Impl, sig).convert_stmts(stmts)
     }
 
     /// Extract one from spec body
     pub fn from_spec<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmts: &[Stmt]) -> Result<Self> {
         let mut unifier = TypeUnifier::new();
-        let root = ExprParserRoot::new(ctxt, &mut unifier, Kind::Impl, sig);
+        let root = ExprParserRoot::new(ctxt, &mut unifier, Kind::Spec, sig);
+        root.parse(stmts)?;
 
-        // create an artificial expression
-        let quoted_stmts: TokenStream = stmts.iter().map(|i| quote!(i)).collect();
-        let target: Exp = syn::parse_quote!( { #quoted_stmts } );
-
-        // parse the artificial expression
-        let parser = root.derive(&target, (&root.ret_ty).into());
-        parser.parse()?;
-
+        // TODO: remove
         ExprParser::new(ctxt, Kind::Spec, sig).convert_stmts(stmts)
-    }
-}
-
-/// Marks whether this expression is for impl or spec
-#[derive(Copy, Clone)]
-enum Kind {
-    /// actual implementation
-    Impl,
-    /// formal specification
-    Spec,
-}
-
-/// Root expression parser (for function body)
-struct ExprParserRoot<'ty, 'ctx, T: CtxtForExpr> {
-    /// context provider
-    ctxt: &'ctx T,
-    /// the expression is in spec or impl
-    kind: Kind,
-    /// function parameters
-    params: BTreeMap<VarName, TypeTag>,
-    /// function return type
-    ret_ty: TypeTag,
-    /// type unifier
-    typing: &'ty mut TypeUnifier,
-}
-
-/// Derived expression parser (for one and only one expression)
-enum ExprParserParent<'exp, 'p, 'ty: 'p, 'ctx: 'p, T: CtxtForExpr> {
-    Root(&'p ExprParserRoot<'ty, 'ctx, T>),
-    Derived(&'p ExprParserDerived<'exp, 'p, 'ty, 'ctx, T>),
-}
-
-/// Derived expression parser (for one and only one expression)
-struct ExprParserDerived<'exp, 'p, 'ty: 'p, 'ctx: 'p, T: CtxtForExpr> {
-    /// parent of the parser
-    parent: ExprParserParent<'exp, 'p, 'ty, 'ctx, T>,
-    /// expression to be analyzed
-    target: &'exp Exp,
-    /// expected type
-    exp_ty: TypeVar<'ty>,
-    /// variables in scope and their types
-    vars: BTreeMap<VarName, TypeVar<'ty>>,
-    /// new let-bindings created, if any
-    bindings: Vec<(VarName, Expr)>,
-}
-
-impl<'ty, 'ctx, T: CtxtForExpr> ExprParserRoot<'ty, 'ctx, T> {
-    /// Creating a new context for parsing the function body expression
-    pub fn new(ctxt: &'ctx T, typing: &'ty mut TypeUnifier, kind: Kind, sig: &FuncSig) -> Self {
-        Self {
-            ctxt,
-            kind,
-            params: sig.param_map(),
-            ret_ty: sig.ret_ty().clone(),
-            typing,
-        }
-    }
-
-    /// Create a child parser for an expression
-    pub fn derive<'exp, 'p>(
-        &'p self,
-        target: &'exp Exp,
-        exp_ty: TypeVar<'ty>,
-    ) -> ExprParserDerived<'exp, 'p, 'ty, 'ctx, T> {
-        ExprParserDerived {
-            parent: ExprParserParent::Root(self),
-            target,
-            exp_ty,
-            vars: BTreeMap::new(),
-            bindings: vec![],
-        }
-    }
-}
-
-impl<'exp, 'p, 'ty: 'p, 'ctx: 'p, T: CtxtForExpr> ExprParserDerived<'exp, 'p, 'ty, 'ctx, T> {
-    /// parse the expression assigned
-    pub fn parse(self) -> Result<Expr> {
-        todo!()
     }
 }
 

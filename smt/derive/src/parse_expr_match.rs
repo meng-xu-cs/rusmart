@@ -6,7 +6,8 @@ use syn::{
 };
 
 use crate::err::{bail_if_exists, bail_on};
-use crate::parse_expr::{CtxtForExpr, Expr};
+use crate::parse_expr::Expr;
+use crate::parse_infer_expr::CtxtForExpr;
 use crate::parse_path::{ADTBranch, TypeName, VarName};
 use crate::parse_type::{ADTVariant, TypeDef, TypeTag};
 

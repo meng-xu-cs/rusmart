@@ -7,9 +7,10 @@ use syn::{Attribute, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result, St
 use walkdir::WalkDir;
 
 use crate::err::{bail_on, bail_on_with_note};
-use crate::parse_expr::{CtxtForExpr, Expr};
+use crate::parse_expr::Expr;
 use crate::parse_func::{FuncDef, FuncSig};
 use crate::parse_infer::InferDatabase;
+use crate::parse_infer_expr::CtxtForExpr;
 use crate::parse_path::{FuncName, TypeName};
 use crate::parse_type::{CtxtForType, TypeDef};
 

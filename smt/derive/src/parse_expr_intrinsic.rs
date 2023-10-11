@@ -3,7 +3,8 @@ use syn::token::Comma;
 use syn::{Expr as Exp, ExprLit, Lit, Result};
 
 use crate::err::bail_on;
-use crate::parse_expr::{CtxtForExpr, Expr, ExprParser};
+use crate::parse_expr::{Expr, ExprParser};
+use crate::parse_infer_expr::CtxtForExpr;
 use crate::parse_type::TypeTag;
 
 /// Intrinsic procedure

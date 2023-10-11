@@ -14,6 +14,7 @@ mod parse_expr_match;
 mod parse_expr_method;
 mod parse_func;
 mod parse_infer;
+mod parse_infer_expr;
 mod parse_path;
 mod parse_type;
 
