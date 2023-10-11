@@ -5,11 +5,11 @@ use crate::parse_func::FuncSig;
 use crate::parse_path::{FuncName, TypeName};
 use crate::parse_type::TypeTag;
 
-/// A reference to either a concrete type or a symbolic (i.e., to be inferred) type
+/// A handle to a concrete type
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
-enum TypeRef {
+enum TypeSig {
     /// to be inferred, param id is relative to an enclosing context
-    Unknown(usize),
+    Param(usize),
     /// boolean
     Boolean,
     /// integer (unlimited precision)
@@ -19,20 +19,20 @@ enum TypeRef {
     /// string
     Text,
     /// inductively defined type
-    Cloak(Box<TypeRef>),
+    Cloak(Box<TypeSig>),
     /// SMT-sequence
-    Seq(Box<TypeRef>),
+    Seq(Box<TypeSig>),
     /// SMT-set
-    Set(Box<TypeRef>),
+    Set(Box<TypeSig>),
     /// SMT-array
-    Map(Box<TypeRef>, Box<TypeRef>),
+    Map(Box<TypeSig>, Box<TypeSig>),
     /// dynamic error type
     Error,
     /// user-defined type
     User(TypeName),
 }
 
-impl From<&TypeTag> for TypeRef {
+impl From<&TypeTag> for TypeSig {
     fn from(ty: &TypeTag) -> Self {
         match ty {
             TypeTag::Boolean => Self::Boolean,
@@ -55,8 +55,8 @@ impl From<&TypeTag> for TypeRef {
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 struct TypeFn {
     qualifier: Option<String>,
-    params: Vec<TypeRef>,
-    ret_ty: TypeRef,
+    params: Vec<TypeSig>,
+    ret_ty: TypeSig,
 }
 
 /// A database for type inference
@@ -78,8 +78,8 @@ impl InferDatabase {
         &mut self,
         ident: &str,
         qualifier: &str,
-        params: Vec<TypeRef>,
-        ret_ty: TypeRef,
+        params: Vec<TypeSig>,
+        ret_ty: TypeSig,
     ) {
         let name = FuncName::for_intrinsic(ident);
         let func = TypeFn {
@@ -98,7 +98,7 @@ impl InferDatabase {
 
     /// Pre-populate the database with intrinsics
     pub fn with_intrinsics() -> Self {
-        use TypeRef::*;
+        use TypeSig::*;
 
         let mut db = Self::new();
 
@@ -131,27 +131,27 @@ impl InferDatabase {
         db.register_intrinsic(
             "eq",
             "Cloak",
-            vec![Cloak(Unknown(0).into()), Cloak(Unknown(0).into())],
+            vec![Cloak(Param(0).into()), Cloak(Param(0).into())],
             Boolean,
         );
         db.register_intrinsic(
             "eq",
             "Seq",
-            vec![Seq(Unknown(0).into()), Seq(Unknown(0).into())],
+            vec![Seq(Param(0).into()), Seq(Param(0).into())],
             Boolean,
         );
         db.register_intrinsic(
             "eq",
             "Set",
-            vec![Set(Unknown(0).into()), Set(Unknown(0).into())],
+            vec![Set(Param(0).into()), Set(Param(0).into())],
             Boolean,
         );
         db.register_intrinsic(
             "eq",
             "Map",
             vec![
-                Map(Unknown(0).into(), Unknown(1).into()),
-                Map(Unknown(0).into(), Unknown(1).into()),
+                Map(Param(0).into(), Param(1).into()),
+                Map(Param(0).into(), Param(1).into()),
             ],
             Boolean,
         );
@@ -164,27 +164,27 @@ impl InferDatabase {
         db.register_intrinsic(
             "ne",
             "Cloak",
-            vec![Cloak(Unknown(0).into()), Cloak(Unknown(0).into())],
+            vec![Cloak(Param(0).into()), Cloak(Param(0).into())],
             Boolean,
         );
         db.register_intrinsic(
             "ne",
             "Seq",
-            vec![Seq(Unknown(0).into()), Seq(Unknown(0).into())],
+            vec![Seq(Param(0).into()), Seq(Param(0).into())],
             Boolean,
         );
         db.register_intrinsic(
             "ne",
             "Set",
-            vec![Set(Unknown(0).into()), Set(Unknown(0).into())],
+            vec![Set(Param(0).into()), Set(Param(0).into())],
             Boolean,
         );
         db.register_intrinsic(
             "ne",
             "Map",
             vec![
-                Map(Unknown(0).into(), Unknown(1).into()),
-                Map(Unknown(0).into(), Unknown(1).into()),
+                Map(Param(0).into(), Param(1).into()),
+                Map(Param(0).into(), Param(1).into()),
             ],
             Boolean,
         );
@@ -206,36 +206,26 @@ impl InferDatabase {
         db.register_intrinsic("gt", "Rational", vec![Rational, Rational], Rational);
 
         // cloaking
-        db.register_intrinsic(
-            "shield",
-            "Cloak",
-            vec![Unknown(0)],
-            Cloak(Unknown(0).into()),
-        );
+        db.register_intrinsic("shield", "Cloak", vec![Param(0)], Cloak(Param(0).into()));
 
-        db.register_intrinsic(
-            "reveal",
-            "Cloak",
-            vec![Cloak(Unknown(0).into())],
-            Unknown(0),
-        );
+        db.register_intrinsic("reveal", "Cloak", vec![Cloak(Param(0).into())], Param(0));
 
         // collections
-        db.register_intrinsic("empty", "Seq", vec![], Seq(Unknown(0).into()));
-        db.register_intrinsic("empty", "Set", vec![], Set(Unknown(0).into()));
+        db.register_intrinsic("empty", "Seq", vec![], Seq(Param(0).into()));
+        db.register_intrinsic("empty", "Set", vec![], Set(Param(0).into()));
         db.register_intrinsic(
             "empty",
             "Map",
             vec![],
-            Map(Unknown(0).into(), Unknown(1).into()),
+            Map(Param(0).into(), Param(1).into()),
         );
 
-        db.register_intrinsic("length", "Seq", vec![Seq(Unknown(0).into())], Integer);
-        db.register_intrinsic("length", "Set", vec![Set(Unknown(0).into())], Integer);
+        db.register_intrinsic("length", "Seq", vec![Seq(Param(0).into())], Integer);
+        db.register_intrinsic("length", "Set", vec![Set(Param(0).into())], Integer);
         db.register_intrinsic(
             "length",
             "Map",
-            vec![Map(Unknown(0).into(), Unknown(1).into())],
+            vec![Map(Param(0).into(), Param(1).into())],
             Integer,
         );
 
@@ -243,19 +233,19 @@ impl InferDatabase {
         db.register_intrinsic(
             "append",
             "Seq",
-            vec![Seq(Unknown(0).into()), Unknown(0)],
-            Seq(Unknown(0).into()),
+            vec![Seq(Param(0).into()), Param(0)],
+            Seq(Param(0).into()),
         );
         db.register_intrinsic(
             "at_unchecked",
             "Seq",
-            vec![Seq(Unknown(0).into()), Integer],
-            Unknown(0),
+            vec![Seq(Param(0).into()), Integer],
+            Param(0),
         );
         db.register_intrinsic(
             "includes",
             "Seq",
-            vec![Seq(Unknown(0).into()), Unknown(0)],
+            vec![Seq(Param(0).into()), Param(0)],
             Boolean,
         );
 
@@ -263,13 +253,13 @@ impl InferDatabase {
         db.register_intrinsic(
             "insert",
             "Set",
-            vec![Set(Unknown(0).into()), Unknown(0)],
-            Set(Unknown(0).into()),
+            vec![Set(Param(0).into()), Param(0)],
+            Set(Param(0).into()),
         );
         db.register_intrinsic(
             "contains",
             "Set",
-            vec![Set(Unknown(0).into()), Unknown(0)],
+            vec![Set(Param(0).into()), Param(0)],
             Boolean,
         );
 
@@ -277,23 +267,19 @@ impl InferDatabase {
         db.register_intrinsic(
             "put_unchecked",
             "Map",
-            vec![
-                Map(Unknown(0).into(), Unknown(1).into()),
-                Unknown(0),
-                Unknown(1),
-            ],
-            Map(Unknown(0).into(), Unknown(1).into()),
+            vec![Map(Param(0).into(), Param(1).into()), Param(0), Param(1)],
+            Map(Param(0).into(), Param(1).into()),
         );
         db.register_intrinsic(
             "get_unchecked",
             "Map",
-            vec![Map(Unknown(0).into(), Unknown(1).into()), Unknown(0)],
-            Unknown(1),
+            vec![Map(Param(0).into(), Param(1).into()), Param(0)],
+            Param(1),
         );
         db.register_intrinsic(
             "contains_key",
             "Map",
-            vec![Map(Unknown(0).into(), Unknown(1).into()), Unknown(0)],
+            vec![Map(Param(0).into(), Param(1).into()), Param(0)],
             Boolean,
         );
 
@@ -309,8 +295,8 @@ impl InferDatabase {
     pub fn register_user_type(&mut self, name: &TypeName) {
         let func_eq = TypeFn {
             qualifier: Some(name.to_string()),
-            params: vec![TypeRef::User(name.clone()), TypeRef::User(name.clone())],
-            ret_ty: TypeRef::Boolean,
+            params: vec![TypeSig::User(name.clone()), TypeSig::User(name.clone())],
+            ret_ty: TypeSig::Boolean,
         };
         let inserted = self
             .methods
@@ -323,8 +309,8 @@ impl InferDatabase {
 
         let func_ne = TypeFn {
             qualifier: Some(name.to_string()),
-            params: vec![TypeRef::User(name.clone()), TypeRef::User(name.clone())],
-            ret_ty: TypeRef::Boolean,
+            params: vec![TypeSig::User(name.clone()), TypeSig::User(name.clone())],
+            ret_ty: TypeSig::Boolean,
         };
         let inserted = self
             .methods
@@ -367,18 +353,18 @@ impl InferDatabase {
 /// Context manager for type inference
 pub struct TypeUnifier {
     /// holds the set of possible candidates associated with each type parameter
-    params: RefCell<BTreeMap<usize, Option<BTreeSet<TypeRef>>>>,
+    params: RefCell<BTreeMap<usize, Option<BTreeSet<TypeSig>>>>,
 }
 
 impl TypeUnifier {
-    /// create with an empty type unification context
+    /// Create with an empty type unification context
     pub fn new() -> Self {
         Self {
             params: BTreeMap::new().into(),
         }
     }
 
-    /// Create a new type parameter
+    /// Make a new type parameter
     pub fn mk_param(&self) -> TypeVar {
         let mut params = self.params.borrow_mut();
 
@@ -390,7 +376,7 @@ impl TypeUnifier {
     }
 }
 
-/// Represents a type parameter
+/// Represents a type variable participating in type unification
 #[derive(Clone)]
 pub struct TypeParam<'ty> {
     id: usize,
