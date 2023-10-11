@@ -297,7 +297,6 @@ impl FuncTypeDatabase {
 
         // error
         db.register_intrinsic("fresh", "Error", vec![], Error);
-
         db.register_intrinsic("merge", "Error", vec![Error, Error], Error);
 
         // done
