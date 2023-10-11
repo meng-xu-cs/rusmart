@@ -3,7 +3,7 @@ use syn::token::Comma;
 use syn::{Expr as Exp, ExprMethodCall, Result};
 
 use crate::err::bail_on;
-use crate::parse_expr::{CtxtForExpr, Expr, ExprParseCtxt, Inst};
+use crate::parse_expr::{CtxtForExpr, Expr, ExprParser, Inst};
 use crate::parse_path::FuncName;
 use crate::parse_type::TypeTag;
 
@@ -21,7 +21,7 @@ impl ExprStatus<'_> {
     }
 }
 
-impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
+impl<'a, T: CtxtForExpr> ExprParser<'a, T> {
     /// Convert an unpacked a method call into an operation
     pub fn expect_expr_method_call(
         &self,

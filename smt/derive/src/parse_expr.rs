@@ -94,12 +94,12 @@ impl Expr {
 
     /// Extract one from impl body
     pub fn from_impl<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        ExprParseCtxt::new(ctxt, Kind::Impl, sig).convert_stmts(stmt)
+        ExprParser::new(ctxt, Kind::Impl, sig).convert_stmts(stmt)
     }
 
     /// Extract one from spec body
     pub fn from_spec<T: CtxtForExpr>(ctxt: &T, sig: &FuncSig, stmt: &[Stmt]) -> Result<Self> {
-        ExprParseCtxt::new(ctxt, Kind::Spec, sig).convert_stmts(stmt)
+        ExprParser::new(ctxt, Kind::Spec, sig).convert_stmts(stmt)
     }
 }
 
@@ -113,7 +113,7 @@ enum Kind {
 }
 
 /// A parser for one and only one expression
-pub struct ExprParseCtxt<'a, T: CtxtForExpr> {
+pub struct ExprParser<'a, T: CtxtForExpr> {
     /// context provider
     ctxt: &'a T,
     /// the expression is in spec or impl
@@ -126,7 +126,7 @@ pub struct ExprParseCtxt<'a, T: CtxtForExpr> {
     bindings: Vec<(VarName, Expr)>,
 }
 
-impl<'a, T: CtxtForExpr> ExprParseCtxt<'a, T> {
+impl<'a, T: CtxtForExpr> ExprParser<'a, T> {
     /// Creating a new context for parsing the function body expression
     fn new(ctxt: &'a T, kind: Kind, sig: &FuncSig) -> Self {
         Self {
