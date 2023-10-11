@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::parse_func::FuncSig;
@@ -366,29 +367,41 @@ impl InferDatabase {
 /// Context manager for type inference
 pub struct TypeUnifier {
     /// holds the set of possible candidates associated with each type parameter
-    params: BTreeMap<TypeParam, Option<BTreeSet<TypeRef>>>,
+    params: RefCell<BTreeMap<usize, Option<BTreeSet<TypeRef>>>>,
 }
 
 impl TypeUnifier {
     /// create with an empty type unification context
     pub fn new() -> Self {
         Self {
-            params: BTreeMap::new(),
+            params: BTreeMap::new().into(),
         }
+    }
+
+    /// Create a new type parameter
+    pub fn mk_param(&self) -> TypeVar {
+        let mut params = self.params.borrow_mut();
+
+        let id = params.len();
+        let existing = params.insert(id, None);
+        assert!(existing.is_none());
+
+        TypeVar::Param(TypeParam { id, unifier: self })
     }
 }
 
 /// Represents a type parameter
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct TypeParam {
+#[derive(Clone)]
+pub struct TypeParam<'ty> {
     id: usize,
+    unifier: &'ty TypeUnifier,
 }
 
 /// A type variable representing either a concrete type or a symbolic (i.e., to be inferred) one
 #[derive(Clone)]
 pub enum TypeVar<'ty> {
     /// to be inferred
-    Param(&'ty TypeUnifier, TypeParam),
+    Param(TypeParam<'ty>),
     /// boolean
     Boolean,
     /// integer (unlimited precision)
