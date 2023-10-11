@@ -322,18 +322,18 @@ impl ContextWithTypeAndSig {
     pub fn analyze_func_body(self) -> Result<ContextWithTypeAndFunc> {
         // impl
         let mut body_impls = BTreeMap::new();
-        for (name, (sig, stmt)) in &self.impls {
+        for (name, (sig, stmts)) in &self.impls {
             trace!("handling impl body: {}", name);
-            let body = Expr::from_impl(&self, sig, stmt)?;
+            let body = Expr::from_impl(&self, sig, stmts)?;
             trace!("impl body analyzed: {}", name);
             body_impls.insert(name.clone(), body);
         }
 
         // spec
         let mut body_specs = BTreeMap::new();
-        for (name, (sig, stmt)) in &self.specs {
+        for (name, (sig, stmts)) in &self.specs {
             trace!("handling spec body: {}", name);
-            let body = Expr::from_spec(&self, sig, stmt)?;
+            let body = Expr::from_spec(&self, sig, stmts)?;
             trace!("spec body analyzed: {}", name);
             body_specs.insert(name.clone(), body);
         }

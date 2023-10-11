@@ -369,6 +369,15 @@ pub struct TypeUnifier {
     params: BTreeMap<TypeParam, Option<BTreeSet<TypeRef>>>,
 }
 
+impl TypeUnifier {
+    /// create with an empty type unification context
+    pub fn new() -> Self {
+        Self {
+            params: BTreeMap::new(),
+        }
+    }
+}
+
 /// Represents a type parameter
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct TypeParam {
@@ -377,9 +386,9 @@ pub struct TypeParam {
 
 /// A type variable representing either a concrete type or a symbolic (i.e., to be inferred) one
 #[derive(Clone)]
-pub enum TypeVar<'ctx> {
+pub enum TypeVar<'ty> {
     /// to be inferred
-    Param(&'ctx TypeUnifier, TypeParam),
+    Param(&'ty TypeUnifier, TypeParam),
     /// boolean
     Boolean,
     /// integer (unlimited precision)
@@ -389,13 +398,13 @@ pub enum TypeVar<'ctx> {
     /// string
     Text,
     /// inductively defined type
-    Cloak(Box<TypeVar<'ctx>>),
+    Cloak(Box<TypeVar<'ty>>),
     /// SMT-sequence
-    Seq(Box<TypeVar<'ctx>>),
+    Seq(Box<TypeVar<'ty>>),
     /// SMT-set
-    Set(Box<TypeVar<'ctx>>),
+    Set(Box<TypeVar<'ty>>),
     /// SMT-array
-    Map(Box<TypeVar<'ctx>>, Box<TypeVar<'ctx>>),
+    Map(Box<TypeVar<'ty>>, Box<TypeVar<'ty>>),
     /// dynamic error type
     Error,
     /// user-defined type
