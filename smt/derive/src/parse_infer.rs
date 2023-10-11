@@ -4,10 +4,10 @@ use crate::parse_func::FuncSig;
 use crate::parse_path::{FuncName, TypeName};
 use crate::parse_type::TypeTag;
 
-/// A type variable representing either a concrete type or a symbolic (i.e., to be inferred) one
+/// A reference to either a concrete type or a symbolic (i.e., to be inferred) type
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
-enum TypeVar {
-    /// to be inferred
+enum TypeRef {
+    /// to be inferred, param id is relative to an enclosing context
     Unknown(usize),
     /// boolean
     Boolean,
@@ -18,20 +18,20 @@ enum TypeVar {
     /// string
     Text,
     /// inductively defined type
-    Cloak(Box<TypeVar>),
+    Cloak(Box<TypeRef>),
     /// SMT-sequence
-    Seq(Box<TypeVar>),
+    Seq(Box<TypeRef>),
     /// SMT-set
-    Set(Box<TypeVar>),
+    Set(Box<TypeRef>),
     /// SMT-array
-    Map(Box<TypeVar>, Box<TypeVar>),
+    Map(Box<TypeRef>, Box<TypeRef>),
     /// dynamic error type
     Error,
     /// user-defined type
     User(TypeName),
 }
 
-impl From<&TypeTag> for TypeVar {
+impl From<&TypeTag> for TypeRef {
     fn from(ty: &TypeTag) -> Self {
         match ty {
             TypeTag::Boolean => Self::Boolean,
@@ -54,20 +54,21 @@ impl From<&TypeTag> for TypeVar {
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 struct TypeFn {
     qualifier: Option<String>,
-    params: Vec<TypeVar>,
-    ret_ty: TypeVar,
+    params: Vec<TypeRef>,
+    ret_ty: TypeRef,
 }
 
-/// A database of intrinsic and declared function with their typing information
-pub struct FuncTypeDatabase {
-    db: BTreeMap<FuncName, BTreeSet<TypeFn>>,
+/// A database for type inference
+pub struct InferDatabase {
+    /// intrinsic and declared function with their typing information
+    methods: BTreeMap<FuncName, BTreeSet<TypeFn>>,
 }
 
-impl FuncTypeDatabase {
+impl InferDatabase {
     /// Create an empty database
     fn new() -> Self {
         Self {
-            db: BTreeMap::new(),
+            methods: BTreeMap::new(),
         }
     }
 
@@ -76,8 +77,8 @@ impl FuncTypeDatabase {
         &mut self,
         ident: &str,
         qualifier: &str,
-        params: Vec<TypeVar>,
-        ret_ty: TypeVar,
+        params: Vec<TypeRef>,
+        ret_ty: TypeRef,
     ) {
         let name = FuncName::for_intrinsic(ident);
         let func = TypeFn {
@@ -85,7 +86,7 @@ impl FuncTypeDatabase {
             params,
             ret_ty,
         };
-        let inserted = self.db.entry(name).or_default().insert(func);
+        let inserted = self.methods.entry(name).or_default().insert(func);
         if !inserted {
             panic!(
                 "duplicated registration of intrinsics: {}::{}",
@@ -96,7 +97,7 @@ impl FuncTypeDatabase {
 
     /// Pre-populate the database with intrinsics
     pub fn with_intrinsics() -> Self {
-        use TypeVar::*;
+        use TypeRef::*;
 
         let mut db = Self::new();
 
@@ -307,11 +308,11 @@ impl FuncTypeDatabase {
     pub fn register_user_type(&mut self, name: &TypeName) {
         let func_eq = TypeFn {
             qualifier: Some(name.to_string()),
-            params: vec![TypeVar::User(name.clone()), TypeVar::User(name.clone())],
-            ret_ty: TypeVar::Boolean,
+            params: vec![TypeRef::User(name.clone()), TypeRef::User(name.clone())],
+            ret_ty: TypeRef::Boolean,
         };
         let inserted = self
-            .db
+            .methods
             .entry(FuncName::for_intrinsic("eq"))
             .or_default()
             .insert(func_eq);
@@ -321,11 +322,11 @@ impl FuncTypeDatabase {
 
         let func_ne = TypeFn {
             qualifier: Some(name.to_string()),
-            params: vec![TypeVar::User(name.clone()), TypeVar::User(name.clone())],
-            ret_ty: TypeVar::Boolean,
+            params: vec![TypeRef::User(name.clone()), TypeRef::User(name.clone())],
+            ret_ty: TypeRef::Boolean,
         };
         let inserted = self
-            .db
+            .methods
             .entry(FuncName::for_intrinsic("ne"))
             .or_default()
             .insert(func_ne);
@@ -350,7 +351,7 @@ impl FuncTypeDatabase {
             params,
             ret_ty,
         };
-        let inserted = self.db.entry(name.clone()).or_default().insert(func);
+        let inserted = self.methods.entry(name.clone()).or_default().insert(func);
         if !inserted {
             panic!("duplicated registration of smt func: {}", name);
         }
@@ -358,6 +359,64 @@ impl FuncTypeDatabase {
 
     /// Report number of entries in the database
     pub fn size(&self) -> usize {
-        self.db.len()
+        self.methods.len()
+    }
+}
+
+/// Context manager for type inference
+pub struct TypeUnifier {
+    /// holds the set of possible candidates associated with each type parameter
+    params: BTreeMap<TypeParam, Option<BTreeSet<TypeRef>>>,
+}
+
+/// Represents a type parameter
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct TypeParam {
+    id: usize,
+}
+
+/// A type variable representing either a concrete type or a symbolic (i.e., to be inferred) one
+#[derive(Clone)]
+pub enum TypeVar<'ctx> {
+    /// to be inferred
+    Param(&'ctx TypeUnifier, TypeParam),
+    /// boolean
+    Boolean,
+    /// integer (unlimited precision)
+    Integer,
+    /// rational numbers (unlimited precision)
+    Rational,
+    /// string
+    Text,
+    /// inductively defined type
+    Cloak(Box<TypeVar<'ctx>>),
+    /// SMT-sequence
+    Seq(Box<TypeVar<'ctx>>),
+    /// SMT-set
+    Set(Box<TypeVar<'ctx>>),
+    /// SMT-array
+    Map(Box<TypeVar<'ctx>>, Box<TypeVar<'ctx>>),
+    /// dynamic error type
+    Error,
+    /// user-defined type
+    User(TypeName),
+}
+
+impl From<&TypeTag> for TypeVar<'static> {
+    fn from(ty: &TypeTag) -> Self {
+        match ty {
+            TypeTag::Boolean => Self::Boolean,
+            TypeTag::Integer => Self::Integer,
+            TypeTag::Rational => Self::Rational,
+            TypeTag::Text => Self::Text,
+            TypeTag::Cloak(sub) => Self::Cloak(Box::new(sub.as_ref().into())),
+            TypeTag::Seq(sub) => Self::Seq(Box::new(sub.as_ref().into())),
+            TypeTag::Set(sub) => Self::Set(Box::new(sub.as_ref().into())),
+            TypeTag::Map(key, val) => {
+                Self::Map(Box::new(key.as_ref().into()), Box::new(val.as_ref().into()))
+            }
+            TypeTag::Error => Self::Error,
+            TypeTag::User(name) => Self::User(name.clone()),
+        }
     }
 }

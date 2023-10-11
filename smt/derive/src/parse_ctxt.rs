@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 use crate::err::{bail_on, bail_on_with_note};
 use crate::parse_expr::{CtxtForExpr, Expr};
 use crate::parse_func::{FuncDef, FuncSig};
-use crate::parse_infer::FuncTypeDatabase;
+use crate::parse_infer::InferDatabase;
 use crate::parse_path::{FuncName, TypeName};
 use crate::parse_type::{CtxtForType, TypeDef};
 
@@ -277,26 +277,26 @@ impl ContextWithType {
             })
             .collect();
 
-        // populate the function database
-        let mut fn_db = FuncTypeDatabase::with_intrinsics();
+        // populate the inference database
+        let mut infer = InferDatabase::with_intrinsics();
 
         // register SMT types as they all implement the SMT trait
         for ty in types.keys() {
-            fn_db.register_user_type(ty);
+            infer.register_user_type(ty);
         }
         // register user-implemented functions
         for (name, (sig, _)) in unpacked_impls.iter() {
-            fn_db.register_user_func(name, sig);
+            infer.register_user_func(name, sig);
         }
 
-        trace!("function database populated with {} entries", fn_db.size());
+        trace!("function database populated with {} entries", infer.size());
 
         // done
         let ctxt = ContextWithTypeAndSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
-            fn_db,
+            infer,
         };
         Ok(ctxt)
     }
@@ -313,8 +313,8 @@ pub struct ContextWithTypeAndSig {
     types: BTreeMap<TypeName, TypeDef>,
     impls: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<FuncName, (FuncSig, Vec<Stmt>)>,
-    /// a database of all functions available in the system
-    fn_db: FuncTypeDatabase,
+    /// a database for inference
+    infer: InferDatabase,
 }
 
 impl ContextWithTypeAndSig {
@@ -342,7 +342,7 @@ impl ContextWithTypeAndSig {
             types,
             impls,
             specs,
-            fn_db: _,
+            infer: _,
         } = self;
 
         let unpacked_impls = impls
