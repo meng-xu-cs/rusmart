@@ -6,8 +6,8 @@ use log::trace;
 use syn::{Attribute, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
 use walkdir::WalkDir;
 
-use crate::err::{bail_on, bail_on_with_note};
-use crate::name::{FuncName, TypeName};
+use crate::parser::err::{bail_on, bail_on_with_note};
+use crate::parser::name::{FuncName, TypeName};
 
 /// SMT-marked type
 pub enum MarkedType {
@@ -75,59 +75,73 @@ pub struct Context {
 
 impl Context {
     /// Build a context for crate
-    pub fn new(path_crate: &Path) -> Result<Self> {
+    pub fn new(path_input: &Path) -> Result<Self> {
         let mut ctxt = Self {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
             specs: BTreeMap::new(),
         };
 
-        // scan over the code base
-        for entry in WalkDir::new(path_crate) {
-            let entry = entry.unwrap_or_else(|err| panic!("unable to walk the directory: {}", err));
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "rs") {
-                // load and parse the source
-                let content = fs::read_to_string(path).unwrap_or_else(|err| {
-                    panic!(
-                        "unable to read source file {}: {}",
-                        path.to_string_lossy(),
-                        err
-                    )
-                });
-                let file = syn::parse_file(&content)?;
-
-                // identify items marked with smt-related attributes
-                for item in file.items {
-                    match item {
-                        Item::Enum(syntax) => {
-                            if MarkedType::has_mark(&syntax.attrs) {
-                                ctxt.add_type(MarkedType::Enum(syntax))?;
-                            }
-                        }
-                        Item::Struct(syntax) => {
-                            if MarkedType::has_mark(&syntax.attrs) {
-                                ctxt.add_type(MarkedType::Struct(syntax))?;
-                            }
-                        }
-                        Item::Fn(syntax) => {
-                            if MarkedImpl::has_mark(&syntax.attrs) {
-                                if MarkedSpec::has_mark(&syntax.attrs) {
-                                    bail_on!(&syntax, "function cannot be both spec and impl");
-                                }
-                                ctxt.add_impl(MarkedImpl(syntax))?;
-                            } else if MarkedSpec::has_mark(&syntax.attrs) {
-                                ctxt.add_spec(MarkedSpec(syntax))?;
-                            }
-                        }
-                        _ => (),
-                    }
+        // test whether the path is a file or a directory
+        if path_input.is_file() {
+            ctxt.process_file(path_input)?;
+        } else {
+            // scan over the code base
+            for entry in WalkDir::new(path_input) {
+                let entry =
+                    entry.unwrap_or_else(|err| panic!("unable to walk the directory: {}", err));
+                let path = entry.path();
+                if path.extension().map_or(false, |ext| ext == "rs") {
+                    ctxt.process_file(path)?;
                 }
             }
         }
 
         // return a collection of items as derivation context
         Ok(ctxt)
+    }
+
+    /// Process a single input file
+    fn process_file(&mut self, path: &Path) -> Result<()> {
+        // load and parse the source
+        let content = fs::read_to_string(path).unwrap_or_else(|err| {
+            panic!(
+                "unable to read source file {}: {}",
+                path.to_string_lossy(),
+                err
+            )
+        });
+        let file = syn::parse_file(&content)?;
+
+        // identify items marked with smt-related attributes
+        for item in file.items {
+            match item {
+                Item::Enum(syntax) => {
+                    if MarkedType::has_mark(&syntax.attrs) {
+                        self.add_type(MarkedType::Enum(syntax))?;
+                    }
+                }
+                Item::Struct(syntax) => {
+                    if MarkedType::has_mark(&syntax.attrs) {
+                        self.add_type(MarkedType::Struct(syntax))?;
+                    }
+                }
+                Item::Fn(syntax) => {
+                    if MarkedImpl::has_mark(&syntax.attrs) {
+                        if MarkedSpec::has_mark(&syntax.attrs) {
+                            bail_on!(&syntax, "function cannot be both spec and impl");
+                        }
+                        self.add_impl(MarkedImpl(syntax))?;
+                    } else if MarkedSpec::has_mark(&syntax.attrs) {
+                        self.add_spec(MarkedSpec(syntax))?;
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        // processing completed
+        Ok(())
     }
 
     /// Add a type to the context
