@@ -1,3 +1,4 @@
+#[cfg(test)]
 /// Utility rules of making unit tests
 macro_rules! unit_test {
     ($name:ident, $stream:tt) => {
@@ -24,4 +25,6 @@ macro_rules! unit_test {
         }
     };
 }
+
+#[cfg(test)]
 pub(crate) use unit_test;

@@ -12,7 +12,6 @@ use crate::parser::err::{
 };
 use crate::parser::name::{ReservedIdent, TypeParamName};
 use crate::parser::path::PathUtil;
-use crate::parser::test::unit_test;
 
 /// Reserved trait
 pub enum SysTrait {
@@ -183,24 +182,50 @@ impl Generics {
     }
 }
 
-unit_test!(
-    no_smt_trait,
-    {
+#[cfg(test)]
+mod tests {
+    use crate::parser::test::unit_test;
+
+    unit_test!(with_smt_trait, {
         #[smt_type]
-        struct S<T>(T);
-    },
-    "expect trait bound"
-);
+        struct S<T: SMT>(T);
+    });
 
-unit_test!(with_smt_trait, {
-    #[smt_type]
-    struct S<T: SMT>(T);
-});
+    unit_test!(multi_params, {
+        #[smt_type]
+        enum E<K: SMT, V: SMT> {
+            UseK(K),
+            UseV(V),
+        }
+    });
 
-unit_test!(multi_params, {
-    #[smt_type]
-    enum E<K: SMT, V: SMT> {
-        UseK(K),
-        UseV(V),
-    }
-});
+    unit_test!(
+        no_trait,
+        {
+            #[smt_type]
+            struct S<T>(T);
+        },
+        "expect trait bound"
+    );
+
+    unit_test!(
+        other_trait,
+        {
+            #[smt_type]
+            struct S<T: NotSMT>(T);
+        },
+        "not an intrinsic trait"
+    );
+
+    unit_test!(
+        one_param_no_trait,
+        {
+            #[smt_type]
+            enum E<K: SMT, V> {
+                UseK(K),
+                UseV(V),
+            }
+        },
+        "expect trait bound"
+    );
+}

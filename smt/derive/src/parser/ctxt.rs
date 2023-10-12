@@ -9,7 +9,6 @@ use walkdir::WalkDir;
 use crate::parser::err::{bail_on, bail_on_with_note};
 use crate::parser::generics::Generics;
 use crate::parser::name::{FuncName, TypeName};
-use crate::parser::test::unit_test;
 
 #[cfg(test)]
 use proc_macro2::TokenStream;
@@ -244,7 +243,12 @@ pub struct ContextWithGenerics {
     specs: BTreeMap<FuncName, (Generics, MarkedSpec)>,
 }
 
-unit_test!(basics, {
-    #[smt_type]
-    struct SimpleBool(Boolean);
-});
+#[cfg(test)]
+mod tests {
+    use crate::parser::test::unit_test;
+
+    unit_test!(basics, {
+        #[smt_type]
+        struct SimpleBool(Boolean);
+    });
+}
