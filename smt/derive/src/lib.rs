@@ -14,7 +14,7 @@ pub fn derive<P: AsRef<Path>>(input: P) -> Result<()> {
 
     let path_crate = input.as_ref();
     debug!("deriving for crate {}", path_crate.to_string_lossy());
-    Context::new(path_crate)?;
+    Context::new(path_crate)?.parse_generics()?;
     debug!("derivation completed");
 
     Ok(())

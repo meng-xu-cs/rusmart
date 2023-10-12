@@ -3,14 +3,19 @@ use std::fmt::{Display, Formatter};
 use syn::{Ident, Result};
 
 use crate::parser::err::bail_on;
+use crate::parser::generics::SysTrait;
 
 /// Test whether an identifier is a reserved keyword
 fn validate_user_ident(ident: &Ident) -> Result<String> {
+    // check for reserved keywords
+    if SysTrait::from_ident(ident).is_some() {
+        bail_on!(ident, "reserved trait name");
+    }
+
+    // TODO: check the rest
+
     let name = ident.to_string();
     match name.as_str() {
-        "SMT" => {
-            bail_on!(ident, "reserved trait name");
-        }
         "Boolean" | "Integer" | "Rational" | "Text" | "Cloak" | "Seq" | "Set" | "Map" | "Error" => {
             bail_on!(ident, "reserved type name");
         }
@@ -76,5 +81,5 @@ name! {
 /// Mark that this is a reserved identifier
 pub trait ReservedIdent: Sized {
     /// try to parse from an identifier
-    fn from_ident(ident: &Ident) -> Result<Self>;
+    fn from_ident(ident: &Ident) -> Option<Self>;
 }

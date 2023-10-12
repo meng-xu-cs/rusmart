@@ -65,11 +65,22 @@ macro_rules! bail_if_exists {
     ($item:expr) => {
         match $item {
             None => (),
-            Some(__v) => $crate::parser::err::bail_on!(__v, "not expected"),
+            Some(__v) => $crate::parser::err::bail_on!(__v, "unexpected"),
         }
     };
 }
 pub(crate) use bail_if_exists;
+
+/// Special case on bail: does not expect a token to exist
+macro_rules! bail_if_non_empty {
+    ($item:expr) => {{
+        let __v = $item;
+        if !__v.is_empty() {
+            $crate::parser::err::bail_on!(__v, "unexpected");
+        }
+    }};
+}
+pub(crate) use bail_if_non_empty;
 
 /// Special case on bail: does not expect a token to exist
 macro_rules! bail_if_missing {

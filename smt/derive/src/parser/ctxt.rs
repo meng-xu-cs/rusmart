@@ -3,10 +3,16 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use syn::{Attribute, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
+use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
 use walkdir::WalkDir;
 
+#[cfg(test)]
+use proc_macro2::TokenStream;
+#[cfg(test)]
+use quote::quote;
+
 use crate::parser::err::{bail_on, bail_on_with_note};
+use crate::parser::generics::Generics;
 use crate::parser::name::{FuncName, TypeName};
 
 /// SMT-marked type
@@ -33,7 +39,7 @@ impl MarkedType {
 }
 
 /// SMT-marked function as impl
-pub struct MarkedImpl(ItemFn);
+pub struct MarkedImpl(pub ItemFn);
 
 impl MarkedImpl {
     /// Test whether the SMT mark exists in the attributes
@@ -50,7 +56,7 @@ impl MarkedImpl {
 }
 
 /// SMT-marked function as spec
-pub struct MarkedSpec(ItemFn);
+pub struct MarkedSpec(pub ItemFn);
 
 impl MarkedSpec {
     /// Test whether the SMT mark exists in the attributes
@@ -82,18 +88,23 @@ impl Context {
             specs: BTreeMap::new(),
         };
 
-        // test whether the path is a file or a directory
-        if path_input.is_file() {
-            ctxt.process_file(path_input)?;
-        } else {
-            // scan over the code base
-            for entry in WalkDir::new(path_input) {
-                let entry =
-                    entry.unwrap_or_else(|err| panic!("unable to walk the directory: {}", err));
-                let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "rs") {
-                    ctxt.process_file(path)?;
-                }
+        // scan over the code base
+        for entry in WalkDir::new(path_input) {
+            let entry = entry.unwrap_or_else(|err| panic!("unable to walk the directory: {}", err));
+            let path = entry.path();
+            if path.extension().map_or(false, |ext| ext == "rs") {
+                // load and parse the source
+                let content = fs::read_to_string(path).unwrap_or_else(|err| {
+                    panic!(
+                        "unable to read source file {}: {}",
+                        path.to_string_lossy(),
+                        err
+                    )
+                });
+                let file = syn::parse_file(&content)?;
+
+                // process it
+                ctxt.process_file(file)?;
             }
         }
 
@@ -102,17 +113,7 @@ impl Context {
     }
 
     /// Process a single input file
-    fn process_file(&mut self, path: &Path) -> Result<()> {
-        // load and parse the source
-        let content = fs::read_to_string(path).unwrap_or_else(|err| {
-            panic!(
-                "unable to read source file {}: {}",
-                path.to_string_lossy(),
-                err
-            )
-        });
-        let file = syn::parse_file(&content)?;
-
+    fn process_file(&mut self, file: File) -> Result<()> {
         // identify items marked with smt-related attributes
         for item in file.items {
             match item {
@@ -192,6 +193,62 @@ impl Context {
         Ok(())
     }
 
-    /// Analyze the type signature
-    pub fn parse_type_sig(self) {}
+    /// Parse the generics declarations
+    pub fn parse_generics(self) -> Result<ContextWithGenerics> {
+        let mut types = BTreeMap::new();
+        for (name, marked) in self.types {
+            let parsed = Generics::from_marked_type(&marked)?;
+            types.insert(name, (parsed, marked));
+        }
+
+        let mut impls = BTreeMap::new();
+        for (name, marked) in self.impls {
+            let parsed = Generics::from_marked_impl(&marked)?;
+            impls.insert(name, (parsed, marked));
+        }
+
+        let mut specs = BTreeMap::new();
+        for (name, marked) in self.specs {
+            let parsed = Generics::from_marked_spec(&marked)?;
+            specs.insert(name, (parsed, marked));
+        }
+
+        Ok(ContextWithGenerics {
+            types,
+            impls,
+            specs,
+        })
+    }
+
+    #[cfg(test)]
+    pub fn derive_from_stream(stream: TokenStream) -> Result<()> {
+        // init
+        let mut ctxt = Self {
+            types: BTreeMap::new(),
+            impls: BTreeMap::new(),
+            specs: BTreeMap::new(),
+        };
+        let file: File = syn::parse2(stream)?;
+        ctxt.process_file(file)?;
+
+        // derivation
+        ctxt.parse_generics()?;
+        Ok(())
+    }
+}
+
+/// Context manager after analyzing for generics
+pub struct ContextWithGenerics {
+    types: BTreeMap<TypeName, (Generics, MarkedType)>,
+    impls: BTreeMap<FuncName, (Generics, MarkedImpl)>,
+    specs: BTreeMap<FuncName, (Generics, MarkedSpec)>,
+}
+
+#[test]
+fn test_simple() {
+    let stream = quote! {
+        #[smt_type]
+        struct SimpleBool(Boolean);
+    };
+    Context::derive_from_stream(stream).unwrap();
 }

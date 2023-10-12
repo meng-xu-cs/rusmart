@@ -28,6 +28,10 @@ impl PathUtil {
 
     /// Expect a reserved identifier from the path
     pub fn expect_ident_reserved<T: ReservedIdent>(path: &Path) -> Result<T> {
-        Self::expect_ident(path).and_then(T::from_ident)
+        let ident = Self::expect_ident(path)?;
+        match T::from_ident(ident) {
+            None => bail_on!(ident, "not an intrinsic trait"),
+            Some(v) => Ok(v),
+        }
     }
 }

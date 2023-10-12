@@ -1,11 +1,13 @@
+use std::collections::BTreeMap;
+
 use quote::quote_spanned;
 use syn::{
-    GenericParam, Generics, Ident, ItemEnum, ItemStruct, Result, TraitBound, TraitBoundModifier,
-    TypeParam, TypeParamBound,
+    GenericParam, Generics as GenericsDecl, Ident, ItemEnum, ItemFn, ItemStruct, Result,
+    TraitBound, TraitBoundModifier, TypeParam, TypeParamBound,
 };
 
-use crate::parser::ctxt::MarkedType;
-use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::parser::ctxt::{MarkedImpl, MarkedSpec, MarkedType};
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::name::{ReservedIdent, TypeParamName};
 use crate::parser::path::PathUtil;
 
@@ -16,12 +18,12 @@ pub enum SysTrait {
 
 impl ReservedIdent for SysTrait {
     /// Get a trait from an ident
-    fn from_ident(ident: &Ident) -> Result<Self> {
+    fn from_ident(ident: &Ident) -> Option<Self> {
         let matched = match ident.to_string().as_str() {
             "SMT" => Self::SMT,
-            _ => bail_on!(ident, "not an intrinsic trait"),
+            _ => return None,
         };
-        Ok(matched)
+        Some(matched)
     }
 }
 
@@ -41,10 +43,10 @@ impl SysTrait {
         bail_if_exists!(default);
 
         // ensure that the trait bound includes and only includes SMT
-        bail_if_missing!(colon_token, param, "no trait bound");
+        bail_if_missing!(colon_token, param, "trait bound");
 
         let mut iter = bounds.iter();
-        let bound = bail_if_missing!(iter.next(), bounds, "[invariant] no trait bound");
+        let bound = bail_if_missing!(iter.next(), bounds, "trait bound");
         match bound {
             TypeParamBound::Trait(trait_bound) => {
                 let TraitBound {
@@ -74,16 +76,15 @@ impl SysTrait {
     }
 }
 
-/// An arena for declaration of generics
-pub struct GenericsDecl {
-    /// List of declared type parameters, checked for uniqueness
-    params: Vec<TypeParamName>,
+/// Declaration of generics
+pub struct Generics {
+    params: BTreeMap<TypeParamName, usize>,
 }
 
-impl GenericsDecl {
+impl Generics {
     /// Convert from generics
-    fn from_generics(generics: &Generics) -> Result<Self> {
-        let Generics {
+    fn from_generics(generics: &GenericsDecl) -> Result<Self> {
+        let GenericsDecl {
             lt_token,
             params,
             where_clause,
@@ -94,27 +95,23 @@ impl GenericsDecl {
             None => {
                 bail_if_exists!(gt_token);
                 bail_if_exists!(where_clause);
-                if !params.is_empty() {
-                    bail_on!(params, "[invariant] unexpected")
-                }
-                vec![]
+                bail_if_non_empty!(params);
+                BTreeMap::new()
             }
             Some(_) => {
-                bail_if_missing!(gt_token, generics, "[invariant] unmatched");
+                bail_if_missing!(gt_token, generics, ">");
                 bail_if_exists!(where_clause);
-                if params.is_empty() {
-                    bail_on!(generics, "expects one or more parameters");
-                }
+                bail_if_non_empty!(params);
 
-                let mut declared = vec![];
-                for item in params {
+                let mut declared = BTreeMap::new();
+                for (i, item) in params.iter().enumerate() {
                     match item {
                         GenericParam::Type(ty_param) => {
                             let name = SysTrait::validate_type_param_decl(ty_param)?;
-                            if declared.contains(&name) {
-                                bail_on!(ty_param, "name conflicts");
+                            match declared.insert(name, i) {
+                                None => (),
+                                Some(_) => bail_on!(ty_param, "name conflict"),
                             }
-                            declared.push(name);
                         }
                         _ => bail_on!(item, "type parameters only"),
                     }
@@ -149,5 +146,36 @@ impl GenericsDecl {
             }) => generics,
         };
         Self::from_generics(generics)
+    }
+
+    /// Convert from a function item
+    fn from_fn(item: &ItemFn) -> Result<Self> {
+        let ItemFn {
+            attrs: _,
+            vis: _,
+            sig,
+            block: _,
+        } = item;
+        Self::from_generics(&sig.generics)
+    }
+
+    /// Convert from a marked impl
+    pub fn from_marked_impl(item: &MarkedImpl) -> Result<Self> {
+        Self::from_fn(&item.0)
+    }
+
+    /// Convert from a marked spec
+    pub fn from_marked_spec(item: &MarkedSpec) -> Result<Self> {
+        Self::from_fn(&item.0)
+    }
+
+    /// Get the length of the arena
+    pub fn len(&self) -> usize {
+        self.params.len()
+    }
+
+    /// Retrieve a parameter
+    pub fn get(&self, name: &TypeParamName) -> Option<usize> {
+        self.params.get(name).copied()
     }
 }
