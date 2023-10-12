@@ -6,12 +6,13 @@ use syn::{
     TraitBound, TraitBoundModifier, TypeParam, TypeParamBound,
 };
 
-use crate::parser::ctxt::{make_test, MarkedImpl, MarkedSpec, MarkedType};
+use crate::parser::ctxt::{MarkedImpl, MarkedSpec, MarkedType};
 use crate::parser::err::{
     bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
 };
 use crate::parser::name::{ReservedIdent, TypeParamName};
 use crate::parser::path::PathUtil;
+use crate::parser::test::unit_test;
 
 /// Reserved trait
 pub enum SysTrait {
@@ -182,7 +183,7 @@ impl Generics {
     }
 }
 
-make_test!(
+unit_test!(
     no_smt_trait,
     {
         #[smt_type]
@@ -191,7 +192,15 @@ make_test!(
     "expect trait bound"
 );
 
-make_test!(with_smt_trait, {
+unit_test!(with_smt_trait, {
     #[smt_type]
     struct S<T: SMT>(T);
+});
+
+unit_test!(multi_params, {
+    #[smt_type]
+    enum E<K: SMT, V: SMT> {
+        UseK(K),
+        UseV(V),
+    }
 });
