@@ -3,7 +3,7 @@ macro_rules! bail_on {
     ($item:expr, $msg:literal $(,)?) => {
         {
             let __x = $item;
-            let __s = syn::spanned::Spanned::span($item);
+            let __s = syn::spanned::Spanned::span(&__x);
             return Err(syn::Error::new(
                 __s,
                 format!("{}\n{}", $msg, quote::quote_spanned!(__s => #__x)),
@@ -13,7 +13,7 @@ macro_rules! bail_on {
     ($item:expr, $fmt:expr, $($arg:tt)*) => {
         {
             let __x = $item;
-            let __s = syn::spanned::Spanned::span($item);
+            let __s = syn::spanned::Spanned::span(&__x);
             let __m = format!($fmt, $($arg)*);
             return Err(syn::Error::new(
                 __s,
@@ -65,7 +65,7 @@ macro_rules! bail_if_exists {
     ($item:expr) => {
         match $item {
             None => (),
-            Some(__v) => $crate::err::bail_on!(__v, "not expected"),
+            Some(__v) => $crate::parser::err::bail_on!(__v, "not expected"),
         }
     };
 }
@@ -75,7 +75,7 @@ pub(crate) use bail_if_exists;
 macro_rules! bail_if_missing {
     ($item:expr, $par:expr, $note:literal) => {
         match $item {
-            None => $crate::err::bail_on!($par, "expect {}", $note),
+            None => $crate::parser::err::bail_on!($par, "expect {}", $note),
             Some(__v) => __v,
         }
     };

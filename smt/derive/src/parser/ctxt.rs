@@ -191,4 +191,7 @@ impl Context {
         self.specs.insert(name, item);
         Ok(())
     }
+
+    /// Analyze the type signature
+    pub fn parse_type_sig(self) {}
 }

@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use syn::{Ident, Result};
 
 use crate::parser::err::bail_on;
@@ -6,6 +8,9 @@ use crate::parser::err::bail_on;
 fn validate_user_ident(ident: &Ident) -> Result<String> {
     let name = ident.to_string();
     match name.as_str() {
+        "SMT" => {
+            bail_on!(ident, "reserved trait name");
+        }
         "Boolean" | "Integer" | "Rational" | "Text" | "Cloak" | "Seq" | "Set" | "Map" | "Error" => {
             bail_on!(ident, "reserved type name");
         }
@@ -37,20 +42,25 @@ macro_rules! name {
             }
         }
 
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Display for $name {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", self.ident)
             }
         }
 
-        impl TryFrom<&syn::Ident> for $name {
+        impl TryFrom<&Ident> for $name {
             type Error = syn::Error;
 
-            fn try_from(value: &syn::Ident) -> syn::Result<Self> {
+            fn try_from(value: &Ident) -> Result<Self> {
                 validate_user_ident(value).map(|ident| Self { ident })
             }
         }
     };
+}
+
+name! {
+    /// Identifier for a user-defined type parameter
+    TypeParamName
 }
 
 name! {
@@ -61,4 +71,10 @@ name! {
 name! {
     /// Identifier for a user-defined function (i.e., non-reserved)
     FuncName
+}
+
+/// Mark that this is a reserved identifier
+pub trait ReservedIdent: Sized {
+    /// try to parse from an identifier
+    fn from_ident(ident: &Ident) -> Result<Self>;
 }
