@@ -74,7 +74,7 @@ impl SysTrait {
     }
 }
 
-/// An arena for generics
+/// An arena for declaration of generics
 pub struct GenericsDecl {
     /// List of declared type parameters, checked for uniqueness
     params: Vec<TypeParamName>,
@@ -114,6 +114,7 @@ impl GenericsDecl {
                             if declared.contains(&name) {
                                 bail_on!(ty_param, "name conflicts");
                             }
+                            declared.push(name);
                         }
                         _ => bail_on!(item, "type parameters only"),
                     }
