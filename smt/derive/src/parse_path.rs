@@ -10,7 +10,7 @@ use crate::err::{bail_if_exists, bail_on};
 fn validate_user_ident(ident: &Ident) -> Result<String> {
     let name = ident.to_string();
     match name.as_str() {
-        "Boolean" | "Integer" | "Rational" | "Text" | "Box" | "Seq" | "Set" | "Map" | "Error" => {
+        "Boolean" | "Integer" | "Rational" | "Text" | "Cloak" | "Seq" | "Set" | "Map" | "Error" => {
             bail_on!(ident, "reserved type name");
         }
         "forall" | "exists" => {
@@ -26,57 +26,44 @@ fn validate_user_ident(ident: &Ident) -> Result<String> {
     }
 }
 
+/// Utility macro to define a name
+macro_rules! name {
+    ($n:ident) => {
+        #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
+        pub struct $n {
+            ident: String,
+        }
+
+        impl AsRef<str> for $n {
+            fn as_ref(&self) -> &str {
+                &self.ident
+            }
+        }
+
+        impl Display for $n {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.ident)
+            }
+        }
+
+        impl TryFrom<&Ident> for $n {
+            type Error = Error;
+
+            fn try_from(value: &Ident) -> Result<Self> {
+                validate_user_ident(value).map(|ident| Self { ident })
+            }
+        }
+    };
+}
+
+/// Identifier for a type parameter
+name!(TypeParamName);
+
 /// Identifier for a user-defined type (i.e., non-reserved)
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
-pub struct TypeName {
-    ident: String,
-}
-
-impl TryFrom<&Ident> for TypeName {
-    type Error = Error;
-
-    fn try_from(value: &Ident) -> Result<Self> {
-        validate_user_ident(value).map(|ident| Self { ident })
-    }
-}
-
-impl AsRef<str> for TypeName {
-    fn as_ref(&self) -> &str {
-        &self.ident
-    }
-}
-
-impl Display for TypeName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.ident)
-    }
-}
+name!(TypeName);
 
 /// Identifier for a user-defined function (i.e., non-reserved)
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
-pub struct FuncName {
-    ident: String,
-}
-
-impl AsRef<str> for FuncName {
-    fn as_ref(&self) -> &str {
-        &self.ident
-    }
-}
-
-impl Display for FuncName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.ident)
-    }
-}
-
-impl TryFrom<&Ident> for FuncName {
-    type Error = Error;
-
-    fn try_from(value: &Ident) -> Result<Self> {
-        validate_user_ident(value).map(|ident| Self { ident })
-    }
-}
+name!(FuncName);
 
 impl FuncName {
     /// Make a function name for primitive methods

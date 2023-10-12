@@ -15,9 +15,20 @@ pub trait CtxtForType {
     fn has_type(&self, name: &TypeName) -> bool;
 }
 
+/// An arena holding type parameters enclosed
+struct TypeParamArena<T> {
+    params: BTreeMap<usize, T>,
+}
+
+/// A type parameter managed by an arena
+pub struct TypeParam<'a, T> {
+    id: usize,
+    arena: &'a TypeParamArena<T>,
+}
+
 /// A unique and complete reference to an SMT-related type
 #[derive(Clone, Eq, PartialEq)]
-pub enum TypeTag {
+pub enum TypeTag<'a, T> {
     /// boolean
     Boolean,
     /// integer (unlimited precision)
@@ -27,23 +38,25 @@ pub enum TypeTag {
     /// string
     Text,
     /// inductively defined type
-    Cloak(Box<TypeTag>),
+    Cloak(Box<TypeTag<'a, T>>),
     /// SMT-sequence
-    Seq(Box<TypeTag>),
+    Seq(Box<TypeTag<'a, T>>),
     /// SMT-set
-    Set(Box<TypeTag>),
+    Set(Box<TypeTag<'a, T>>),
     /// SMT-array
-    Map(Box<TypeTag>, Box<TypeTag>),
+    Map(Box<TypeTag<'a, T>>, Box<TypeTag<'a, T>>),
     /// dynamic error type
     Error,
     /// user-defined type
-    User(TypeName),
+    User(TypeName, Vec<TypeTag<'a, T>>),
+    /// parameter
+    Parameter(TypeParam<'a, T>),
 }
 
-impl TypeTag {
+impl<'a, T> TypeTag<'a, T> {
     /// Convert from a type argument pack
-    fn from_args<T: CtxtForType>(
-        ctxt: &T,
+    fn from_args<CTX: CtxtForType>(
+        ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<Vec<Self>> {
         let AngleBracketedGenericArguments {
@@ -67,8 +80,8 @@ impl TypeTag {
     }
 
     /// Convert from a type argument pack, expecting 1 argument
-    fn from_args_expect_1<T: CtxtForType>(
-        ctxt: &T,
+    fn from_args_expect_1<CTX: CtxtForType>(
+        ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<Self> {
         let mut iter = Self::from_args(ctxt, pack)?.into_iter();
@@ -83,8 +96,8 @@ impl TypeTag {
     }
 
     /// Convert from a type argument pack, expecting 2 arguments
-    fn from_args_expect_2<T: CtxtForType>(
-        ctxt: &T,
+    fn from_args_expect_2<CTX: CtxtForType>(
+        ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<(Self, Self)> {
         let mut iter = Self::from_args(ctxt, pack)?.into_iter();
@@ -103,7 +116,7 @@ impl TypeTag {
     }
 
     /// Convert from a path
-    fn from_path<T: CtxtForType>(ctxt: &T, path: &Path) -> Result<Self> {
+    fn from_path<CTX: CtxtForType>(ctxt: &CTX, path: &Path) -> Result<Self> {
         let Path {
             leading_colon,
             segments,
@@ -146,7 +159,7 @@ impl TypeTag {
                         if !matches!(arguments, PathArguments::None) {
                             bail_on!(arguments, "unexpected type arguments");
                         }
-                        Self::User(name)
+                        Self::User(name, vec![])
                     }
                 }
             }
@@ -161,7 +174,7 @@ impl TypeTag {
     }
 
     /// Convert from a type
-    pub fn from_type<T: CtxtForType>(ctxt: &T, ty: &Type) -> Result<Self> {
+    pub fn from_type<CTX: CtxtForType>(ctxt: &CTX, ty: &Type) -> Result<Self> {
         match ty {
             Type::Path(TypePath { qself, path }) => {
                 bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
@@ -172,9 +185,10 @@ impl TypeTag {
     }
 }
 
-impl Display for TypeTag {
+impl<'a, T> Display for TypeTag<'a, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Param(_) => todo!(),
             Self::Boolean => write!(f, "Boolean"),
             Self::Integer => write!(f, "Integer"),
             Self::Rational => write!(f, "Rational"),
@@ -183,21 +197,21 @@ impl Display for TypeTag {
             Self::Seq(sub) => write!(f, "Seq<{}>", sub),
             Self::Set(sub) => write!(f, "Set<{}>", sub),
             Self::Map(key, val) => write!(f, "Map<{}, {}>", key, val),
-            Self::User(name) => write!(f, "{}", name),
+            Self::User(name, params) => write!(f, "{}", name),
             Self::Error => write!(f, "Error"),
         }
     }
 }
 
 /// Represents a tuple definition
-pub struct TypeTuple {
-    slots: Vec<TypeTag>,
+pub struct TypeTuple<'a, T> {
+    slots: Vec<TypeTag<'a, T>>,
 }
 
-impl TypeTuple {
+impl<'a, T> TypeTuple<'a, T> {
     /// Convert from a list of fields
-    fn from_fields<'a, I: Iterator<Item = &'a Field>, T: CtxtForType>(
-        ctxt: &T,
+    fn from_fields<'b, I: Iterator<Item = &'b Field>, CTX: CtxtForType>(
+        ctxt: &CTX,
         items: I,
     ) -> Result<Self> {
         let mut slots = vec![];
@@ -223,20 +237,20 @@ impl TypeTuple {
     }
 
     /// Get slots
-    pub fn slots(&self) -> &[TypeTag] {
+    pub fn slots(&self) -> &[TypeTag<'a, T>] {
         &self.slots
     }
 }
 
 /// Represents a record definition
-pub struct TypeRecord {
-    fields: BTreeMap<String, TypeTag>,
+pub struct TypeRecord<'a, T> {
+    fields: BTreeMap<String, TypeTag<'a, T>>,
 }
 
-impl TypeRecord {
+impl<'a, T> TypeRecord<'a, T> {
     /// Convert from a fields token
-    fn from_fields<'a, I: Iterator<Item = &'a Field>, T: CtxtForType>(
-        ctxt: &T,
+    fn from_fields<'b, I: Iterator<Item = &'b Field>, CTX: CtxtForType>(
+        ctxt: &CTX,
         items: I,
     ) -> Result<Self> {
         let mut fields = BTreeMap::new();
@@ -265,21 +279,21 @@ impl TypeRecord {
     }
 
     /// Get fields
-    pub fn fields(&self) -> &BTreeMap<String, TypeTag> {
+    pub fn fields(&self) -> &BTreeMap<String, TypeTag<'a, T>> {
         &self.fields
     }
 }
 
 /// A helper enum to represent a variant definition in an ADT type
-pub enum ADTVariant {
+pub enum ADTVariant<'a, T> {
     Unit,
-    Tuple(TypeTuple),
-    Record(TypeRecord),
+    Tuple(TypeTuple<'a, T>),
+    Record(TypeRecord<'a, T>),
 }
 
-impl ADTVariant {
+impl<'a, T> ADTVariant<'a, T> {
     /// Convert from a fields token
-    fn from_fields<T: CtxtForType>(ctxt: &T, fields: &Fields) -> Result<Self> {
+    fn from_fields<CTX: CtxtForType>(ctxt: &CTX, fields: &Fields) -> Result<Self> {
         let variant = match fields {
             Fields::Unit => Self::Unit,
             Fields::Named(FieldsNamed {
@@ -296,14 +310,14 @@ impl ADTVariant {
 }
 
 /// Represents an ADT definition
-pub struct TypeADT {
-    variants: BTreeMap<String, ADTVariant>,
+pub struct TypeADT<'a, T> {
+    variants: BTreeMap<String, ADTVariant<'a, T>>,
 }
 
-impl TypeADT {
+impl<'a, T> TypeADT<'a, T> {
     /// Convert from a list of variants
-    fn from_variants<'a, I: Iterator<Item = &'a Variant>, T: CtxtForType>(
-        ctxt: &T,
+    fn from_variants<'b, I: Iterator<Item = &'b Variant>, CTX: CtxtForType>(
+        ctxt: &CTX,
         items: I,
     ) -> Result<Self> {
         let mut variants = BTreeMap::new();
@@ -328,21 +342,21 @@ impl TypeADT {
     }
 
     /// Get variants as map
-    pub fn variants(&self) -> &BTreeMap<String, ADTVariant> {
+    pub fn variants(&self) -> &BTreeMap<String, ADTVariant<'a, T>> {
         &self.variants
     }
 }
 
 /// A complete definition of type
-pub enum TypeDef {
-    Tuple(TypeTuple),
-    Record(TypeRecord),
-    Algebraic(TypeADT),
+pub enum TypeDef<'a, T> {
+    Tuple(TypeTuple<'a, T>),
+    Record(TypeRecord<'a, T>),
+    Algebraic(TypeADT<'a, T>),
 }
 
-impl TypeDef {
+impl<'a, T> TypeDef<'a, T> {
     /// Convert from a marked type
-    pub fn from_marked<T: CtxtForType>(ctxt: &T, item: &MarkedType) -> Result<Self> {
+    pub fn from_marked<CTX: CtxtForType>(ctxt: &CTX, item: &MarkedType) -> Result<Self> {
         let parsed = match item {
             MarkedType::Enum(item) => {
                 let ItemEnum {
