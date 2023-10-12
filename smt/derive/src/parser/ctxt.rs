@@ -6,14 +6,12 @@ use log::trace;
 use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
 use walkdir::WalkDir;
 
-#[cfg(test)]
-use proc_macro2::TokenStream;
-#[cfg(test)]
-use quote::quote;
-
 use crate::parser::err::{bail_on, bail_on_with_note};
 use crate::parser::generics::Generics;
 use crate::parser::name::{FuncName, TypeName};
+
+#[cfg(test)]
+use proc_macro2::TokenStream;
 
 /// SMT-marked type
 pub enum MarkedType {
@@ -238,17 +236,42 @@ impl Context {
 }
 
 /// Context manager after analyzing for generics
+#[allow(dead_code)]
 pub struct ContextWithGenerics {
     types: BTreeMap<TypeName, (Generics, MarkedType)>,
     impls: BTreeMap<FuncName, (Generics, MarkedImpl)>,
     specs: BTreeMap<FuncName, (Generics, MarkedSpec)>,
 }
 
-#[test]
-fn test_simple() {
-    let stream = quote! {
-        #[smt_type]
-        struct SimpleBool(Boolean);
+/// Utility rules of making tests
+macro_rules! make_test {
+    ($name:ident, $stream:tt) => {
+        #[test]
+        fn $name() {
+            let code = quote::quote! $stream;
+            crate::parser::ctxt::Context::derive_from_stream(code).unwrap();
+        }
     };
-    Context::derive_from_stream(stream).unwrap();
+    ($name:ident, $stream:tt, $msg:expr) => {
+        #[test]
+        fn $name() {
+            let code = quote::quote! $stream;
+            match crate::parser::ctxt::Context::derive_from_stream(code) {
+                Ok(_) => panic!("expect failure"),
+                Err(e) => {
+                    let err = e.to_string();
+                    let exp = $msg;
+                    if !err.contains(exp) {
+                        panic!("\n==== expect ====\n{}\n==== actual ====\n{}", exp, err)
+                    }
+                }
+            };
+        }
+    };
 }
+pub(crate) use make_test;
+
+make_test!(basics, {
+    #[smt_type]
+    struct SimpleBool(Boolean);
+});

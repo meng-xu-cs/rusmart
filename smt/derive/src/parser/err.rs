@@ -82,6 +82,17 @@ macro_rules! bail_if_non_empty {
 }
 pub(crate) use bail_if_non_empty;
 
+/// Special case on bail: expect a token to exist
+macro_rules! bail_if_empty {
+    ($item:expr, $note:literal) => {{
+        let __v = $item;
+        if __v.is_empty() {
+            $crate::parser::err::bail_on!(__v, "expect {}", $note);
+        }
+    }};
+}
+pub(crate) use bail_if_empty;
+
 /// Special case on bail: does not expect a token to exist
 macro_rules! bail_if_missing {
     ($item:expr, $par:expr, $note:literal) => {

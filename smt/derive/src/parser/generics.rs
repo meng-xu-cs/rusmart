@@ -6,8 +6,10 @@ use syn::{
     TraitBound, TraitBoundModifier, TypeParam, TypeParamBound,
 };
 
-use crate::parser::ctxt::{MarkedImpl, MarkedSpec, MarkedType};
-use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
+use crate::parser::ctxt::{make_test, MarkedImpl, MarkedSpec, MarkedType};
+use crate::parser::err::{
+    bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
+};
 use crate::parser::name::{ReservedIdent, TypeParamName};
 use crate::parser::path::PathUtil;
 
@@ -101,7 +103,7 @@ impl Generics {
             Some(_) => {
                 bail_if_missing!(gt_token, generics, ">");
                 bail_if_exists!(where_clause);
-                bail_if_non_empty!(params);
+                bail_if_empty!(params, "type parameter");
 
                 let mut declared = BTreeMap::new();
                 for (i, item) in params.iter().enumerate() {
@@ -179,3 +181,17 @@ impl Generics {
         self.params.get(name).copied()
     }
 }
+
+make_test!(
+    no_smt_trait,
+    {
+        #[smt_type]
+        struct S<T>(T);
+    },
+    "expect trait bound"
+);
+
+make_test!(with_smt_trait, {
+    #[smt_type]
+    struct S<T: SMT>(T);
+});
