@@ -171,7 +171,7 @@ impl Context {
                 prev.name(),
                 "previously defined here",
                 item.name(),
-                "duplicated impl name"
+                "duplicated spec name"
             );
         }
         trace!("spec found: {}", name);

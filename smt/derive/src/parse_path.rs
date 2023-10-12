@@ -7,7 +7,7 @@ use syn::{
 use crate::err::{bail_if_exists, bail_on};
 
 /// Test whether an identifier is a reserved keyword
-fn validate_usr_ident(ident: &Ident) -> Result<String> {
+fn validate_user_ident(ident: &Ident) -> Result<String> {
     let name = ident.to_string();
     match name.as_str() {
         "Boolean" | "Integer" | "Rational" | "Text" | "Box" | "Seq" | "Set" | "Map" | "Error" => {
@@ -36,7 +36,7 @@ impl TryFrom<&Ident> for TypeName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        validate_usr_ident(value).map(|ident| Self { ident })
+        validate_user_ident(value).map(|ident| Self { ident })
     }
 }
 
@@ -74,7 +74,7 @@ impl TryFrom<&Ident> for FuncName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        validate_usr_ident(value).map(|ident| Self { ident })
+        validate_user_ident(value).map(|ident| Self { ident })
     }
 }
 
@@ -179,7 +179,7 @@ impl TryFrom<&Ident> for VarName {
     type Error = Error;
 
     fn try_from(value: &Ident) -> Result<Self> {
-        validate_usr_ident(value).map(|ident| Self { ident })
+        validate_user_ident(value).map(|ident| Self { ident })
     }
 }
 
