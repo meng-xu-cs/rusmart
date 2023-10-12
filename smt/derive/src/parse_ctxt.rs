@@ -7,8 +7,7 @@ use syn::{Attribute, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
 use walkdir::WalkDir;
 
 use crate::err::{bail_on, bail_on_with_note};
-use crate::parse_path::{FuncName, TypeName};
-use crate::parse_type::{CtxtForType, TypeDef};
+use crate::name::{FuncName, TypeName};
 
 /// SMT-marked type
 pub enum MarkedType {
@@ -178,39 +177,4 @@ impl Context {
         self.specs.insert(name, item);
         Ok(())
     }
-
-    /// Parse types
-    pub fn analyze_type(self) -> Result<ContextWithType> {
-        let mut parsed_types = BTreeMap::new();
-        for (name, marked) in &self.types {
-            trace!("handling type: {}", name);
-            let parsed = TypeDef::from_marked(&self, marked)?;
-            trace!("type analyzed: {}", name);
-            parsed_types.insert(name.clone(), parsed);
-        }
-
-        let Self {
-            types: _,
-            impls,
-            specs,
-        } = self;
-        Ok(ContextWithType {
-            types: parsed_types,
-            impls,
-            specs,
-        })
-    }
-}
-
-impl CtxtForType for Context {
-    fn has_type(&self, name: &TypeName) -> bool {
-        self.types.contains_key(name)
-    }
-}
-
-/// Context manager after type analysis is done
-pub struct ContextWithType {
-    types: BTreeMap<TypeName, TypeDef>,
-    impls: BTreeMap<FuncName, MarkedImpl>,
-    specs: BTreeMap<FuncName, MarkedSpec>,
 }

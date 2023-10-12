@@ -8,7 +8,7 @@ use syn::{
 
 use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parse_ctxt::MarkedType;
-use crate::parse_path::TypeName;
+use crate::name::TypeName;
 
 /// A context suitable for type analysis
 pub trait CtxtForType {
