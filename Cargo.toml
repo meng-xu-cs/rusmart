@@ -4,6 +4,5 @@ members = [
     "utils",
     "smt/stdlib",
     "smt/derive",
-    "lang/rego",
 ]
 resolver = "2"

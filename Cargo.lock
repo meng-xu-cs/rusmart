@@ -252,15 +252,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusmart-lang-rego"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rusmart-smt-derive",
- "rusmart-smt-stdlib",
-]
-
-[[package]]
 name = "rusmart-smt-derive"
 version = "0.1.0"
 dependencies = [

@@ -6,9 +6,6 @@ authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
 license = "GPL-3.0"
 edition = "2021"
 
-[lib]
-proc-macro = true
-
 [dependencies]
 itertools = "0.11.0"
 log = "0.4.20"
