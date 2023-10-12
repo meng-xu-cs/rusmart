@@ -1,11 +1,15 @@
 use std::env;
 use std::fmt::{Display, Formatter};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use lazy_static::lazy_static;
 use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 
 /// Name of project
 pub static PROJECT: &str = "RUSMART";
+
+/// Marks whether initialization is completed
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Mode of operation
 pub enum Mode {
@@ -52,6 +56,13 @@ lazy_static! {
 
 /// initialize all configs
 pub fn initialize() {
+    // check whether we need to run the initialization process
+    match INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+        Ok(false) => (),
+        Err(true) => return,
+        _ => panic!("invalid result from atomic reading"),
+    }
+
     // logging
     let level = match *MODE {
         Mode::Prod => LevelFilter::Warn,

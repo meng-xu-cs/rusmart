@@ -1,3 +1,3 @@
-mod ctxt;
+pub mod ctxt;
 mod err;
 mod name;
