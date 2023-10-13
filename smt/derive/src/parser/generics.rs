@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 use quote::quote_spanned;
 use syn::{
-    GenericParam, Generics as GenericsDecl, ItemEnum, ItemFn, ItemStruct, Result, TraitBound,
+    GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, Result, TraitBound,
     TraitBoundModifier, TypeParam, TypeParamBound,
 };
 
-use crate::parser::ctxt::{MarkedImpl, MarkedSpec, MarkedType};
+use crate::parser::ctxt::MarkedType;
 use crate::parser::err::{
     bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
 };

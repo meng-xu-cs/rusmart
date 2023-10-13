@@ -4,6 +4,7 @@ use syn::{FnArg, Ident, PatType, Result, ReturnType, Signature};
 
 use crate::parser::ctxt::ContextWithType;
 use crate::parser::err::{bail_if_exists, bail_on};
+use crate::parser::expr::Expr;
 use crate::parser::generics::Generics;
 use crate::parser::name::{ReservedIdent, UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
@@ -160,6 +161,19 @@ impl FuncSig {
     /// Get the return type
     pub fn ret_ty(&self) -> &TypeTag {
         &self.ret_ty
+    }
+}
+
+/// Function definition
+pub struct FuncDef {
+    sig: FuncSig,
+    body: Expr,
+}
+
+impl FuncDef {
+    /// Create a new function definition
+    pub fn new(sig: FuncSig, body: Expr) -> Self {
+        Self { sig, body }
     }
 }
 

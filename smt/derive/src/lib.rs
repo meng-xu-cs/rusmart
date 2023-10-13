@@ -17,7 +17,8 @@ pub fn derive<P: AsRef<Path>>(input: P) -> Result<()> {
     Context::new(path_crate)?
         .parse_generics()?
         .parse_types()?
-        .parse_func_sigs()?;
+        .parse_func_sigs()?
+        .parse_func_body()?;
     debug!("derivation completed");
 
     Ok(())

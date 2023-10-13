@@ -7,11 +7,12 @@ use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Resu
 use walkdir::WalkDir;
 
 use crate::parser::err::{bail_on, bail_on_with_note};
-use crate::parser::func::FuncSig;
+use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
 
+use crate::parser::expr::{ExprParserRoot, Kind};
 use crate::parser::infer::InferDatabase;
 #[cfg(test)]
 use proc_macro2::TokenStream;
@@ -221,7 +222,10 @@ impl Context {
         ctxt.process_file(file)?;
 
         // derivation
-        ctxt.parse_generics()?.parse_types()?.parse_func_sigs()?;
+        ctxt.parse_generics()?
+            .parse_types()?
+            .parse_func_sigs()?
+            .parse_func_body()?;
         Ok(())
     }
 }
@@ -261,7 +265,7 @@ impl ContextWithGenerics {
             .into_iter()
             .map(|(name, (generics, _))| {
                 let body = parsed_types.remove(&name).unwrap();
-                (name, body.combine(generics))
+                (name, TypeDef::new(generics, body))
             })
             .collect();
 
@@ -383,6 +387,62 @@ impl ContextWithSig {
     pub fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
         self.types.get(name).map(|def| def.head())
     }
+
+    /// Parse function body
+    pub fn parse_func_body(self) -> Result<ContextWithFunc> {
+        // impl
+        let mut body_impls = BTreeMap::new();
+        for (name, (sig, stmts)) in &self.impls {
+            trace!("handling impl body: {}", name);
+            let body = ExprParserRoot::new(&self, Kind::Impl, &sig).parse(stmts)?;
+            trace!("impl body analyzed: {}", name);
+            body_impls.insert(name.clone(), body);
+        }
+
+        // spec
+        let mut body_specs = BTreeMap::new();
+        for (name, (sig, stmts)) in &self.specs {
+            trace!("handling spec body: {}", name);
+            let body = ExprParserRoot::new(&self, Kind::Spec, &sig).parse(stmts)?;
+            trace!("spec body analyzed: {}", name);
+            body_specs.insert(name.clone(), body);
+        }
+
+        let Self {
+            types,
+            impls,
+            specs,
+            infer: _,
+        } = self;
+
+        let unpacked_impls = impls
+            .into_iter()
+            .map(|(name, (sig, _))| {
+                let body = body_impls.remove(&name).unwrap();
+                (name, FuncDef::new(sig, body))
+            })
+            .collect();
+        let unpacked_specs = specs
+            .into_iter()
+            .map(|(name, (sig, _))| {
+                let body = body_specs.remove(&name).unwrap();
+                (name, FuncDef::new(sig, body))
+            })
+            .collect();
+
+        Ok(ContextWithFunc {
+            types,
+            impls: unpacked_impls,
+            specs: unpacked_specs,
+        })
+    }
+}
+
+/// Context manager after type, signature, and expression conversion is done
+pub struct ContextWithFunc {
+    types: BTreeMap<UsrTypeName, TypeDef>,
+    impls: BTreeMap<UsrFuncName, FuncDef>,
+    specs: BTreeMap<UsrFuncName, FuncDef>,
 }
 
 #[cfg(test)]

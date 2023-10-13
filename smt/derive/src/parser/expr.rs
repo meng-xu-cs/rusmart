@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use proc_macro2::TokenStream;
-use quote::quote;
 use syn::{Block, Expr as Exp, ExprBlock, Local, LocalInit, Pat, PatType, Result, Stmt};
 
 use crate::parser::ctxt::ContextWithSig;
@@ -14,19 +12,19 @@ use crate::parser::ty::{CtxtForType, TypeTag};
 use crate::parser::util::{ExprUtil, PatUtil};
 
 /// Operations
-enum Op {
+pub enum Op {
     /// `<var>`
     Var(VarName),
 }
 
 /// Instructions (operations with type)
-struct Inst {
+pub struct Inst {
     op: Box<Op>,
     ty: TypeRef,
 }
 
 /// Expressions
-enum Expr {
+pub enum Expr {
     /// a single instruction
     Unit(Inst),
     /// `{ let <v1> = ...; let <v2> = ...; ...; <op>(<v1>, <v2>, ...) }`
@@ -56,7 +54,7 @@ pub enum Kind {
     Spec,
 }
 
-/// Root expression parser (for function body)
+/// Root expression parser for function body
 pub struct ExprParserRoot<'ctx> {
     /// context provider
     ctxt: &'ctx ContextWithSig,
@@ -68,22 +66,12 @@ pub struct ExprParserRoot<'ctx> {
     params: BTreeMap<VarName, TypeRef>,
     /// function return type
     ret_ty: TypeRef,
-    /// type unifier
-    typing: TypeUnifier,
-}
-
-/// Parser stacking mechanism
-enum ExprParserParent<'exp, 'p, 'ctx: 'p> {
-    Root(&'p mut ExprParserRoot<'ctx>),
-    Derived(&'p mut ExprParserDerived<'exp, 'p, 'ctx>),
 }
 
 /// Derived expression parser (for one and only one expression)
-struct ExprParserDerived<'exp, 'p, 'ctx: 'p> {
+struct ExprParserCursor<'r, 'ctx: 'r> {
     /// parent of the parser
-    parent: ExprParserParent<'exp, 'p, 'ctx>,
-    /// expression to be analyzed
-    target: &'exp Exp,
+    root: &'r ExprParserRoot<'ctx>,
     /// expected type
     exp_ty: TypeRef,
     /// variables in scope and their types
@@ -105,29 +93,27 @@ impl<'ctx> ExprParserRoot<'ctx> {
                 .map(|(k, v)| (k, (&v).into()))
                 .collect(),
             ret_ty: sig.ret_ty().into(),
-            typing: TypeUnifier::new(),
         }
     }
 
     /// Parse the body of the function
-    pub fn parse(mut self, stmts: &[Stmt]) -> Result<()> {
-        // create an artificial expression
-        let quoted_stmts: TokenStream = stmts.iter().map(|i| quote!(i)).collect();
-        let target: Exp = syn::parse_quote!( { #quoted_stmts } );
+    pub fn parse(self, stmts: &[Stmt]) -> Result<Expr> {
+        let mut unifier = TypeUnifier::new();
 
         // derive a parser
         let exp_ty = self.ret_ty.clone();
-        let parser = ExprParserDerived {
-            parent: ExprParserParent::Root(&mut self),
-            target: &target,
+        let parser = ExprParserCursor {
+            root: &self,
             exp_ty,
-            vars: BTreeMap::new(),
+            vars: self.params.clone(),
             bindings: vec![],
         };
-        parser.run()?;
+        let parsed = parser.convert_stmts(&mut unifier, stmts)?;
 
-        // check type completeness
-        todo!()
+        // TODO: check type completeness
+
+        // things look good
+        Ok(parsed)
     }
 }
 
@@ -141,48 +127,19 @@ impl CtxtForType for ExprParserRoot<'_> {
     }
 }
 
-impl<'exp, 'p, 'ctx: 'p> ExprParserDerived<'exp, 'p, 'ctx> {
-    /// Retrieve the context
-    fn root(&self) -> &'p ExprParserRoot {
-        match &self.parent {
-            ExprParserParent::Root(root) => root,
-            ExprParserParent::Derived(derived) => derived.root(),
-        }
-    }
-
-    /// Fork a child parser and convert a child expression
-    fn parse(&'p mut self, target: &'exp Exp, exp_ty: TypeRef) -> Result<Expr> {
+impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
+    /// Fork a child parser
+    fn fork(&self, exp_ty: TypeRef) -> Self {
         Self {
-            parent: ExprParserParent::Derived(self),
-            target,
+            root: self.root,
             exp_ty,
-            vars: BTreeMap::new(),
+            vars: self.vars.clone(),
             bindings: vec![],
-        }
-        .run()
-    }
-
-    /// Look up the type of a variable
-    fn lookup_var(&self, name: &VarName) -> Option<&TypeRef> {
-        match self.vars.get(name) {
-            None => match &self.parent {
-                ExprParserParent::Root(root) => root.params.get(name),
-                ExprParserParent::Derived(derived) => derived.lookup_var(name),
-            },
-            Some(ty) => Some(ty),
-        }
-    }
-
-    /// Create a fresh type parameter
-    fn fresh_type_param(&mut self) -> TypeRef {
-        match &mut self.parent {
-            ExprParserParent::Root(root) => TypeRef::Var(root.typing.mk_var()),
-            ExprParserParent::Derived(derived) => derived.fresh_type_param(),
         }
     }
 
     /// Consume a stream of statements
-    fn convert_stmts(mut self, stmts: &'exp [Stmt]) -> Result<Expr> {
+    fn convert_stmts(mut self, unifier: &mut TypeUnifier, stmts: &[Stmt]) -> Result<Expr> {
         let mut expr_found = None;
         let mut iter = stmts.iter();
         for stmt in iter.by_ref() {
@@ -210,12 +167,12 @@ impl<'exp, 'p, 'ctx: 'p> ExprParserDerived<'exp, 'p, 'ctx> {
                             } = pty;
                             (
                                 PatUtil::expect_name(pat)?,
-                                Some(TypeTag::from_type(self.root(), ty.as_ref())?),
+                                Some(TypeTag::from_type(self.root, ty.as_ref())?),
                             )
                         }
                         _ => bail_on!(pat, "unrecognized binding"),
                     };
-                    if self.lookup_var(&name).is_some() {
+                    if self.vars.get(&name).is_some() {
                         bail_on!(pat, "name conflict");
                     }
 
@@ -229,14 +186,14 @@ impl<'exp, 'p, 'ctx: 'p> ExprParserDerived<'exp, 'p, 'ctx> {
                     bail_if_exists!(diverge.as_ref().map(|(_, div)| div));
 
                     // parse the body with a new parser
-                    let body_expr = match vty.as_ref() {
+                    let exp_ty = match vty.as_ref() {
                         None => {
-                            // assign a new type parameter to this variable
-                            let exp_ty = self.fresh_type_param();
-                            self.parse(expr, exp_ty)?
+                            // assign a new type var to this variable (i.e., to be inferred)
+                            TypeRef::Var(unifier.mk_var())
                         }
-                        Some(t) => self.parse(expr, t.into())?,
+                        Some(t) => t.into(),
                     };
+                    let body_expr = self.fork(exp_ty).convert_expr(unifier, expr)?;
 
                     // done, continue to next statement
                     self.vars.insert(name.clone(), body_expr.ty().clone());
@@ -246,8 +203,8 @@ impl<'exp, 'p, 'ctx: 'p> ExprParserDerived<'exp, 'p, 'ctx> {
                     // expecting a unit expression
                     bail_if_exists!(semi_token);
 
-                    // convert the expression and mark that we have found it in the statements
-                    expr_found = Some(self.convert_expr(expr)?);
+                    // mark that we have found the main expression in the statements
+                    expr_found = Some(expr);
 
                     // end of loop
                     break;
@@ -257,36 +214,28 @@ impl<'exp, 'p, 'ctx: 'p> ExprParserDerived<'exp, 'p, 'ctx> {
         }
 
         // bail if there are more statements
-        match iter.next() {
-            None => (),
-            Some(stmt) => {
-                bail_on!(stmt, "unexpected statement after the main expression");
-            }
-        }
+        bail_if_exists!(iter.next());
 
-        // check that we have an expression
+        // check that we have an expression and convert it if so
         match expr_found {
             None => bail_on!(
                 stmts.last().expect("at least one statement"),
                 "unable to find the main expression"
             ),
-            Some(e) => Ok(e),
+            Some(expr) => self.convert_expr(unifier, expr),
         }
     }
 
     /// Parse an expression
-    fn convert_expr(self, target: &'exp Exp) -> Result<Expr> {
+    fn convert_expr(self, unifier: &mut TypeUnifier, target: &Exp) -> Result<Expr> {
         // case on expression type
         let inst = match target {
             Exp::Path(expr_path) => {
                 let name = ExprUtil::expect_name_from_path(expr_path)?;
-
-                // look up the type
-                let ty = match self.lookup_var(&name) {
+                let ty = match self.vars.get(&name) {
                     None => bail_on!(expr_path, "unknown local variable"),
                     Some(t) => t.clone(),
                 };
-
                 Inst {
                     op: Op::Var(name).into(),
                     ty,
@@ -304,7 +253,7 @@ impl<'exp, 'p, 'ctx: 'p> ExprParserDerived<'exp, 'p, 'ctx> {
                 } = expr_block;
 
                 bail_if_exists!(label);
-                return self.convert_stmts(stmts);
+                return self.convert_stmts(unifier, stmts);
             }
             _ => todo!(),
         };
@@ -319,11 +268,5 @@ impl<'exp, 'p, 'ctx: 'p> ExprParserDerived<'exp, 'p, 'ctx> {
             }
         };
         Ok(converted)
-    }
-
-    /// Consume the parser by parsing the expression assigned
-    pub fn run(self) -> Result<Expr> {
-        let target = self.target;
-        self.convert_expr(target)
     }
 }

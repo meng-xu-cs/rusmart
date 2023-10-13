@@ -492,20 +492,19 @@ impl TypeBody {
         };
         Ok(parsed)
     }
-
-    /// Merge with the generics to create a type def
-    pub fn combine(self, generics: Generics) -> TypeDef {
-        TypeDef {
-            head: generics,
-            body: self,
-        }
-    }
 }
 
 /// A complete definition of a type (generics + body)
 pub struct TypeDef {
     head: Generics,
     body: TypeBody,
+}
+
+impl TypeDef {
+    /// Pack a new type definition
+    pub fn new(head: Generics, body: TypeBody) -> Self {
+        Self { head, body }
+    }
 }
 
 impl TypeDef {
