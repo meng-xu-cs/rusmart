@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 
 use crate::parser::err::{bail_on, bail_on_with_note};
 use crate::parser::generics::Generics;
-use crate::parser::name::{FuncName, TypeName};
+use crate::parser::name::{UsrFuncName, UsrTypeName};
 
 use crate::parser::ty::CtxtForType;
 #[cfg(test)]
@@ -73,9 +73,9 @@ impl MarkedSpec {
 
 /// Context manager for holding marked items
 pub struct Context {
-    types: BTreeMap<TypeName, MarkedType>,
-    impls: BTreeMap<FuncName, MarkedImpl>,
-    specs: BTreeMap<FuncName, MarkedSpec>,
+    types: BTreeMap<UsrTypeName, MarkedType>,
+    impls: BTreeMap<UsrFuncName, MarkedImpl>,
+    specs: BTreeMap<UsrFuncName, MarkedSpec>,
 }
 
 impl Context {
@@ -238,13 +238,13 @@ impl Context {
 
 /// Context manager after analyzing for generics
 pub struct ContextWithGenerics {
-    types: BTreeMap<TypeName, (Generics, MarkedType)>,
-    impls: BTreeMap<FuncName, (Generics, MarkedImpl)>,
-    specs: BTreeMap<FuncName, (Generics, MarkedSpec)>,
+    types: BTreeMap<UsrTypeName, (Generics, MarkedType)>,
+    impls: BTreeMap<UsrFuncName, (Generics, MarkedImpl)>,
+    specs: BTreeMap<UsrFuncName, (Generics, MarkedSpec)>,
 }
 
 impl CtxtForType for ContextWithGenerics {
-    fn get_type_generics(&self, name: &TypeName) -> Option<&Generics> {
+    fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
         self.types.get(name).map(|(generics, _)| generics)
     }
 }

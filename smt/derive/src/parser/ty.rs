@@ -5,12 +5,12 @@ use syn::{
 
 use crate::parser::err::{bail_if_exists, bail_on};
 use crate::parser::generics::Generics;
-use crate::parser::name::{TypeName, TypeParamName};
+use crate::parser::name::{TypeParamName, UsrTypeName};
 
 /// A context suitable for type analysis
 pub trait CtxtForType {
     /// Retrieve the generics declared (if any)
-    fn get_type_generics(&self, name: &TypeName) -> Option<&Generics>;
+    fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics>;
 }
 
 /// A unique and complete reference to an SMT-related type
@@ -35,7 +35,7 @@ pub enum TypeTag {
     /// dynamic error type
     Error,
     /// user-defined type
-    User(TypeName, Vec<TypeTag>),
+    User(UsrTypeName, Vec<TypeTag>),
     /// parameter
     Parameter(TypeParamName),
 }

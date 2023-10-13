@@ -70,12 +70,12 @@ name! {
 
 name! {
     /// Identifier for a user-defined type (i.e., non-reserved)
-    TypeName
+    UsrTypeName
 }
 
 name! {
     /// Identifier for a user-defined function (i.e., non-reserved)
-    FuncName
+    UsrFuncName
 }
 
 /// Mark that this is a reserved identifier
