@@ -14,6 +14,7 @@ use crate::parser::name::{ReservedIdent, TypeParamName};
 use crate::parser::path::PathUtil;
 
 /// Reserved trait
+#[allow(clippy::upper_case_acronyms)]
 pub enum SysTrait {
     SMT,
 }
