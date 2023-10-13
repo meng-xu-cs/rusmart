@@ -85,7 +85,7 @@ pub struct Generics {
 
 impl Generics {
     /// Convert from generics
-    fn from_generics(generics: &GenericsDecl) -> Result<Self> {
+    pub fn from_generics(generics: &GenericsDecl) -> Result<Self> {
         let GenericsDecl {
             lt_token,
             params,
@@ -148,27 +148,6 @@ impl Generics {
             }) => generics,
         };
         Self::from_generics(generics)
-    }
-
-    /// Convert from a function item
-    fn from_fn(item: &ItemFn) -> Result<Self> {
-        let ItemFn {
-            attrs: _,
-            vis: _,
-            sig,
-            block: _,
-        } = item;
-        Self::from_generics(&sig.generics)
-    }
-
-    /// Convert from a marked impl
-    pub fn from_marked_impl(item: &MarkedImpl) -> Result<Self> {
-        Self::from_fn(&item.0)
-    }
-
-    /// Convert from a marked spec
-    pub fn from_marked_spec(item: &MarkedSpec) -> Result<Self> {
-        Self::from_fn(&item.0)
     }
 
     /// Get the length of the arena

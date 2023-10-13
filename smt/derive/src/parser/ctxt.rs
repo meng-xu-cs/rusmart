@@ -3,13 +3,14 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result};
+use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result, Stmt};
 use walkdir::WalkDir;
 
 use crate::parser::err::{bail_on, bail_on_with_note};
+use crate::parser::func::FuncSig;
 use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
-use crate::parser::ty::{CtxtForType, TypeBody, TypeDef};
+use crate::parser::ty::{TypeBody, TypeDef};
 
 #[cfg(test)]
 use proc_macro2::TokenStream;
@@ -38,7 +39,7 @@ impl MarkedType {
 }
 
 /// SMT-marked function as impl
-pub struct MarkedImpl(pub ItemFn);
+pub struct MarkedImpl(ItemFn);
 
 impl MarkedImpl {
     /// Test whether the SMT mark exists in the attributes
@@ -55,7 +56,7 @@ impl MarkedImpl {
 }
 
 /// SMT-marked function as spec
-pub struct MarkedSpec(pub ItemFn);
+pub struct MarkedSpec(ItemFn);
 
 impl MarkedSpec {
     /// Test whether the SMT mark exists in the attributes
@@ -200,22 +201,10 @@ impl Context {
             types.insert(name, (parsed, marked));
         }
 
-        let mut impls = BTreeMap::new();
-        for (name, marked) in self.impls {
-            let parsed = Generics::from_marked_impl(&marked)?;
-            impls.insert(name, (parsed, marked));
-        }
-
-        let mut specs = BTreeMap::new();
-        for (name, marked) in self.specs {
-            let parsed = Generics::from_marked_spec(&marked)?;
-            specs.insert(name, (parsed, marked));
-        }
-
         Ok(ContextWithGenerics {
             types,
-            impls,
-            specs,
+            impls: self.impls,
+            specs: self.specs,
         })
     }
 
@@ -231,7 +220,7 @@ impl Context {
         ctxt.process_file(file)?;
 
         // derivation
-        ctxt.parse_generics()?.parse_types()?;
+        ctxt.parse_generics()?.parse_types()?.parse_func_sigs()?;
         Ok(())
     }
 }
@@ -239,39 +228,23 @@ impl Context {
 /// Context manager after analyzing for generics
 pub struct ContextWithGenerics {
     types: BTreeMap<UsrTypeName, (Generics, MarkedType)>,
-    impls: BTreeMap<UsrFuncName, (Generics, MarkedImpl)>,
-    specs: BTreeMap<UsrFuncName, (Generics, MarkedSpec)>,
-}
-
-/// A parser for type
-struct TypeParseCtxt<'a> {
-    /// context provider
-    ctxt: &'a ContextWithGenerics,
-    generics: &'a Generics,
-}
-
-impl CtxtForType for TypeParseCtxt<'_> {
-    fn generics(&self) -> &Generics {
-        self.generics
-    }
-
-    fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
-        self.ctxt.types.get(name).map(|(generics, _)| generics)
-    }
+    impls: BTreeMap<UsrFuncName, MarkedImpl>,
+    specs: BTreeMap<UsrFuncName, MarkedSpec>,
 }
 
 impl ContextWithGenerics {
+    /// Get the generics declaration for a type
+    pub fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
+        self.types.get(name).map(|(generics, _)| generics)
+    }
+
     /// Parse types
     pub fn parse_types(self) -> Result<ContextWithType> {
         // parsing
         let mut parsed_types = BTreeMap::new();
         for (name, (generics, marked)) in &self.types {
-            let parser = TypeParseCtxt {
-                ctxt: &self,
-                generics,
-            };
             trace!("handling type: {}", name);
-            let parsed = TypeBody::from_marked(&parser, marked)?;
+            let parsed = TypeBody::from_marked(&self, generics, marked)?;
             trace!("type analyzed: {}", name);
             parsed_types.insert(name.clone(), parsed);
         }
@@ -302,8 +275,89 @@ impl ContextWithGenerics {
 /// Context manager after type analysis is done
 pub struct ContextWithType {
     types: BTreeMap<UsrTypeName, TypeDef>,
-    impls: BTreeMap<UsrFuncName, (Generics, MarkedImpl)>,
-    specs: BTreeMap<UsrFuncName, (Generics, MarkedSpec)>,
+    impls: BTreeMap<UsrFuncName, MarkedImpl>,
+    specs: BTreeMap<UsrFuncName, MarkedSpec>,
+}
+
+impl ContextWithType {
+    /// Get the generics declaration for a type
+    pub fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
+        self.types.get(name).map(|def| def.head())
+    }
+
+    /// Parse function signatures
+    pub fn parse_func_sigs(self) -> Result<ContextWithSig> {
+        // impl
+        let mut sig_impls = BTreeMap::new();
+        for (name, marked) in &self.impls {
+            let ItemFn {
+                attrs: _,
+                vis: _,
+                sig,
+                block: _, // handled later
+            } = &marked.0;
+
+            trace!("handling impl sig: {}", name);
+            let sig = FuncSig::from_sig(&self, sig)?;
+            trace!("impl sig analyzed: {}", name);
+            sig_impls.insert(name.clone(), sig);
+        }
+
+        // spec
+        let mut sig_specs = BTreeMap::new();
+        for (name, marked) in &self.specs {
+            let ItemFn {
+                attrs: _,
+                vis: _,
+                sig,
+                block: _, // handled later
+            } = &marked.0;
+
+            trace!("handling spec sig: {}", name);
+            let sig = FuncSig::from_sig(&self, sig)?;
+            trace!("spec sig analyzed: {}", name);
+            sig_specs.insert(name.clone(), sig);
+        }
+
+        // re-packing
+        let Self {
+            types,
+            impls,
+            specs,
+        } = self;
+
+        let unpacked_impls: BTreeMap<_, _> = impls
+            .into_iter()
+            .map(|(name, marked)| {
+                let sig = sig_impls.remove(&name).unwrap();
+                let stmts = marked.0.block.stmts;
+                (name, (sig, stmts))
+            })
+            .collect();
+        let unpacked_specs: BTreeMap<_, _> = specs
+            .into_iter()
+            .map(|(name, marked)| {
+                let sig = sig_specs.remove(&name).unwrap();
+                let stmts = marked.0.block.stmts;
+                (name, (sig, stmts))
+            })
+            .collect();
+
+        // done
+        let ctxt = ContextWithSig {
+            types,
+            impls: unpacked_impls,
+            specs: unpacked_specs,
+        };
+        Ok(ctxt)
+    }
+}
+
+/// Context manager after type and function signature analysis is done
+pub struct ContextWithSig {
+    types: BTreeMap<UsrTypeName, TypeDef>,
+    impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
+    specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
 }
 
 #[cfg(test)]

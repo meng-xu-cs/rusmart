@@ -5,7 +5,7 @@ use syn::{
     Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
 };
 
-use crate::parser::ctxt::MarkedType;
+use crate::parser::ctxt::{ContextWithGenerics, MarkedType};
 use crate::parser::err::{bail_if_empty, bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::generics::Generics;
 use crate::parser::name::{ReservedIdent, TypeParamName, UsrTypeName};
@@ -17,6 +17,22 @@ pub trait CtxtForType {
 
     /// Retrieve the generics declared (if any) for a user-defined type
     fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics>;
+}
+
+/// A context provider for type parsing
+struct TypeParseCtxt<'a> {
+    ctxt: &'a ContextWithGenerics,
+    generics: &'a Generics,
+}
+
+impl CtxtForType for TypeParseCtxt<'_> {
+    fn generics(&self) -> &Generics {
+        self.generics
+    }
+
+    fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
+        self.ctxt.get_type_generics(name)
+    }
 }
 
 /// Reserved type name
@@ -398,7 +414,15 @@ pub enum TypeBody {
 
 impl TypeBody {
     /// Convert from a marked type
-    pub fn from_marked<CTX: CtxtForType>(ctxt: &CTX, item: &MarkedType) -> Result<Self> {
+    pub fn from_marked(
+        driver: &ContextWithGenerics,
+        generics: &Generics,
+        item: &MarkedType,
+    ) -> Result<Self> {
+        let ctxt = TypeParseCtxt {
+            ctxt: driver,
+            generics,
+        };
         let parsed = match item {
             MarkedType::Enum(item) => {
                 let ItemEnum {
@@ -413,7 +437,7 @@ impl TypeBody {
                 bail_if_empty!(variants, "variants");
 
                 // build from variants
-                Self::Enum(TypeEnum::from_variants(ctxt, variants.iter())?)
+                Self::Enum(TypeEnum::from_variants(&ctxt, variants.iter())?)
             }
             MarkedType::Struct(item) => {
                 let ItemStruct {
@@ -427,7 +451,7 @@ impl TypeBody {
                 } = item;
 
                 // exploit the similarity with ADT variant
-                match EnumVariant::from_fields(ctxt, fields)? {
+                match EnumVariant::from_fields(&ctxt, fields)? {
                     EnumVariant::Unit => bail_on!(item, "expect fields or slots"),
                     EnumVariant::Tuple(tuple) => {
                         if tuple.slots.is_empty() {
@@ -462,6 +486,18 @@ impl TypeBody {
 pub struct TypeDef {
     head: Generics,
     body: TypeBody,
+}
+
+impl TypeDef {
+    /// Retrieve the generics
+    pub fn head(&self) -> &Generics {
+        &self.head
+    }
+
+    /// Retrieve the body of the definition
+    pub fn body(&self) -> &TypeBody {
+        &self.body
+    }
 }
 
 #[cfg(test)]

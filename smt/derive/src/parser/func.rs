@@ -2,28 +2,47 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use syn::{FnArg, PatType, Result, ReturnType, Signature};
 
+use crate::parser::ctxt::ContextWithType;
 use crate::parser::err::{bail_if_exists, bail_on};
-use crate::parser::name::VarName;
+use crate::parser::generics::Generics;
+use crate::parser::name::{UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
 use crate::parser::util::PatUtil;
 
+/// A context provider for function signature parsing
+struct FuncSigParseCtxt<'a> {
+    ctxt: &'a ContextWithType,
+    generics: &'a Generics,
+}
+
+impl CtxtForType for FuncSigParseCtxt<'_> {
+    fn generics(&self) -> &Generics {
+        self.generics
+    }
+
+    fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
+        self.ctxt.get_type_generics(name)
+    }
+}
+
 /// Function signature
 pub struct FuncSig {
+    generics: Generics,
     params: Vec<(VarName, TypeTag)>,
     ret_ty: TypeTag,
 }
 
 impl FuncSig {
     /// Convert from a function signature
-    pub fn from_sig<T: CtxtForType>(ctxt: &T, sig: &Signature) -> Result<Self> {
+    pub fn from_sig(driver: &ContextWithType, sig: &Signature) -> Result<Self> {
         let Signature {
             constness,
             asyncness,
             unsafety,
             abi,
             fn_token: _,
-            ident: _,    // handled earlier
-            generics: _, // handled earlier
+            ident: _, // handled earlier
+            generics,
             paren_token: _,
             inputs,
             variadic,
@@ -36,6 +55,13 @@ impl FuncSig {
         bail_if_exists!(unsafety);
         bail_if_exists!(abi);
         bail_if_exists!(variadic);
+
+        // generics
+        let generics = Generics::from_generics(generics)?;
+        let ctxt = FuncSigParseCtxt {
+            ctxt: driver,
+            generics: &generics,
+        };
 
         // parameters
         let mut param_decls = vec![];
@@ -56,7 +82,7 @@ impl FuncSig {
                         bail_on!(pat, "duplicated parameter name");
                     }
 
-                    let ty = TypeTag::from_type(ctxt, ty)?;
+                    let ty = TypeTag::from_type(&ctxt, ty)?;
                     param_decls.push((name, ty));
                 }
             }
@@ -65,11 +91,12 @@ impl FuncSig {
         // return type
         let ret_ty = match output {
             ReturnType::Default => bail_on!(sig, "no return type"),
-            ReturnType::Type(_, rty) => TypeTag::from_type(ctxt, rty)?,
+            ReturnType::Type(_, rty) => TypeTag::from_type(&ctxt, rty)?,
         };
 
         // done
         Ok(Self {
+            generics,
             params: param_decls,
             ret_ty,
         })
