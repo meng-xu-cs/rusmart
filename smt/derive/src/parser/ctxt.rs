@@ -9,8 +9,8 @@ use walkdir::WalkDir;
 use crate::parser::err::{bail_on, bail_on_with_note};
 use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
-
 use crate::parser::ty::{CtxtForType, TypeBody, TypeDef};
+
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -243,19 +243,35 @@ pub struct ContextWithGenerics {
     specs: BTreeMap<UsrFuncName, (Generics, MarkedSpec)>,
 }
 
-impl CtxtForType for ContextWithGenerics {
+/// A parser for type
+struct TypeParseCtxt<'a> {
+    /// context provider
+    ctxt: &'a ContextWithGenerics,
+    generics: &'a Generics,
+}
+
+impl CtxtForType for TypeParseCtxt<'_> {
+    fn generics(&self) -> &Generics {
+        self.generics
+    }
+
     fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
-        self.types.get(name).map(|(generics, _)| generics)
+        self.ctxt.types.get(name).map(|(generics, _)| generics)
     }
 }
 
 impl ContextWithGenerics {
     /// Parse types
     pub fn parse_types(self) -> Result<ContextWithType> {
+        // parsing
         let mut parsed_types = BTreeMap::new();
         for (name, (generics, marked)) in &self.types {
+            let parser = TypeParseCtxt {
+                ctxt: &self,
+                generics,
+            };
             trace!("handling type: {}", name);
-            let parsed = TypeBody::from_marked(&self, generics, marked)?;
+            let parsed = TypeBody::from_marked(&parser, marked)?;
             trace!("type analyzed: {}", name);
             parsed_types.insert(name.clone(), parsed);
         }

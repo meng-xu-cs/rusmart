@@ -12,7 +12,10 @@ use crate::parser::name::{ReservedIdent, TypeParamName, UsrTypeName};
 
 /// A context suitable for type analysis
 pub trait CtxtForType {
-    /// Retrieve the generics declared (if any)
+    /// Retrieve the generics in the current context
+    fn generics(&self) -> &Generics;
+
+    /// Retrieve the generics declared (if any) for a user-defined type
     fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics>;
 }
 
@@ -74,13 +77,6 @@ impl TypeName {
     }
 }
 
-/// A parser for type
-struct TypeParser<'a, CTX: CtxtForType> {
-    /// context provider
-    ctxt: &'a CTX,
-    generics: &'a Generics,
-}
-
 /// A unique and complete reference to an SMT-related type
 #[derive(Clone, Eq, PartialEq)]
 pub enum TypeTag {
@@ -111,7 +107,7 @@ pub enum TypeTag {
 impl TypeTag {
     /// Convert from a type argument pack
     fn from_args<CTX: CtxtForType>(
-        parser: &TypeParser<CTX>,
+        ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<Vec<Self>> {
         let AngleBracketedGenericArguments {
@@ -126,7 +122,7 @@ impl TypeTag {
         for arg in args {
             match arg {
                 GenericArgument::Type(ty) => {
-                    list.push(Self::from_type(parser, ty)?);
+                    list.push(Self::from_type(ctxt, ty)?);
                 }
                 _ => bail_on!(arg, "invalid type argument"),
             }
@@ -136,10 +132,10 @@ impl TypeTag {
 
     /// Convert from a type argument pack, expecting 1 argument
     fn from_args_expect_1<CTX: CtxtForType>(
-        parser: &TypeParser<CTX>,
+        ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<Self> {
-        let mut iter = Self::from_args(parser, pack)?.into_iter();
+        let mut iter = Self::from_args(ctxt, pack)?.into_iter();
         let a1 = match iter.next() {
             None => bail_on!(pack, "expect 1 argument, found 0"),
             Some(t) => t,
@@ -152,10 +148,10 @@ impl TypeTag {
 
     /// Convert from a type argument pack, expecting 2 arguments
     fn from_args_expect_2<CTX: CtxtForType>(
-        parser: &TypeParser<CTX>,
+        ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<(Self, Self)> {
-        let mut iter = Self::from_args(parser, pack)?.into_iter();
+        let mut iter = Self::from_args(ctxt, pack)?.into_iter();
         let a1 = match iter.next() {
             None => bail_on!(pack, "expect 2 argument, found 0"),
             Some(t) => t,
@@ -171,7 +167,7 @@ impl TypeTag {
     }
 
     /// Convert from a path
-    fn from_path<CTX: CtxtForType>(parser: &TypeParser<CTX>, path: &Path) -> Result<Self> {
+    fn from_path<CTX: CtxtForType>(ctxt: &CTX, path: &Path) -> Result<Self> {
         let Path {
             leading_colon,
             segments,
@@ -183,32 +179,32 @@ impl TypeTag {
         let segment = bail_if_missing!(iter.next(), path, "ident");
         let PathSegment { ident, arguments } = segment;
 
-        let tag = match TypeName::try_from(parser.generics, ident)? {
+        let tag = match TypeName::try_from(ctxt.generics(), ident)? {
             TypeName::Sys(intrinsic) => match (intrinsic, arguments) {
                 (SysTypeName::Boolean, PathArguments::None) => Self::Boolean,
                 (SysTypeName::Integer, PathArguments::None) => Self::Integer,
                 (SysTypeName::Rational, PathArguments::None) => Self::Rational,
                 (SysTypeName::Text, PathArguments::None) => Self::Text,
                 (SysTypeName::Cloak, PathArguments::AngleBracketed(pack)) => {
-                    let sub = Self::from_args_expect_1(parser, pack)?;
+                    let sub = Self::from_args_expect_1(ctxt, pack)?;
                     Self::Cloak(sub.into())
                 }
                 (SysTypeName::Seq, PathArguments::AngleBracketed(pack)) => {
-                    let sub = Self::from_args_expect_1(parser, pack)?;
+                    let sub = Self::from_args_expect_1(ctxt, pack)?;
                     Self::Seq(sub.into())
                 }
                 (SysTypeName::Set, PathArguments::AngleBracketed(pack)) => {
-                    let sub = Self::from_args_expect_1(parser, pack)?;
+                    let sub = Self::from_args_expect_1(ctxt, pack)?;
                     Self::Set(sub.into())
                 }
                 (SysTypeName::Map, PathArguments::AngleBracketed(pack)) => {
-                    let (key, val) = Self::from_args_expect_2(parser, pack)?;
+                    let (key, val) = Self::from_args_expect_2(ctxt, pack)?;
                     Self::Map(key.into(), val.into())
                 }
                 (SysTypeName::Error, PathArguments::None) => Self::Error,
                 _ => bail_on!(segment, "invalid type tag for intrinsic type"),
             },
-            TypeName::Usr(name) => match parser.ctxt.get_type_generics(&name) {
+            TypeName::Usr(name) => match ctxt.get_type_generics(&name) {
                 None => bail_on!(ident, "no such type"),
                 Some(generics) => match generics.len() {
                     0 => {
@@ -220,7 +216,7 @@ impl TypeTag {
                     n => match arguments {
                         PathArguments::None => bail_on!(ident, "expect type arguments"),
                         PathArguments::AngleBracketed(pack) => {
-                            let args = Self::from_args(parser, pack)?;
+                            let args = Self::from_args(ctxt, pack)?;
                             if args.len() != n {
                                 bail_on!(arguments, "type argument number mismatch");
                             }
@@ -238,11 +234,11 @@ impl TypeTag {
     }
 
     /// Convert from a type
-    fn from_type<CTX: CtxtForType>(parser: &TypeParser<CTX>, ty: &Type) -> Result<Self> {
+    fn from_type<CTX: CtxtForType>(ctxt: &CTX, ty: &Type) -> Result<Self> {
         match ty {
             Type::Path(TypePath { qself, path }) => {
                 bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
-                Self::from_path(parser, path)
+                Self::from_path(ctxt, path)
             }
             _ => bail_on!(ty, "expect type path"),
         }
@@ -257,7 +253,7 @@ pub struct TypeTuple {
 impl TypeTuple {
     /// Convert from a list of fields
     fn from_fields<'a, I: Iterator<Item = &'a Field>, CTX: CtxtForType>(
-        parser: &TypeParser<CTX>,
+        ctxt: &CTX,
         items: I,
     ) -> Result<Self> {
         let mut slots = vec![];
@@ -275,7 +271,7 @@ impl TypeTuple {
             bail_if_exists!(ident);
             bail_if_exists!(colon_token);
 
-            let tag = TypeTag::from_type(parser, ty)?;
+            let tag = TypeTag::from_type(ctxt, ty)?;
             slots.push(tag);
         }
 
@@ -296,7 +292,7 @@ pub struct TypeRecord {
 impl TypeRecord {
     /// Convert from a fields token
     fn from_fields<'b, I: Iterator<Item = &'b Field>, CTX: CtxtForType>(
-        parser: &TypeParser<CTX>,
+        ctxt: &CTX,
         items: I,
     ) -> Result<Self> {
         let mut fields = BTreeMap::new();
@@ -314,7 +310,7 @@ impl TypeRecord {
             let name = bail_if_missing!(ident, field, "name");
             bail_if_missing!(colon_token, field, "colon");
 
-            let tag = TypeTag::from_type(parser, ty)?;
+            let tag = TypeTag::from_type(ctxt, ty)?;
             match fields.insert(name.to_string(), tag) {
                 None => (),
                 Some(_) => bail_on!(ident, "duplicated field name"),
@@ -339,17 +335,17 @@ pub enum EnumVariant {
 
 impl EnumVariant {
     /// Convert from a fields token
-    fn from_fields<CTX: CtxtForType>(parser: &TypeParser<CTX>, fields: &Fields) -> Result<Self> {
+    fn from_fields<CTX: CtxtForType>(ctxt: &CTX, fields: &Fields) -> Result<Self> {
         let variant = match fields {
             Fields::Unit => Self::Unit,
             Fields::Named(FieldsNamed {
                 brace_token: _,
                 named,
-            }) => Self::Record(TypeRecord::from_fields(parser, named.iter())?),
+            }) => Self::Record(TypeRecord::from_fields(ctxt, named.iter())?),
             Fields::Unnamed(FieldsUnnamed {
                 paren_token: _,
                 unnamed,
-            }) => Self::Tuple(TypeTuple::from_fields(parser, unnamed.iter())?),
+            }) => Self::Tuple(TypeTuple::from_fields(ctxt, unnamed.iter())?),
         };
         Ok(variant)
     }
@@ -363,7 +359,7 @@ pub struct TypeEnum {
 impl TypeEnum {
     /// Convert from a list of variants
     fn from_variants<'a, I: Iterator<Item = &'a Variant>, CTX: CtxtForType>(
-        parser: &TypeParser<CTX>,
+        ctxt: &CTX,
         items: I,
     ) -> Result<Self> {
         let mut variants = BTreeMap::new();
@@ -377,7 +373,7 @@ impl TypeEnum {
             } = variant;
 
             bail_if_exists!(discriminant.as_ref().map(|(_, e)| e));
-            let branch = EnumVariant::from_fields(parser, fields)?;
+            let branch = EnumVariant::from_fields(ctxt, fields)?;
             match variants.insert(ident.to_string(), branch) {
                 None => (),
                 Some(_) => bail_on!(ident, "duplicated variant name"),
@@ -402,13 +398,7 @@ pub enum TypeBody {
 
 impl TypeBody {
     /// Convert from a marked type
-    pub fn from_marked<CTX: CtxtForType>(
-        ctxt: &CTX,
-        generics: &Generics,
-        item: &MarkedType,
-    ) -> Result<Self> {
-        let parser = TypeParser { ctxt, generics };
-
+    pub fn from_marked<CTX: CtxtForType>(ctxt: &CTX, item: &MarkedType) -> Result<Self> {
         let parsed = match item {
             MarkedType::Enum(item) => {
                 let ItemEnum {
@@ -423,7 +413,7 @@ impl TypeBody {
                 bail_if_empty!(variants, "variants");
 
                 // build from variants
-                Self::Enum(TypeEnum::from_variants(&parser, variants.iter())?)
+                Self::Enum(TypeEnum::from_variants(ctxt, variants.iter())?)
             }
             MarkedType::Struct(item) => {
                 let ItemStruct {
@@ -437,7 +427,7 @@ impl TypeBody {
                 } = item;
 
                 // exploit the similarity with ADT variant
-                match EnumVariant::from_fields(&parser, fields)? {
+                match EnumVariant::from_fields(ctxt, fields)? {
                     EnumVariant::Unit => bail_on!(item, "expect fields or slots"),
                     EnumVariant::Tuple(tuple) => {
                         if tuple.slots.is_empty() {
