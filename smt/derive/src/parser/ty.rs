@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 
 use syn::{
     AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
@@ -36,6 +37,7 @@ impl CtxtForType for TypeParseCtxt<'_> {
 }
 
 /// Reserved type name
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SysTypeName {
     Boolean,
     Integer,
@@ -46,6 +48,23 @@ pub enum SysTypeName {
     Set,
     Map,
     Error,
+}
+
+impl Display for SysTypeName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Boolean => "Boolean",
+            Self::Integer => "Integer",
+            Self::Rational => "Rational",
+            Self::Text => "Text",
+            Self::Cloak => "Cloak",
+            Self::Seq => "Seq",
+            Self::Set => "Set",
+            Self::Map => "Map",
+            Self::Error => "Error",
+        };
+        f.write_str(name)
+    }
 }
 
 impl ReservedIdent for SysTypeName {
@@ -67,6 +86,7 @@ impl ReservedIdent for SysTypeName {
 }
 
 /// A type name
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub enum TypeName {
     Sys(SysTypeName),
     Usr(UsrTypeName),
@@ -94,7 +114,7 @@ impl TypeName {
 }
 
 /// A unique and complete reference to an SMT-related type
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum TypeTag {
     /// boolean
     Boolean,

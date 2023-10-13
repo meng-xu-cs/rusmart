@@ -79,11 +79,23 @@ impl SysTrait {
 }
 
 /// Declaration of generics
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Generics {
     params: BTreeMap<TypeParamName, usize>,
 }
 
 impl Generics {
+    /// Create a new generics for intrinsics
+    pub fn intrinsic(params: Vec<TypeParamName>) -> Self {
+        Self {
+            params: params
+                .into_iter()
+                .enumerate()
+                .map(|(n, i)| (i, n))
+                .collect(),
+        }
+    }
+
     /// Convert from generics
     pub fn from_generics(generics: &GenericsDecl) -> Result<Self> {
         let GenericsDecl {
@@ -158,6 +170,12 @@ impl Generics {
     /// Retrieve a parameter
     pub fn get(&self, name: &TypeParamName) -> Option<usize> {
         self.params.get(name).copied()
+    }
+
+    /// Shape the parameters in its declaration order
+    pub fn vec(&self) -> Vec<TypeParamName> {
+        let rev: BTreeMap<_, _> = self.params.iter().map(|(k, v)| (*v, k.clone())).collect();
+        rev.into_values().collect()
     }
 }
 

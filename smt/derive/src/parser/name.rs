@@ -92,3 +92,46 @@ name! {
     /// Identifier for a variable
     VarName
 }
+
+impl TypeParamName {
+    /// Make a type parameter name for intrinsic usage
+    pub fn intrinsic(name: &str) -> Self {
+        match name {
+            "T" | "K" | "V" => Self {
+                ident: name.to_string(),
+            },
+            // all other names are invalid
+            _ => panic!("not an intrinsic type parameter: {}", name),
+        }
+    }
+}
+
+impl UsrFuncName {
+    /// Make a function name for intrinsic functions
+    pub fn intrinsic(name: &str) -> Self {
+        match name {
+            // logical
+            "not" | "and" | "or" | "xor"
+            // arithmetic
+            | "add" | "sub" | "mul" | "div" | "rem"
+            // comparison
+            | "eq" | "ne" | "lt" | "le" | "ge" | "gt"
+            // error
+            | "fresh" | "merge"
+            // cloak
+            | "shield" | "reveal"
+            // collections (common)
+            | "empty" | "length"
+            // seq
+            | "append" | "at_unchecked" | "includes"
+            // set
+            | "insert" | "contains"
+            // map
+            | "put_unchecked" | "get_unchecked" | "contains_key"
+            // done
+            => Self { ident: name.to_string() },
+            // all other names are invalid
+            _ => panic!("not an intrinsic function: {}", name),
+        }
+    }
+}

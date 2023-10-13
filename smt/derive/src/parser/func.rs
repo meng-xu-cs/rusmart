@@ -10,6 +10,7 @@ use crate::parser::ty::{CtxtForType, TypeTag};
 use crate::parser::util::PatUtil;
 
 /// Reserved func name
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SysFuncName {
     From,
     Into,
@@ -27,6 +28,7 @@ impl ReservedIdent for SysFuncName {
 }
 
 /// A function name
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub enum FuncName {
     Sys(SysFuncName),
     Usr(UsrFuncName),
@@ -34,7 +36,7 @@ pub enum FuncName {
 
 impl FuncName {
     /// Try to convert an ident into a function name
-    fn try_from(ident: &Ident) -> Result<Self> {
+    pub fn try_from(ident: &Ident) -> Result<Self> {
         let name = ident.to_string();
         let parsed = match SysFuncName::from_str(&name) {
             None => Self::Usr(ident.try_into()?),
@@ -135,6 +137,11 @@ impl FuncSig {
             params: param_decls,
             ret_ty,
         })
+    }
+
+    /// Get the generics
+    pub fn generics(&self) -> &Generics {
+        &self.generics
     }
 
     /// Collect variables (in map) declared in the parameter list
