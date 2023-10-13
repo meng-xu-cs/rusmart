@@ -227,4 +227,15 @@ mod tests {
         },
         "expect trait bound"
     );
+
+    unit_test!(
+        name_conflicts,
+        {
+            #[smt_type]
+            enum E<K: SMT, K: SMT> {
+                UseK(K),
+            }
+        },
+        "name conflict"
+    );
 }

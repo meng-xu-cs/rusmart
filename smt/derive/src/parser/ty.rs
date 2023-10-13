@@ -438,12 +438,18 @@ impl TypeBody {
 
                 // exploit the similarity with ADT variant
                 match EnumVariant::from_fields(&parser, fields)? {
-                    EnumVariant::Unit => bail_on!(item, "unexpected unit type"),
+                    EnumVariant::Unit => bail_on!(item, "expect fields or slots"),
                     EnumVariant::Tuple(tuple) => {
+                        if tuple.slots.is_empty() {
+                            bail_on!(fields, "expect slots");
+                        }
                         bail_if_missing!(semi_token, item, "expect ; at the end");
                         Self::Tuple(tuple)
                     }
                     EnumVariant::Record(record) => {
+                        if record.fields.is_empty() {
+                            bail_on!(fields, "expect fields");
+                        }
                         bail_if_exists!(semi_token);
                         Self::Record(record)
                     }
@@ -466,4 +472,54 @@ impl TypeBody {
 pub struct TypeDef {
     head: Generics,
     body: TypeBody,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::test::unit_test;
+
+    unit_test!(
+        struct_no_field,
+        {
+            #[smt_type]
+            struct S;
+        },
+        "expect fields or slots"
+    );
+
+    unit_test!(
+        tuple_no_slot,
+        {
+            #[smt_type]
+            struct S();
+        },
+        "expect slots"
+    );
+
+    unit_test!(
+        record_no_field,
+        {
+            #[smt_type]
+            struct S {}
+        },
+        "expect fields"
+    );
+
+    unit_test!(
+        enum_no_variant,
+        {
+            #[smt_type]
+            enum S {}
+        },
+        "expect variants"
+    );
+
+    unit_test!(
+        no_user_type,
+        {
+            #[smt_type]
+            struct S(A);
+        },
+        "no such type"
+    );
 }
