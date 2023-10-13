@@ -277,3 +277,38 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
         Ok(converted)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::test::unit_test;
+
+    unit_test!(forward_arg_plain, {
+        #[smt_impl]
+        fn foo(x: Boolean) -> Boolean {
+            x
+        }
+    });
+
+    unit_test!(forward_arg_ty_param, {
+        #[smt_impl]
+        fn foo<T: SMT>(x: T) -> T {
+            x
+        }
+    });
+
+    unit_test!(let_bind_arg_plain, {
+        #[smt_impl]
+        fn foo<T: SMT>(x: Boolean) -> Boolean {
+            let y = x;
+            y
+        }
+    });
+
+    unit_test!(let_bind_arg_ty_param, {
+        #[smt_impl]
+        fn foo<T: SMT>(x: T) -> T {
+            let y = x;
+            y
+        }
+    });
+}
