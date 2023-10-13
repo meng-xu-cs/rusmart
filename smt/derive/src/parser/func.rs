@@ -184,7 +184,7 @@ mod tests {
     unit_test!(plain, {
         #[smt_impl]
         fn foo() -> Boolean {
-            Boolean::from(false)
+            false.into()
         }
     });
 
@@ -209,7 +209,7 @@ mod tests {
         {
             #[smt_impl]
             fn foo(self) -> Boolean {
-                Boolean::from(false)
+                false.into()
             }
         },
         "unexpected self param"

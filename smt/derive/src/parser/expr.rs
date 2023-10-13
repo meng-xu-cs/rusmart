@@ -1,12 +1,15 @@
 use std::collections::BTreeMap;
 
-use syn::{Block, Expr as Exp, ExprBlock, Local, LocalInit, Pat, PatType, Result, Stmt};
+use syn::{
+    Block, Expr as Exp, ExprBlock, ExprMethodCall, Local, LocalInit, Pat, PatType, Result, Stmt,
+};
 
 use crate::parser::ctxt::ContextWithSig;
-use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
-use crate::parser::func::FuncSig;
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
+use crate::parser::func::{FuncName, FuncSig, SysFuncName};
 use crate::parser::generics::Generics;
 use crate::parser::infer::{TypeRef, TypeUnifier};
+use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
 use crate::parser::util::{ExprUtil, PatUtil};
@@ -15,6 +18,8 @@ use crate::parser::util::{ExprUtil, PatUtil};
 pub enum Op {
     /// `<var>`
     Var(VarName),
+    /// `<class>::<method>(<a1>, <a2>, ...)`
+    Intrinsic(Intrinsic),
 }
 
 /// Instructions (operations with type)
@@ -251,6 +256,31 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                 bail_if_exists!(label);
                 return self.convert_stmts(unifier, stmts);
+            }
+            Exp::MethodCall(expr_method) => {
+                let ExprMethodCall {
+                    attrs: _,
+                    receiver,
+                    dot_token: _,
+                    method,
+                    turbofish,
+                    paren_token: _,
+                    args,
+                } = expr_method;
+
+                match FuncName::try_from(method)? {
+                    FuncName::Sys(SysFuncName::Into) => {
+                        // handle literal conversion
+                        bail_if_exists!(turbofish);
+                        bail_if_non_empty!(args);
+                        let (intrinsic, ty) = Intrinsic::parse_literal_into(receiver)?;
+                        (Op::Intrinsic(intrinsic), ty)
+                    }
+                    FuncName::Sys(SysFuncName::From) => bail_on!(expr_method, "unexpected"),
+                    FuncName::Usr(name) => {
+                        todo!()
+                    }
+                }
             }
             _ => todo!(),
         };
