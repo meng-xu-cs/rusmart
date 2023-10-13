@@ -5,9 +5,26 @@ use syn::{FnArg, PatType, Result, ReturnType, Signature};
 use crate::parser::ctxt::ContextWithType;
 use crate::parser::err::{bail_if_exists, bail_on};
 use crate::parser::generics::Generics;
-use crate::parser::name::{UsrTypeName, VarName};
+use crate::parser::name::{ReservedIdent, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
 use crate::parser::util::PatUtil;
+
+/// Reserved func name
+pub enum SysFuncName {
+    From,
+    Into,
+}
+
+impl ReservedIdent for SysFuncName {
+    fn from_str(ident: &str) -> Option<Self> {
+        let matched = match ident.to_string().as_str() {
+            "from" => Self::From,
+            "into" => Self::Into,
+            _ => return None,
+        };
+        Some(matched)
+    }
+}
 
 /// A context provider for function signature parsing
 struct FuncSigParseCtxt<'a> {

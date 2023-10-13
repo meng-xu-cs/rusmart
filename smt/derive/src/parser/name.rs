@@ -3,8 +3,15 @@ use std::fmt::{Display, Formatter};
 use syn::{Ident, Result};
 
 use crate::parser::err::bail_on;
+use crate::parser::func::SysFuncName;
 use crate::parser::generics::SysTrait;
 use crate::parser::ty::SysTypeName;
+
+/// Mark that this is a reserved identifier
+pub trait ReservedIdent: Sized {
+    /// try to parse from an identifier
+    fn from_str(ident: &str) -> Option<Self>;
+}
 
 /// Test whether an identifier is a reserved keyword
 fn validate_user_ident(ident: &Ident) -> Result<String> {
@@ -17,6 +24,9 @@ fn validate_user_ident(ident: &Ident) -> Result<String> {
     if SysTypeName::from_str(&name).is_some() {
         bail_on!(ident, "reserved type name");
     }
+    if SysFuncName::from_str(&name).is_some() {
+        bail_on!(ident, "reserved method name");
+    }
 
     // TODO: check the rest
 
@@ -24,9 +34,6 @@ fn validate_user_ident(ident: &Ident) -> Result<String> {
     match name.as_str() {
         "forall" | "exists" => {
             bail_on!(ident, "reserved macro name");
-        }
-        "into" => {
-            bail_on!(ident, "reserved method name");
         }
         "_" => {
             bail_on!(ident, "underscore not allowed");
@@ -84,10 +91,4 @@ name! {
 name! {
     /// Identifier for a variable
     VarName
-}
-
-/// Mark that this is a reserved identifier
-pub trait ReservedIdent: Sized {
-    /// try to parse from an identifier
-    fn from_str(ident: &str) -> Option<Self>;
 }
