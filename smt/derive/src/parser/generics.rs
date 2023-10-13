@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use quote::quote_spanned;
 use syn::{
-    GenericParam, Generics as GenericsDecl, Ident, ItemEnum, ItemFn, ItemStruct, Result,
-    TraitBound, TraitBoundModifier, TypeParam, TypeParamBound,
+    GenericParam, Generics as GenericsDecl, ItemEnum, ItemFn, ItemStruct, Result, TraitBound,
+    TraitBoundModifier, TypeParam, TypeParamBound,
 };
 
 use crate::parser::ctxt::{MarkedImpl, MarkedSpec, MarkedType};
@@ -19,9 +19,8 @@ pub enum SysTrait {
 }
 
 impl ReservedIdent for SysTrait {
-    /// Get a trait from an ident
-    fn from_ident(ident: &Ident) -> Option<Self> {
-        let matched = match ident.to_string().as_str() {
+    fn from_str(ident: &str) -> Option<Self> {
+        let matched = match ident {
             "SMT" => Self::SMT,
             _ => return None,
         };

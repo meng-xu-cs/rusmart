@@ -1,16 +1,66 @@
 use syn::{
-    AngleBracketedGenericArguments, GenericArgument, Path, PathArguments, PathSegment, Result,
-    Type, TypePath,
+    AngleBracketedGenericArguments, Error, GenericArgument, Ident, Path, PathArguments,
+    PathSegment, Result, Type, TypePath,
 };
 
-use crate::parser::err::{bail_if_exists, bail_on};
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::generics::Generics;
-use crate::parser::name::{TypeParamName, UsrTypeName};
+use crate::parser::name::{ReservedIdent, TypeParamName, UsrTypeName};
 
 /// A context suitable for type analysis
 pub trait CtxtForType {
     /// Retrieve the generics declared (if any)
     fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics>;
+}
+
+/// Reserved type name
+pub enum SysTypeName {
+    Boolean,
+    Integer,
+    Rational,
+    Text,
+    Cloak,
+    Seq,
+    Set,
+    Map,
+    Error,
+}
+
+impl ReservedIdent for SysTypeName {
+    fn from_str(ident: &str) -> Option<Self> {
+        let matched = match ident.to_string().as_str() {
+            "Boolean" => Self::Boolean,
+            "Integer" => Self::Integer,
+            "Rational" => Self::Rational,
+            "Text" => Self::Text,
+            "Cloak" => Self::Cloak,
+            "Seq" => Self::Seq,
+            "Set" => Self::Set,
+            "Map" => Self::Map,
+            "Error" => Self::Error,
+            _ => return None,
+        };
+        Some(matched)
+    }
+}
+
+/// A type name
+pub enum TypeName {
+    Sys(SysTypeName),
+    Usr(UsrTypeName),
+}
+
+impl TryFrom<&Ident> for TypeName {
+    type Error = Error;
+
+    fn try_from(ident: &Ident) -> Result<Self> {
+        let name = ident.to_string();
+        let parsed = match SysTypeName::from_str(&name) {
+            None => TypeName::Usr(ident.try_into()?),
+            Some(n) => TypeName::Sys(n),
+        };
+        Ok(parsed)
+    }
 }
 
 /// A unique and complete reference to an SMT-related type
@@ -112,66 +162,59 @@ impl TypeTag {
 
         // in reverse order
         let mut iter = segments.iter().rev();
-        let tag = match iter.next() {
-            None => bail_on!(segments, "invalid path"),
-            Some(segment) => {
-                let PathSegment { ident, arguments } = segment;
-                match (ident.to_string().as_str(), arguments) {
-                    ("Boolean", PathArguments::None) => Self::Boolean,
-                    ("Integer", PathArguments::None) => Self::Integer,
-                    ("Rational", PathArguments::None) => Self::Rational,
-                    ("Text", PathArguments::None) => Self::Text,
-                    ("Cloak", PathArguments::AngleBracketed(pack)) => {
-                        let sub = Self::from_args_expect_1(ctxt, pack)?;
-                        Self::Cloak(sub.into())
-                    }
-                    ("Seq", PathArguments::AngleBracketed(pack)) => {
-                        let sub = Self::from_args_expect_1(ctxt, pack)?;
-                        Self::Seq(sub.into())
-                    }
-                    ("Set", PathArguments::AngleBracketed(pack)) => {
-                        let sub = Self::from_args_expect_1(ctxt, pack)?;
-                        Self::Set(sub.into())
-                    }
-                    ("Map", PathArguments::AngleBracketed(pack)) => {
-                        let (key, val) = Self::from_args_expect_2(ctxt, pack)?;
-                        Self::Map(key.into(), val.into())
-                    }
-                    ("Error", PathArguments::None) => Self::Error,
-                    (_, _) => {
-                        let name = ident.try_into()?;
-                        match ctxt.get_type_generics(&name) {
-                            None => bail_on!(ident, "no such type"),
-                            Some(generics) => match generics.len() {
-                                0 => {
-                                    if !matches!(arguments, PathArguments::None) {
-                                        bail_on!(arguments, "unexpected");
-                                    }
-                                    Self::User(name, vec![])
-                                }
-                                n => match arguments {
-                                    PathArguments::None => bail_on!(ident, "expect type arguments"),
-                                    PathArguments::AngleBracketed(pack) => {
-                                        let args = Self::from_args(ctxt, pack)?;
-                                        if args.len() != n {
-                                            bail_on!(arguments, "type argument number mismatch");
-                                        }
-                                        Self::User(name, args)
-                                    }
-                                    _ => bail_on!(arguments, "invalid type arguments"),
-                                },
-                            },
-                        }
-                    }
-                }
-            }
-        };
+        let segment = bail_if_missing!(iter.next(), path, "ident");
+        let PathSegment { ident, arguments } = segment;
 
-        // disallow more items in the match
-        match iter.next() {
-            None => (),
-            Some(segment) => bail_on!(segment, "unexpected segment"),
-        }
+        let tag = match ident.try_into()? {
+            TypeName::Sys(intrinsic) => match (intrinsic, arguments) {
+                (SysTypeName::Boolean, PathArguments::None) => Self::Boolean,
+                (SysTypeName::Integer, PathArguments::None) => Self::Integer,
+                (SysTypeName::Rational, PathArguments::None) => Self::Rational,
+                (SysTypeName::Text, PathArguments::None) => Self::Text,
+                (SysTypeName::Cloak, PathArguments::AngleBracketed(pack)) => {
+                    let sub = Self::from_args_expect_1(ctxt, pack)?;
+                    Self::Cloak(sub.into())
+                }
+                (SysTypeName::Seq, PathArguments::AngleBracketed(pack)) => {
+                    let sub = Self::from_args_expect_1(ctxt, pack)?;
+                    Self::Seq(sub.into())
+                }
+                (SysTypeName::Set, PathArguments::AngleBracketed(pack)) => {
+                    let sub = Self::from_args_expect_1(ctxt, pack)?;
+                    Self::Set(sub.into())
+                }
+                (SysTypeName::Map, PathArguments::AngleBracketed(pack)) => {
+                    let (key, val) = Self::from_args_expect_2(ctxt, pack)?;
+                    Self::Map(key.into(), val.into())
+                }
+                (SysTypeName::Error, PathArguments::None) => Self::Error,
+                _ => bail_on!(segment, "invalid type tag for intrinsic type"),
+            },
+            TypeName::Usr(name) => match ctxt.get_type_generics(&name) {
+                None => bail_on!(ident, "no such type"),
+                Some(generics) => match generics.len() {
+                    0 => {
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected");
+                        }
+                        Self::User(name, vec![])
+                    }
+                    n => match arguments {
+                        PathArguments::None => bail_on!(ident, "expect type arguments"),
+                        PathArguments::AngleBracketed(pack) => {
+                            let args = Self::from_args(ctxt, pack)?;
+                            if args.len() != n {
+                                bail_on!(arguments, "type argument number mismatch");
+                            }
+                            Self::User(name, args)
+                        }
+                        _ => bail_on!(arguments, "invalid type arguments"),
+                    },
+                },
+            },
+        };
+        bail_if_exists!(iter.next());
+
         Ok(tag)
     }
 

@@ -4,21 +4,24 @@ use syn::{Ident, Result};
 
 use crate::parser::err::bail_on;
 use crate::parser::generics::SysTrait;
+use crate::parser::ty::SysTypeName;
 
 /// Test whether an identifier is a reserved keyword
 fn validate_user_ident(ident: &Ident) -> Result<String> {
+    let name = ident.to_string();
+
     // check for reserved keywords
-    if SysTrait::from_ident(ident).is_some() {
+    if SysTrait::from_str(&name).is_some() {
         bail_on!(ident, "reserved trait name");
+    }
+    if SysTypeName::from_str(&name).is_some() {
+        bail_on!(ident, "reserved type name");
     }
 
     // TODO: check the rest
 
     let name = ident.to_string();
     match name.as_str() {
-        "Boolean" | "Integer" | "Rational" | "Text" | "Cloak" | "Seq" | "Set" | "Map" | "Error" => {
-            bail_on!(ident, "reserved type name");
-        }
         "forall" | "exists" => {
             bail_on!(ident, "reserved macro name");
         }
@@ -81,5 +84,5 @@ name! {
 /// Mark that this is a reserved identifier
 pub trait ReservedIdent: Sized {
     /// try to parse from an identifier
-    fn from_ident(ident: &Ident) -> Option<Self>;
+    fn from_str(ident: &str) -> Option<Self>;
 }
