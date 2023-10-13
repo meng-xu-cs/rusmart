@@ -1,4 +1,4 @@
-use syn::{Error, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
+use syn::{Error, ExprPath, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::name::ReservedIdent;
@@ -65,5 +65,28 @@ impl PatUtil {
     /// Expect a name that can be converted from an ident
     pub fn expect_name<'a, T: TryFrom<&'a Ident, Error = Error>>(pat: &'a Pat) -> Result<T> {
         Self::expect_ident(pat).and_then(T::try_from)
+    }
+}
+
+/// A convenience wrapper for parsing expressions
+pub struct ExprUtil;
+
+impl ExprUtil {
+    /// Extract a variable name from an expression path
+    pub fn expect_ident_from_path(expr_path: &ExprPath) -> Result<&Ident> {
+        let ExprPath {
+            attrs: _,
+            qself,
+            path,
+        } = expr_path;
+        bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+        PathUtil::expect_ident(path)
+    }
+
+    /// Expect a name that can be converted from an expr path
+    pub fn expect_name_from_path<'a, T: TryFrom<&'a Ident, Error = Error>>(
+        expr_path: &'a ExprPath,
+    ) -> Result<T> {
+        Self::expect_ident_from_path(expr_path).and_then(T::try_from)
     }
 }

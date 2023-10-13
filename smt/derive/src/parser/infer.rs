@@ -253,3 +253,81 @@ impl InferDatabase {
         self.methods.len()
     }
 }
+
+/// Represents a type variable participating in type unification
+#[derive(Clone, Eq, PartialEq)]
+pub struct TypeVar(usize);
+
+/// Like `TypeTag`, but allows type variable for type unification
+#[derive(Clone, Eq, PartialEq)]
+pub enum TypeRef {
+    /// variable
+    Var(TypeVar),
+    /// boolean
+    Boolean,
+    /// integer (unlimited precision)
+    Integer,
+    /// rational numbers (unlimited precision)
+    Rational,
+    /// string
+    Text,
+    /// inductively defined type
+    Cloak(Box<TypeRef>),
+    /// SMT-sequence
+    Seq(Box<TypeRef>),
+    /// SMT-set
+    Set(Box<TypeRef>),
+    /// SMT-array
+    Map(Box<TypeRef>, Box<TypeRef>),
+    /// dynamic error type
+    Error,
+    /// user-defined type
+    User(UsrTypeName, Vec<TypeRef>),
+    /// parameter
+    Parameter(TypeParamName),
+}
+
+impl From<&TypeTag> for TypeRef {
+    fn from(ty: &TypeTag) -> Self {
+        match ty {
+            TypeTag::Boolean => Self::Boolean,
+            TypeTag::Integer => Self::Integer,
+            TypeTag::Rational => Self::Rational,
+            TypeTag::Text => Self::Text,
+            TypeTag::Cloak(sub) => Self::Cloak(Box::new(sub.as_ref().into())),
+            TypeTag::Seq(sub) => Self::Seq(Box::new(sub.as_ref().into())),
+            TypeTag::Set(sub) => Self::Set(Box::new(sub.as_ref().into())),
+            TypeTag::Map(key, val) => {
+                Self::Map(Box::new(key.as_ref().into()), Box::new(val.as_ref().into()))
+            }
+            TypeTag::Error => Self::Error,
+            TypeTag::User(name, tags) => {
+                Self::User(name.clone(), tags.iter().map(|t| t.into()).collect())
+            }
+            TypeTag::Parameter(name) => Self::Parameter(name.clone()),
+        }
+    }
+}
+
+/// Context manager for type unification
+pub struct TypeUnifier {
+    /// holds the set of possible candidates associated with each type parameter
+    params: BTreeMap<usize, Option<BTreeSet<TypeTag>>>,
+}
+
+impl TypeUnifier {
+    /// Create with an empty type unification context
+    pub fn new() -> Self {
+        Self {
+            params: BTreeMap::new(),
+        }
+    }
+
+    /// Make a new type parameter
+    pub fn mk_var(&mut self) -> TypeVar {
+        let id = self.params.len();
+        let existing = self.params.insert(id, None);
+        assert!(existing.is_none());
+        TypeVar(id)
+    }
+}

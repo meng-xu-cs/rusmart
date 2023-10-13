@@ -378,6 +378,13 @@ pub struct ContextWithSig {
     infer: InferDatabase,
 }
 
+impl ContextWithSig {
+    /// Get the generics declaration for a type
+    pub fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
+        self.types.get(name).map(|def| def.head())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::parser::test::unit_test;
