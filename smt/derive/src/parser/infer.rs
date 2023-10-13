@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::parser::func::{FuncName, FuncSig};
@@ -309,10 +310,19 @@ impl From<&TypeTag> for TypeRef {
     }
 }
 
+/// An equivalence group of type variables
+#[derive(Clone)]
+struct TypeEquivGroup {
+    vars: BTreeSet<usize>,
+    ty: Option<TypeRef>,
+}
+
 /// Context manager for type unification
 pub struct TypeUnifier {
     /// holds the set of possible candidates associated with each type parameter
-    params: BTreeMap<usize, Option<BTreeSet<TypeTag>>>,
+    params: BTreeMap<usize, usize>,
+    /// hold the equivalence groups
+    groups: Vec<TypeEquivGroup>,
 }
 
 impl TypeUnifier {
@@ -320,14 +330,160 @@ impl TypeUnifier {
     pub fn new() -> Self {
         Self {
             params: BTreeMap::new(),
+            groups: vec![],
         }
     }
 
     /// Make a new type parameter
     pub fn mk_var(&mut self) -> TypeVar {
-        let id = self.params.len();
-        let existing = self.params.insert(id, None);
+        let var_id = self.params.len();
+
+        // assign a fresh equivalence group to the type variable
+        let group = TypeEquivGroup {
+            vars: std::iter::once(var_id).collect(),
+            ty: None,
+        };
+        let group_index = self.groups.len();
+
+        // register the param and the gropu
+        self.groups.push(group);
+        let existing = self.params.insert(var_id, group_index);
         assert!(existing.is_none());
-        TypeVar(id)
+
+        // done
+        TypeVar(var_id)
+    }
+
+    /// merge the type constrains
+    fn merge_group(&mut self, l: &TypeVar, h: &TypeVar) -> Option<TypeRef> {
+        let idx_l = *self.params.get(&l.0).unwrap();
+        let idx_h = *self.params.get(&h.0).unwrap();
+
+        // obtain groups
+        let mut group_l = self.groups.get(idx_l).unwrap().clone();
+        let mut group_h = self.groups.get(idx_h).unwrap().clone();
+
+        // unify the equivalence set
+        if !group_l.vars.is_disjoint(&group_h.vars) {
+            // this is an invariant violation
+            return None;
+        }
+        group_l.vars.extend(group_h.vars.into_iter());
+
+        // check whether they unity to the same type, if any
+        let inferred = match (group_l.ty.as_ref(), group_h.ty.as_ref()) {
+            (None, None) => {
+                // none of the groups have type inferred, return the type var with a lower index
+                TypeRef::Var(l.clone())
+            }
+            (Some(t_l), None) => {
+                // the lower group already has a constraint
+                t_l.clone()
+            }
+            (None, Some(t_h)) => {
+                // propagate the type to the lower group
+                let _ = group_l.ty.insert(t_h.clone());
+                t_h.clone()
+            }
+            (Some(t_l), Some(t_h)) => {
+                // further unity (refine) the types, also check for mismatches
+                let unified = self.unify(t_l, t_h)?;
+                let _ = group_l.ty.insert(unified.clone());
+                unified
+            }
+        };
+
+        // redirect the group for the type variable at a higher index
+        self.groups.remove(idx_l);
+        self.groups.insert(idx_l, group_l);
+        *self.params.get_mut(&h.0).unwrap() = idx_l;
+
+        // return the inferred type
+        Some(inferred)
+    }
+
+    /// Assign the constraint
+    fn update_group(&mut self, v: &TypeVar, t: &TypeRef) -> Option<TypeRef> {
+        // obtain the group
+        let idx = *self.params.get(&v.0).unwrap();
+        let mut group = self.groups.get(idx).unwrap().clone();
+
+        // decides on whether further unification is needed
+        let inferred = match group.ty.as_ref() {
+            None => {
+                // propagate the type to the group
+                let _ = group.ty.insert(t.clone());
+                t.clone()
+            }
+            Some(e) => {
+                // further unity (refine) the types, also check for mismatches
+                let unified = self.unify(e, t)?;
+                let _ = group.ty.insert(unified.clone());
+                unified
+            }
+        };
+
+        // reset the equivalence the group for the type variable at a lower index
+        self.groups.remove(idx);
+        self.groups.insert(idx, group);
+
+        // return the inferred type
+        Some(inferred)
+    }
+
+    /// Unify two types
+    pub fn unify(&mut self, lhs: &TypeRef, rhs: &TypeRef) -> Option<TypeRef> {
+        use TypeRef::*;
+
+        let inferred = match (lhs, rhs) {
+            // variable
+            (Var(l), Var(r)) => match Ord::cmp(&l.0, &r.0) {
+                Ordering::Equal => {
+                    // no knowledge gain in this case
+                    Var(l.clone())
+                }
+                Ordering::Less => self.merge_group(l, r)?,
+                Ordering::Greater => self.merge_group(r, l)?,
+            },
+            (Var(l), _) => self.update_group(l, rhs)?,
+            (_, Var(r)) => self.update_group(r, lhs)?,
+            // concrete types
+            (Boolean, Boolean) => Boolean,
+            (Integer, Integer) => Integer,
+            (Rational, Rational) => Rational,
+            (Text, Text) => Text,
+            (Error, Error) => Error,
+            // variadic types
+            (Cloak(sub_lhs), Cloak(sub_rhs)) => Cloak(self.unify(sub_lhs, sub_rhs)?.into()),
+            (Seq(sub_lhs), Seq(sub_rhs)) => Seq(self.unify(sub_lhs, sub_rhs)?.into()),
+            (Set(sub_lhs), Set(sub_rhs)) => Set(self.unify(sub_lhs, sub_rhs)?.into()),
+            (Map(key_lhs, val_lhs), Map(key_rhs, val_rhs)) => Map(
+                self.unify(key_lhs, key_rhs)?.into(),
+                self.unify(val_lhs, val_rhs)?.into(),
+            ),
+            // user-define types
+            (User(name_lhs, vars_lhs), User(name_rhs, vars_rhs)) => {
+                if name_lhs != name_rhs {
+                    return None;
+                }
+                assert_eq!(vars_lhs.len(), vars_rhs.len());
+
+                let mut new_vars = vec![];
+                for (v_lhs, v_rhs) in vars_lhs.iter().zip(vars_rhs.iter()) {
+                    new_vars.push(self.unify(v_lhs, v_rhs)?);
+                }
+                User(name_lhs.clone(), new_vars)
+            }
+            // type parameters
+            (Parameter(name_lhs), Parameter(name_rhs)) => {
+                if name_lhs != name_rhs {
+                    return None;
+                }
+                Parameter(name_lhs.clone())
+            }
+            // all other cases are considered mismatch
+            _ => return None,
+        };
+        Some(inferred)
     }
 }

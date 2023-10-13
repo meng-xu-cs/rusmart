@@ -229,17 +229,14 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
     /// Parse an expression
     fn convert_expr(self, unifier: &mut TypeUnifier, target: &Exp) -> Result<Expr> {
         // case on expression type
-        let inst = match target {
+        let (op, ty) = match target {
             Exp::Path(expr_path) => {
                 let name = ExprUtil::expect_name_from_path(expr_path)?;
                 let ty = match self.vars.get(&name) {
                     None => bail_on!(expr_path, "unknown local variable"),
                     Some(t) => t.clone(),
                 };
-                Inst {
-                    op: Op::Var(name).into(),
-                    ty,
-                }
+                (Op::Var(name), ty)
             }
             Exp::Block(expr_block) => {
                 let ExprBlock {
@@ -256,6 +253,16 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 return self.convert_stmts(unifier, stmts);
             }
             _ => todo!(),
+        };
+
+        // unity the type and then build the instruction
+        let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
+            None => bail_on!(target, "type unification"),
+            Some(unified) => unified,
+        };
+        let inst = Inst {
+            op: op.into(),
+            ty: ty_unified,
         };
 
         // decide to go with an instruction or a block
