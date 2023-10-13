@@ -10,6 +10,7 @@ use crate::parser::err::{bail_on, bail_on_with_note};
 use crate::parser::generics::Generics;
 use crate::parser::name::{FuncName, TypeName};
 
+use crate::parser::ty::CtxtForType;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -236,11 +237,16 @@ impl Context {
 }
 
 /// Context manager after analyzing for generics
-#[allow(dead_code)]
 pub struct ContextWithGenerics {
     types: BTreeMap<TypeName, (Generics, MarkedType)>,
     impls: BTreeMap<FuncName, (Generics, MarkedImpl)>,
     specs: BTreeMap<FuncName, (Generics, MarkedSpec)>,
+}
+
+impl CtxtForType for ContextWithGenerics {
+    fn get_type_generics(&self, name: &TypeName) -> Option<&Generics> {
+        self.types.get(name).map(|(generics, _)| generics)
+    }
 }
 
 #[cfg(test)]
