@@ -234,7 +234,7 @@ impl TypeTag {
     }
 
     /// Convert from a type
-    fn from_type<CTX: CtxtForType>(ctxt: &CTX, ty: &Type) -> Result<Self> {
+    pub fn from_type<CTX: CtxtForType>(ctxt: &CTX, ty: &Type) -> Result<Self> {
         match ty {
             Type::Path(TypePath { qself, path }) => {
                 bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));

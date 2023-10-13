@@ -67,7 +67,7 @@ macro_rules! name {
 }
 
 name! {
-    /// Identifier for a user-defined type parameter
+    /// Identifier for a type parameter
     TypeParamName
 }
 
@@ -79,6 +79,11 @@ name! {
 name! {
     /// Identifier for a user-defined function (i.e., non-reserved)
     UsrFuncName
+}
+
+name! {
+    /// Identifier for a variable
+    VarName
 }
 
 /// Mark that this is a reserved identifier
