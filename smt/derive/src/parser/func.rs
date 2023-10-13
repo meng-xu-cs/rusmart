@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use syn::{FnArg, PatType, Result, ReturnType, Signature};
+use syn::{FnArg, Ident, PatType, Result, ReturnType, Signature};
 
 use crate::parser::ctxt::ContextWithType;
 use crate::parser::err::{bail_if_exists, bail_on};
 use crate::parser::generics::Generics;
-use crate::parser::name::{ReservedIdent, UsrTypeName, VarName};
+use crate::parser::name::{ReservedIdent, UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
 use crate::parser::util::PatUtil;
 
@@ -23,6 +23,24 @@ impl ReservedIdent for SysFuncName {
             _ => return None,
         };
         Some(matched)
+    }
+}
+
+/// A function name
+pub enum FuncName {
+    Sys(SysFuncName),
+    Usr(UsrFuncName),
+}
+
+impl FuncName {
+    /// Try to convert an ident into a function name
+    fn try_from(ident: &Ident) -> Result<Self> {
+        let name = ident.to_string();
+        let parsed = match SysFuncName::from_str(&name) {
+            None => Self::Usr(ident.try_into()?),
+            Some(n) => Self::Sys(n),
+        };
+        Ok(parsed)
     }
 }
 
