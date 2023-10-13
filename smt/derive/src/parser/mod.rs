@@ -5,5 +5,5 @@ mod test;
 mod func;
 mod generics;
 mod name;
-mod path;
+mod util;
 mod ty;

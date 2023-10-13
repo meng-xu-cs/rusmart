@@ -11,7 +11,7 @@ use crate::parser::err::{
     bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
 };
 use crate::parser::name::{ReservedIdent, TypeParamName};
-use crate::parser::path::PathUtil;
+use crate::parser::util::PathUtil;
 
 /// Reserved trait
 #[allow(clippy::upper_case_acronyms)]

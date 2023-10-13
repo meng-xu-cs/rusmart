@@ -5,6 +5,7 @@ use syn::{FnArg, PatType, Result, ReturnType, Signature};
 use crate::parser::err::{bail_if_exists, bail_on};
 use crate::parser::name::VarName;
 use crate::parser::ty::{CtxtForType, TypeTag};
+use crate::parser::util::PatUtil;
 
 /// Function signature
 pub struct FuncSig {
@@ -50,7 +51,7 @@ impl FuncSig {
                         ty,
                     } = typed;
 
-                    let name = VarName::from_pat(pat)?;
+                    let name: VarName = PatUtil::expect_name(pat)?;
                     if !param_names.insert(name.clone()) {
                         bail_on!(pat, "duplicated parameter name");
                     }

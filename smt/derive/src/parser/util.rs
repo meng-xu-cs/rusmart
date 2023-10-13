@@ -1,4 +1,4 @@
-use syn::{Ident, Path, PathArguments, PathSegment, Result};
+use syn::{Error, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::name::ReservedIdent;
@@ -33,5 +33,37 @@ impl PathUtil {
             None => bail_on!(ident, "not an intrinsic trait"),
             Some(v) => Ok(v),
         }
+    }
+}
+
+/// A convenience wrapper for parsing patterns
+pub struct PatUtil;
+
+impl PatUtil {
+    /// Expect a plain identifier from the pattern
+    pub fn expect_ident(pat: &Pat) -> Result<&Ident> {
+        match pat {
+            Pat::Ident(decl) => {
+                let PatIdent {
+                    attrs: _,
+                    by_ref,
+                    mutability,
+                    ident,
+                    subpat,
+                } = decl;
+
+                // plain name only
+                bail_if_exists!(by_ref);
+                bail_if_exists!(mutability);
+                bail_if_exists!(subpat.as_ref().map(|(_, sub)| sub));
+                Ok(ident)
+            }
+            _ => bail_on!(pat, "not an ident"),
+        }
+    }
+
+    /// Expect a name that can be converted from an ident
+    pub fn expect_name<'a, T: TryFrom<&'a Ident, Error = Error>>(pat: &'a Pat) -> Result<T> {
+        Self::expect_ident(pat).and_then(T::try_from)
     }
 }
