@@ -12,6 +12,7 @@ use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
 
+use crate::parser::infer::InferDatabase;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -343,11 +344,26 @@ impl ContextWithType {
             })
             .collect();
 
+        // populate the inference database
+        let mut infer = InferDatabase::with_intrinsics();
+
+        // register SMT types as they all implement the SMT trait
+        for (ty, def) in &types {
+            infer.register_user_type(ty, def.head());
+        }
+        // register user-implemented functions
+        for (name, (sig, _)) in unpacked_impls.iter() {
+            infer.register_user_func(name, sig);
+        }
+
+        trace!("function database populated with {} entries", infer.size());
+
         // done
         let ctxt = ContextWithSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
+            infer,
         };
         Ok(ctxt)
     }
@@ -358,6 +374,8 @@ pub struct ContextWithSig {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
+    /// a database for inference
+    infer: InferDatabase,
 }
 
 #[cfg(test)]
