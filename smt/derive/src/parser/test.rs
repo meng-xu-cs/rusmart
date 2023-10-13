@@ -5,14 +5,14 @@ macro_rules! unit_test {
         #[test]
         fn $name() {
             let code = quote::quote! $stream;
-            crate::parser::ctxt::Context::derive_from_stream(code).unwrap();
+            crate::test_on_stream(code).unwrap();
         }
     };
     ($name:ident, $stream:tt, $msg:expr) => {
         #[test]
         fn $name() {
             let code = quote::quote! $stream;
-            match crate::parser::ctxt::Context::derive_from_stream(code) {
+            match crate::test_on_stream(code) {
                 Ok(_) => panic!("expect failure"),
                 Err(e) => {
                     let err = e.to_string();

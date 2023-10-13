@@ -6,20 +6,34 @@ use syn::Result;
 
 use crate::parser::ctxt::Context;
 
+#[cfg(test)]
+use proc_macro2::TokenStream;
+
 mod parser;
 
-/// Internal entrypoint for ergonomic error propagation
+/// Default pipeline after a context is constructed
+fn pipeline(ctxt: Context) -> Result<()> {
+    ctxt.parse_generics()?
+        .parse_types()?
+        .parse_func_sigs()?
+        .parse_func_body()?;
+    Ok(())
+}
+
+/// Internal entrypoint
 pub fn derive<P: AsRef<Path>>(input: P) -> Result<()> {
     initialize();
 
     let path_crate = input.as_ref();
     debug!("deriving for crate {}", path_crate.to_string_lossy());
-    Context::new(path_crate)?
-        .parse_generics()?
-        .parse_types()?
-        .parse_func_sigs()?
-        .parse_func_body()?;
+    pipeline(Context::new(path_crate)?)?;
     debug!("derivation completed");
 
     Ok(())
+}
+
+#[cfg(test)]
+/// A shortcut to run tests
+pub fn test_on_stream(stream: TokenStream) -> Result<()> {
+    Context::new_from_stream(stream).and_then(pipeline)
 }

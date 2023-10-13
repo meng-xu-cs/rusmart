@@ -211,22 +211,18 @@ impl Context {
     }
 
     #[cfg(test)]
-    pub fn derive_from_stream(stream: TokenStream) -> Result<()> {
+    pub fn new_from_stream(stream: TokenStream) -> Result<Self> {
         // init
         let mut ctxt = Self {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
             specs: BTreeMap::new(),
         };
+
+        // parse
         let file: File = syn::parse2(stream)?;
         ctxt.process_file(file)?;
-
-        // derivation
-        ctxt.parse_generics()?
-            .parse_types()?
-            .parse_func_sigs()?
-            .parse_func_body()?;
-        Ok(())
+        Ok(ctxt)
     }
 }
 
