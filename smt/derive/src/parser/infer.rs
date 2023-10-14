@@ -254,6 +254,7 @@ impl InferDatabase {
         &self,
         unifier: &mut TypeUnifier,
         name: &UsrFuncName,
+        qualifier: Option<&TypeName>,
         ty_args_opt: Option<&[TypeTag]>,
         args: Vec<Expr>,
         rval: &TypeRef,
@@ -265,6 +266,15 @@ impl InferDatabase {
             .ok_or_else(|| anyhow!("no such method"))?
         {
             // early filtering
+            match (candidate.qualifier.as_ref(), qualifier) {
+                (None, Some(_)) => {
+                    continue;
+                }
+                (Some(n1), Some(n2)) if n1 != n2 => {
+                    continue;
+                }
+                _ => (),
+            }
             if candidate.params.len() != args.len() {
                 continue;
             }

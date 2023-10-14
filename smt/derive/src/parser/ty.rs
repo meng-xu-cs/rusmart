@@ -95,7 +95,7 @@ pub enum TypeName {
 
 impl TypeName {
     /// Try to convert an ident into a type name
-    fn try_from(generics: &Generics, ident: &Ident) -> Result<Self> {
+    pub fn try_from(generics: &Generics, ident: &Ident) -> Result<Self> {
         let name = ident.to_string();
         let parsed = match SysTypeName::from_str(&name) {
             None => {
@@ -278,6 +278,33 @@ impl TypeTag {
             }
             _ => bail_on!(ty, "expect type path"),
         }
+    }
+
+    /// Convert a series of generic arguments
+    pub fn from_generics<CTX: CtxtForType>(
+        ctxt: &CTX,
+        generics: &AngleBracketedGenericArguments,
+    ) -> Result<Vec<Self>> {
+        let AngleBracketedGenericArguments {
+            colon2_token,
+            lt_token: _,
+            args,
+            gt_token: _,
+        } = generics;
+        bail_if_missing!(colon2_token, generics, "::");
+        bail_if_empty!(args, "type argument");
+
+        let mut arguments = vec![];
+        for item in args {
+            match item {
+                GenericArgument::Type(ty_arg) => {
+                    let t = TypeTag::from_type(ctxt, ty_arg)?;
+                    arguments.push(t);
+                }
+                _ => bail_on!(item, "not a type argument"),
+            }
+        }
+        Ok(arguments)
     }
 }
 

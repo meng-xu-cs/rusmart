@@ -114,7 +114,7 @@ pub enum Intrinsic {
 
 impl Intrinsic {
     /// Convert an argument list to a boolean literal
-    fn unpack_lit_bool(args: &Punctuated<Exp, Comma>) -> Result<bool> {
+    pub fn unpack_lit_bool(args: &Punctuated<Exp, Comma>) -> Result<bool> {
         let mut iter = args.iter();
         let expr = bail_if_missing!(iter.next(), args, "argument");
         let parsed = match expr {
@@ -132,7 +132,7 @@ impl Intrinsic {
     }
 
     /// Convert an argument list to an integer literal
-    fn unpack_lit_int(args: &Punctuated<Exp, Comma>) -> Result<i128> {
+    pub fn unpack_lit_int(args: &Punctuated<Exp, Comma>) -> Result<i128> {
         let mut iter = args.iter();
         let expr = bail_if_missing!(iter.next(), args, "argument");
         let parsed = match expr {
@@ -153,7 +153,7 @@ impl Intrinsic {
     }
 
     /// Convert an argument list to a floating-point literal
-    fn unpack_lit_float(args: &Punctuated<Exp, Comma>) -> Result<f64> {
+    pub fn unpack_lit_float(args: &Punctuated<Exp, Comma>) -> Result<f64> {
         let mut iter = args.iter();
         let expr = bail_if_missing!(iter.next(), args, "argument");
         let parsed = match expr {
@@ -174,7 +174,7 @@ impl Intrinsic {
     }
 
     /// Convert an argument list to a string literal
-    fn unpack_lit_str(args: &Punctuated<Exp, Comma>) -> Result<String> {
+    pub fn unpack_lit_str(args: &Punctuated<Exp, Comma>) -> Result<String> {
         let mut iter = args.iter();
         let expr = bail_if_missing!(iter.next(), args, "argument");
         let parsed = match expr {

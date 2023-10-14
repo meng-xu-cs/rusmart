@@ -1,20 +1,18 @@
 use std::collections::BTreeMap;
 
 use syn::{
-    AngleBracketedGenericArguments, Block, Expr as Exp, ExprBlock, ExprMethodCall, GenericArgument,
-    Local, LocalInit, Pat, PatType, Result, Stmt,
+    Block, Expr as Exp, ExprBlock, ExprCall, ExprMethodCall, ExprPath, Local, LocalInit, Pat,
+    PatType, Path, PathArguments, PathSegment, Result, Stmt,
 };
 
 use crate::parser::ctxt::ContextWithSig;
-use crate::parser::err::{
-    bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
-};
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::func::{FuncName, FuncSig, SysFuncName};
 use crate::parser::generics::Generics;
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
-use crate::parser::ty::{CtxtForType, TypeTag};
+use crate::parser::ty::{CtxtForType, SysTypeName, TypeName, TypeTag};
 use crate::parser::util::{ExprUtil, PatUtil};
 
 /// Operations
@@ -279,6 +277,136 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 bail_if_exists!(label);
                 return self.convert_stmts(unifier, stmts);
             }
+            Exp::Call(expr_call) => {
+                let ExprCall {
+                    attrs: _,
+                    func,
+                    paren_token: _,
+                    args,
+                } = expr_call;
+
+                // extract the callee
+                let mut iter = match func.as_ref() {
+                    Exp::Path(p) => {
+                        let ExprPath {
+                            attrs: _,
+                            qself,
+                            path:
+                                Path {
+                                    leading_colon,
+                                    segments,
+                                },
+                        } = p;
+                        bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+                        bail_if_exists!(leading_colon);
+                        segments.iter().rev()
+                    }
+                    _ => bail_on!(func, "invalid callee"),
+                };
+
+                // extract method and class
+                let segment_method = bail_if_missing!(iter.next(), func, "callee");
+                let class = match iter.next() {
+                    None => None,
+                    Some(segment) => {
+                        let PathSegment { ident, arguments } = segment;
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected type arguments");
+                        }
+                        Some((TypeName::try_from(self.root.generics(), ident)?, segment))
+                    }
+                };
+                bail_if_exists!(iter.next());
+
+                // collect type arguments, if any
+                let PathSegment { ident, arguments } = segment_method;
+
+                // case on function names
+                match FuncName::try_from(ident)? {
+                    FuncName::Sys(SysFuncName::From) => {
+                        // handle literal conversion
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected type arguments");
+                        }
+                        bail_if_non_empty!(args);
+
+                        let (intrinsic, ty) = match class {
+                            None => bail_on!(ident, "expect qualifier"),
+                            Some((TypeName::Param(_) | TypeName::Usr(_), segment)) => {
+                                bail_on!(segment, "expect an intrinsic qualifier");
+                            }
+                            Some((TypeName::Sys(tname), segment)) => match tname {
+                                SysTypeName::Boolean => (
+                                    Intrinsic::BoolVal(Intrinsic::unpack_lit_bool(args)?),
+                                    TypeRef::Boolean,
+                                ),
+                                SysTypeName::Integer => (
+                                    Intrinsic::IntVal(Intrinsic::unpack_lit_int(args)?),
+                                    TypeRef::Integer,
+                                ),
+                                SysTypeName::Rational => (
+                                    Intrinsic::NumVal(Intrinsic::unpack_lit_float(args)?),
+                                    TypeRef::Rational,
+                                ),
+                                SysTypeName::Text => (
+                                    Intrinsic::StrVal(Intrinsic::unpack_lit_str(args)?),
+                                    TypeRef::Text,
+                                ),
+                                _ => bail_on!(segment, "expect a literal-enabled qualifier"),
+                            },
+                        };
+
+                        // unity the type and then build the instruction
+                        let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
+                            Ok(unified) => unified,
+                            Err(e) => bail_on!(target, "{}", e),
+                        };
+                        Inst {
+                            op: Op::Intrinsic(intrinsic).into(),
+                            ty: ty_unified,
+                        }
+                    }
+                    FuncName::Sys(SysFuncName::Into) => bail_on!(expr_call, "unexpected"),
+                    FuncName::Usr(name) => {
+                        // collect type arguments
+                        let ty_args_opt = match arguments {
+                            PathArguments::None => None,
+                            PathArguments::AngleBracketed(ty_args) => {
+                                Some(TypeTag::from_generics(self.root, ty_args)?)
+                            }
+                            PathArguments::Parenthesized(_) => {
+                                bail_on!(arguments, "invalid type arguments")
+                            }
+                        };
+
+                        // parse the arguments by making their types as variables
+                        let mut parsed_args = vec![];
+                        for arg in args {
+                            let parsed = self
+                                .fork(TypeRef::Var(unifier.mk_var()))
+                                .convert_expr(unifier, arg)?;
+                            parsed_args.push(parsed);
+                        }
+
+                        // choose the function from function database
+                        let inferred = self.root.ctxt.infer.get_inference(
+                            unifier,
+                            &name,
+                            class.as_ref().map(|(tn, _)| tn),
+                            ty_args_opt.as_deref(),
+                            parsed_args,
+                            &self.exp_ty,
+                        );
+                        match inferred {
+                            Ok((op, unified_ret)) => Inst {
+                                op: op.into(),
+                                ty: unified_ret,
+                            },
+                            Err(e) => bail_on!(expr_call, "{}", e),
+                        }
+                    }
+                }
+            }
             Exp::MethodCall(expr_method) => {
                 let ExprMethodCall {
                     attrs: _,
@@ -312,28 +440,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // collect type arguments, if any
                         let ty_args_opt = match turbofish {
                             None => None,
-                            Some(ty_args) => {
-                                let AngleBracketedGenericArguments {
-                                    colon2_token,
-                                    lt_token: _,
-                                    args,
-                                    gt_token: _,
-                                } = ty_args;
-                                bail_if_missing!(colon2_token, ty_args, "::");
-                                bail_if_empty!(args, "type argument");
-
-                                let mut arguments = vec![];
-                                for item in args {
-                                    match item {
-                                        GenericArgument::Type(ty_arg) => {
-                                            let t = TypeTag::from_type(self.root, ty_arg)?;
-                                            arguments.push(t);
-                                        }
-                                        _ => bail_on!(item, "not a type argument"),
-                                    }
-                                }
-                                Some(arguments)
-                            }
+                            Some(ty_args) => Some(TypeTag::from_generics(self.root, ty_args)?),
                         };
 
                         // parse the arguments by making their types as variables
@@ -354,6 +461,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         let inferred = self.root.ctxt.infer.get_inference(
                             unifier,
                             &name,
+                            None,
                             ty_args_opt.as_deref(),
                             parsed_args,
                             &self.exp_ty,
@@ -415,6 +523,13 @@ mod tests {
         fn foo<T: SMT>(x: T) -> T {
             let y = x;
             y
+        }
+    });
+
+    unit_test!(bool_basics, {
+        #[smt_impl]
+        fn foo(x: Boolean, y: Boolean) -> Boolean {
+            x.not().and(false.into()).or(true.into()).xor(y)
         }
     });
 }
