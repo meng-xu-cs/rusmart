@@ -765,6 +765,14 @@ impl TypeUnifier {
         let mut group_l = self.groups.get(idx_l).unwrap().clone();
         let group_h = self.groups.get(idx_h).unwrap().clone();
 
+        // nothing to do if they belong to the same group
+        if idx_l == idx_h {
+            return Ok(group_l
+                .ty
+                .as_ref()
+                .map_or_else(|| TypeRef::Var(l.clone()), |t| t.clone()));
+        }
+
         // unify the equivalence set
         if !group_l.vars.is_disjoint(&group_h.vars) {
             // this is an invariant violation

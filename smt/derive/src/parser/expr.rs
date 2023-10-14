@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use syn::{
-    Block, Expr as Exp, ExprBlock, ExprCall, ExprMethodCall, ExprPath, Local, LocalInit, Pat,
-    PatType, Path, PathArguments, PathSegment, Result, Stmt,
+    Block, Expr as Exp, ExprBlock, ExprCall, ExprIf, ExprMethodCall, ExprPath, ExprUnary, Local,
+    LocalInit, Pat, PatType, Path, PathArguments, PathSegment, Result, Stmt, UnOp,
 };
 
 use crate::parser::ctxt::ContextWithSig;
@@ -15,10 +15,18 @@ use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, SysTypeName, TypeName, TypeTag};
 use crate::parser::util::{ExprUtil, PatUtil};
 
+/// Phi node, guarded by condition
+pub struct PhiNode {
+    cond: Expr,
+    body: Expr,
+}
+
 /// Operations
 pub enum Op {
     /// `<var>`
     Var(VarName),
+    /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
+    Phi { nodes: Vec<PhiNode>, default: Expr },
     /// `<class>::<method>(<a1>, <a2>, ...)`
     Intrinsic(Intrinsic),
     /// `<function>(<a1>, <a2>, ...)`
@@ -276,6 +284,78 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                 bail_if_exists!(label);
                 return self.convert_stmts(unifier, stmts);
+            }
+            Exp::If(expr_if) => {
+                let mut phi_nodes = vec![];
+                let mut cursor = expr_if;
+                let default_expr = loop {
+                    let ExprIf {
+                        attrs: _,
+                        if_token: _,
+                        cond,
+                        then_branch,
+                        else_branch,
+                    } = cursor;
+
+                    // convert the condition
+                    let new_cond = match cond.as_ref() {
+                        Exp::Unary(expr_unary) => {
+                            let ExprUnary { attrs: _, op, expr } = expr_unary;
+                            if !matches!(op, UnOp::Deref(_)) {
+                                bail_on!(cond, "not a Boolean deref");
+                            }
+                            self.fork(TypeRef::Boolean).convert_expr(unifier, expr)?
+                        }
+                        _ => bail_on!(cond, "not a Boolean deref"),
+                    };
+
+                    // convert the then block
+                    let new_then = self
+                        .fork(self.exp_ty.clone())
+                        .convert_stmts(unifier, &then_branch.stmts)?;
+
+                    // now we have a node
+                    phi_nodes.push(PhiNode {
+                        cond: new_cond,
+                        body: new_then,
+                    });
+
+                    // convert the else block
+                    let else_expr = bail_if_missing!(
+                        else_branch.as_ref().map(|(_, e)| e.as_ref()),
+                        expr_if,
+                        "expect else branch"
+                    );
+
+                    match else_expr {
+                        Exp::If(elseif_expr) => {
+                            cursor = elseif_expr;
+                        }
+                        _ => {
+                            break self
+                                .fork(self.exp_ty.clone())
+                                .convert_expr(unifier, else_expr)?;
+                        }
+                    }
+                };
+
+                // check consistency of body type
+                let ref_ty = default_expr.ty().clone();
+                for item in &phi_nodes {
+                    if item.body.ty() != &ref_ty {
+                        bail_on!(expr_if, "phi node type mismatch");
+                    }
+                }
+
+                // construct the operator
+                let op = Op::Phi {
+                    nodes: phi_nodes,
+                    default: default_expr,
+                };
+                Inst {
+                    op: op.into(),
+                    ty: ref_ty,
+                }
             }
             Exp::Call(expr_call) => {
                 let ExprCall {
