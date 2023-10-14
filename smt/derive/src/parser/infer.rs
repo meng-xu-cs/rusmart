@@ -1,8 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::parser::func::{FuncName, FuncSig};
+use anyhow::{anyhow, bail};
+
+use crate::parser::expr::{Expr, Op};
+use crate::parser::func::FuncSig;
 use crate::parser::generics::Generics;
+use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
 
@@ -18,7 +22,7 @@ struct TypeFn {
 /// A database for type inference
 pub struct InferDatabase {
     /// intrinsic and declared function with their typing information
-    methods: BTreeMap<FuncName, BTreeSet<TypeFn>>,
+    methods: BTreeMap<UsrFuncName, BTreeSet<TypeFn>>,
 }
 
 impl InferDatabase {
@@ -38,7 +42,7 @@ impl InferDatabase {
         params: Vec<TypeTag>,
         ret_ty: TypeTag,
     ) {
-        let name = FuncName::Usr(UsrFuncName::intrinsic(ident));
+        let name = UsrFuncName::intrinsic(ident);
         let func = TypeFn {
             qualifier: Some(TypeName::Sys(qualifier)),
             generics,
@@ -210,7 +214,7 @@ impl InferDatabase {
             };
             let inserted = self
                 .methods
-                .entry(FuncName::Usr(UsrFuncName::intrinsic(builtin)))
+                .entry(UsrFuncName::intrinsic(builtin))
                 .or_default()
                 .insert(func);
             if !inserted {
@@ -239,14 +243,367 @@ impl InferDatabase {
             params,
             ret_ty,
         };
-        let inserted = self
-            .methods
-            .entry(FuncName::Usr(name.clone()))
-            .or_default()
-            .insert(func);
+        let inserted = self.methods.entry(name.clone()).or_default().insert(func);
         if !inserted {
             panic!("duplicated registration of smt func: {}", name);
         }
+    }
+
+    /// Get candidates given a function name
+    pub fn get_inference(
+        &self,
+        unifier: &mut TypeUnifier,
+        name: &UsrFuncName,
+        ty_args_opt: Option<&[TypeTag]>,
+        args: Vec<Expr>,
+        rval: &TypeRef,
+    ) -> anyhow::Result<(Op, TypeRef)> {
+        let mut suitable = None;
+        for candidate in self
+            .methods
+            .get(name)
+            .ok_or_else(|| anyhow!("no such method"))?
+        {
+            // early filtering
+            if candidate.params.len() != args.len() {
+                continue;
+            }
+
+            // use a probing unifier to check
+            let mut probing = unifier.clone();
+
+            // collect the type param substitution
+            let ty_params = candidate.generics.vec();
+            let param_substitutes: BTreeMap<_, _> = match ty_args_opt {
+                None => ty_params
+                    .into_iter()
+                    .map(|name| (name, TypeRef::Var(probing.mk_var())))
+                    .collect(),
+                Some(ty_args) => {
+                    if ty_params.len() != ty_args.len() {
+                        continue;
+                    }
+                    ty_params
+                        .into_iter()
+                        .zip(ty_args.iter())
+                        .map(|(name, ty_arg)| (name, ty_arg.into()))
+                        .collect()
+                }
+            };
+
+            // substitute types in function signature
+            let params = candidate
+                .params
+                .iter()
+                .map(|t| TypeRef::substitute_params(t, &param_substitutes))
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            let ret_ty = TypeRef::substitute_params(&candidate.ret_ty, &param_substitutes)?;
+
+            // unify all types
+            let mut unified_args = vec![];
+            for (param_ty, arg) in params.iter().zip(args.iter()) {
+                let unified = probing.unify(param_ty, arg.ty())?;
+                unified_args.push(unified);
+            }
+            let unified_ret = probing.unify(&ret_ty, rval)?;
+
+            // if all types unifies, mark this candidate as viable
+            if suitable.is_some() {
+                bail!("more than one candidate match the method call");
+            }
+            suitable = Some((candidate, probing, unified_args, unified_ret));
+        }
+
+        // check that we have a match
+        let (candidate, probing, unified_args, unified_ret) = match suitable {
+            None => bail!("no candidates matches the method call"),
+            Some(matched) => matched,
+        };
+
+        // override the unifier
+        *unifier = probing;
+
+        // assign the operation
+        let op = match candidate.qualifier.as_ref() {
+            None | Some(TypeName::Usr(_)) => {
+                // must be a user-defined function
+                Op::Procedure {
+                    name: name.clone(),
+                    args,
+                }
+            }
+            Some(TypeName::Sys(tname)) => {
+                use Intrinsic::*;
+                use SysTypeName::*;
+
+                let intrinsic = match (tname, name.as_ref()) {
+                    // boolean
+                    (Boolean, "not") => {
+                        let a1 = Self::unpack_expr_1(args, unified_args)?;
+                        Not(a1)
+                    }
+                    (Boolean, "and") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        And(a1, a2)
+                    }
+                    (Boolean, "or") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        Or(a1, a2)
+                    }
+                    (Boolean, "xor") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        Xor(a1, a2)
+                    }
+                    // integer
+                    (Integer, "eq") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntEq(a1, a2)
+                    }
+                    (Integer, "ne") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntNe(a1, a2)
+                    }
+                    (Integer, "lt") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntLt(a1, a2)
+                    }
+                    (Integer, "le") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntLe(a1, a2)
+                    }
+                    (Integer, "ge") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntGe(a1, a2)
+                    }
+                    (Integer, "gt") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntGt(a1, a2)
+                    }
+                    (Integer, "add") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntAdd(a1, a2)
+                    }
+                    (Integer, "sub") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntSub(a1, a2)
+                    }
+                    (Integer, "mul") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntMul(a1, a2)
+                    }
+                    (Integer, "div") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntDiv(a1, a2)
+                    }
+                    (Integer, "rem") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        IntRem(a1, a2)
+                    }
+                    // rational
+                    (Rational, "eq") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumEq(a1, a2)
+                    }
+                    (Rational, "ne") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumNe(a1, a2)
+                    }
+                    (Rational, "lt") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumLt(a1, a2)
+                    }
+                    (Rational, "le") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumLe(a1, a2)
+                    }
+                    (Rational, "ge") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumGe(a1, a2)
+                    }
+                    (Rational, "gt") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumGt(a1, a2)
+                    }
+                    (Rational, "add") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumAdd(a1, a2)
+                    }
+                    (Rational, "sub") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumSub(a1, a2)
+                    }
+                    (Rational, "mul") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumMul(a1, a2)
+                    }
+                    (Rational, "div") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        NumDiv(a1, a2)
+                    }
+                    // text
+                    (Text, "eq") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        StrEq(a1, a2)
+                    }
+                    (Text, "ne") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        StrNe(a1, a2)
+                    }
+                    (Text, "lt") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        StrLt(a1, a2)
+                    }
+                    (Text, "le") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        StrLe(a1, a2)
+                    }
+                    // cloak
+                    (Cloak, "shield") => {
+                        let a1 = Self::unpack_expr_1(args, unified_args)?;
+                        BoxShield(a1)
+                    }
+                    (Cloak, "reveal") => {
+                        let a1 = Self::unpack_expr_1(args, unified_args)?;
+                        BoxReveal(a1)
+                    }
+                    // seq
+                    (Seq, "empty") => bail!("[invariant] unexpected"),
+                    (Seq, "length") => {
+                        let a1 = Self::unpack_expr_1(args, unified_args)?;
+                        SeqLength(a1)
+                    }
+                    (Seq, "append") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        SeqAppend(a1, a2)
+                    }
+                    (Seq, "at_unchecked") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        SeqAt(a1, a2)
+                    }
+                    (Seq, "includes") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        SeqIncludes(a1, a2)
+                    }
+                    // set
+                    (Set, "empty") => bail!("[invariant] unexpected"),
+                    (Set, "length") => {
+                        let a1 = Self::unpack_expr_1(args, unified_args)?;
+                        SetLength(a1)
+                    }
+                    (Set, "insert") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        SetInsert(a1, a2)
+                    }
+                    (Set, "contains") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        SetContains(a1, a2)
+                    }
+                    // map
+                    (Map, "empty") => bail!("[invariant] unexpected"),
+                    (Map, "length") => {
+                        let a1 = Self::unpack_expr_1(args, unified_args)?;
+                        MapLength(a1)
+                    }
+                    (Map, "put_unchecked") => {
+                        let (a1, a2, a3) = Self::unpack_expr_3(args, unified_args)?;
+                        MapPut(a1, a2, a3)
+                    }
+                    (Map, "get_unchecked") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        MapGet(a1, a2)
+                    }
+                    (Map, "contains_key") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        MapContainsKey(a1, a2)
+                    }
+                    // error
+                    (Error, "fresh") => bail!("[invariant] unexpected"),
+                    (Error, "merge") => {
+                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
+                        ErrMerge(a1, a2)
+                    }
+                    // should have exhausted all
+                    _ => bail!("[invariant] no such intrinsic"),
+                };
+                Op::Intrinsic(intrinsic)
+            }
+            Some(TypeName::Param(_)) => bail!("[invariant] type parameter as qualifier"),
+        };
+
+        // return the operation
+        Ok((op, unified_ret))
+    }
+
+    /// Utility to unpack 1 argument
+    fn unpack_expr_1(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<Expr> {
+        assert_eq!(exprs.len(), tys.len());
+        let mut iter = exprs.into_iter().zip(tys.into_iter());
+        let e1 = match iter.next() {
+            None => bail!("expect 1 argument"),
+            Some((mut e, t)) => {
+                e.set_ty(t);
+                e
+            }
+        };
+        if iter.next().is_some() {
+            bail!("expect 1 argument");
+        }
+        Ok(e1)
+    }
+
+    /// Utility to unpack 2 arguments
+    fn unpack_expr_2(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<(Expr, Expr)> {
+        assert_eq!(exprs.len(), tys.len());
+        let mut iter = exprs.into_iter().zip(tys.into_iter());
+        let e1 = match iter.next() {
+            None => bail!("expect 2 arguments"),
+            Some((mut e, t)) => {
+                e.set_ty(t);
+                e
+            }
+        };
+        let e2 = match iter.next() {
+            None => bail!("expect 2 arguments"),
+            Some((mut e, t)) => {
+                e.set_ty(t);
+                e
+            }
+        };
+        if iter.next().is_some() {
+            bail!("expect 2 arguments");
+        }
+        Ok((e1, e2))
+    }
+
+    /// Utility to unpack 3 arguments
+    fn unpack_expr_3(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<(Expr, Expr, Expr)> {
+        assert_eq!(exprs.len(), tys.len());
+        let mut iter = exprs.into_iter().zip(tys.into_iter());
+        let e1 = match iter.next() {
+            None => bail!("expect 3 arguments"),
+            Some((mut e, t)) => {
+                e.set_ty(t);
+                e
+            }
+        };
+        let e2 = match iter.next() {
+            None => bail!("expect 3 arguments"),
+            Some((mut e, t)) => {
+                e.set_ty(t);
+                e
+            }
+        };
+        let e3 = match iter.next() {
+            None => bail!("expect 3 arguments"),
+            Some((mut e, t)) => {
+                e.set_ty(t);
+                e
+            }
+        };
+        if iter.next().is_some() {
+            bail!("expect 3 arguments");
+        }
+        Ok((e1, e2, e3))
     }
 
     /// Report number of entries in the database
@@ -310,6 +667,40 @@ impl From<&TypeTag> for TypeRef {
     }
 }
 
+impl TypeRef {
+    /// Apply type parameter substitution
+    pub fn substitute_params(
+        tag: &TypeTag,
+        substitute: &BTreeMap<TypeParamName, TypeRef>,
+    ) -> anyhow::Result<TypeRef> {
+        let updated = match tag {
+            TypeTag::Boolean => TypeRef::Boolean,
+            TypeTag::Integer => TypeRef::Integer,
+            TypeTag::Rational => TypeRef::Rational,
+            TypeTag::Text => TypeRef::Text,
+            TypeTag::Cloak(sub) => TypeRef::Cloak(Self::substitute_params(sub, substitute)?.into()),
+            TypeTag::Seq(sub) => TypeRef::Seq(Self::substitute_params(sub, substitute)?.into()),
+            TypeTag::Set(sub) => TypeRef::Set(Self::substitute_params(sub, substitute)?.into()),
+            TypeTag::Map(key, val) => TypeRef::Map(
+                Self::substitute_params(key, substitute)?.into(),
+                Self::substitute_params(val, substitute)?.into(),
+            ),
+            TypeTag::Error => TypeRef::Error,
+            TypeTag::User(name, args) => TypeRef::User(
+                name.clone(),
+                args.iter()
+                    .map(|t| Self::substitute_params(t, substitute))
+                    .collect::<anyhow::Result<_>>()?,
+            ),
+            TypeTag::Parameter(name) => substitute
+                .get(name)
+                .ok_or_else(|| anyhow!("no such type parameter"))?
+                .clone(),
+        };
+        Ok(updated)
+    }
+}
+
 /// An equivalence group of type variables
 #[derive(Clone)]
 struct TypeEquivGroup {
@@ -318,6 +709,7 @@ struct TypeEquivGroup {
 }
 
 /// Context manager for type unification
+#[derive(Clone)]
 pub struct TypeUnifier {
     /// holds the set of possible candidates associated with each type parameter
     params: BTreeMap<usize, usize>,
@@ -355,7 +747,7 @@ impl TypeUnifier {
     }
 
     /// merge the type constrains
-    fn merge_group(&mut self, l: &TypeVar, h: &TypeVar) -> Option<TypeRef> {
+    fn merge_group(&mut self, l: &TypeVar, h: &TypeVar) -> anyhow::Result<TypeRef> {
         let idx_l = *self.params.get(&l.0).unwrap();
         let idx_h = *self.params.get(&h.0).unwrap();
 
@@ -366,7 +758,7 @@ impl TypeUnifier {
         // unify the equivalence set
         if !group_l.vars.is_disjoint(&group_h.vars) {
             // this is an invariant violation
-            return None;
+            bail!("[invariant] non-disjoint equivalence set");
         }
         group_l.vars.extend(group_h.vars.into_iter());
 
@@ -399,11 +791,11 @@ impl TypeUnifier {
         *self.params.get_mut(&h.0).unwrap() = idx_l;
 
         // return the inferred type
-        Some(inferred)
+        Ok(inferred)
     }
 
     /// Assign the constraint
-    fn update_group(&mut self, v: &TypeVar, t: &TypeRef) -> Option<TypeRef> {
+    fn update_group(&mut self, v: &TypeVar, t: &TypeRef) -> anyhow::Result<TypeRef> {
         // obtain the group
         let idx = *self.params.get(&v.0).unwrap();
         let mut group = self.groups.get(idx).unwrap().clone();
@@ -428,11 +820,11 @@ impl TypeUnifier {
         self.groups.insert(idx, group);
 
         // return the inferred type
-        Some(inferred)
+        Ok(inferred)
     }
 
     /// Unify two types
-    pub fn unify(&mut self, lhs: &TypeRef, rhs: &TypeRef) -> Option<TypeRef> {
+    pub fn unify(&mut self, lhs: &TypeRef, rhs: &TypeRef) -> anyhow::Result<TypeRef> {
         use TypeRef::*;
 
         let inferred = match (lhs, rhs) {
@@ -464,7 +856,7 @@ impl TypeUnifier {
             // user-define types
             (User(name_lhs, vars_lhs), User(name_rhs, vars_rhs)) => {
                 if name_lhs != name_rhs {
-                    return None;
+                    bail!("type mismatch");
                 }
                 assert_eq!(vars_lhs.len(), vars_rhs.len());
 
@@ -477,13 +869,13 @@ impl TypeUnifier {
             // type parameters
             (Parameter(name_lhs), Parameter(name_rhs)) => {
                 if name_lhs != name_rhs {
-                    return None;
+                    bail!("type mismatch");
                 }
                 Parameter(name_lhs.clone())
             }
             // all other cases are considered mismatch
-            _ => return None,
+            _ => bail!("type mismatch"),
         };
-        Some(inferred)
+        Ok(inferred)
     }
 }

@@ -255,6 +255,7 @@ dependencies = [
 name = "rusmart-smt-derive"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "itertools",
  "log",
  "proc-macro2",

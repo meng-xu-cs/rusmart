@@ -375,7 +375,7 @@ pub struct ContextWithSig {
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     /// a database for inference
-    infer: InferDatabase,
+    pub infer: InferDatabase,
 }
 
 impl ContextWithSig {
