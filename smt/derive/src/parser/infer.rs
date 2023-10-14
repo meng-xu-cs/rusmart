@@ -537,7 +537,7 @@ impl InferDatabase {
     /// Utility to unpack 1 argument
     fn unpack_expr_1(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<Expr> {
         assert_eq!(exprs.len(), tys.len());
-        let mut iter = exprs.into_iter().zip(tys.into_iter());
+        let mut iter = exprs.into_iter().zip(tys);
         let e1 = match iter.next() {
             None => bail!("expect 1 argument"),
             Some((mut e, t)) => {
@@ -554,7 +554,7 @@ impl InferDatabase {
     /// Utility to unpack 2 arguments
     fn unpack_expr_2(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<(Expr, Expr)> {
         assert_eq!(exprs.len(), tys.len());
-        let mut iter = exprs.into_iter().zip(tys.into_iter());
+        let mut iter = exprs.into_iter().zip(tys);
         let e1 = match iter.next() {
             None => bail!("expect 2 arguments"),
             Some((mut e, t)) => {
@@ -578,7 +578,7 @@ impl InferDatabase {
     /// Utility to unpack 3 arguments
     fn unpack_expr_3(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<(Expr, Expr, Expr)> {
         assert_eq!(exprs.len(), tys.len());
-        let mut iter = exprs.into_iter().zip(tys.into_iter());
+        let mut iter = exprs.into_iter().zip(tys);
         let e1 = match iter.next() {
             None => bail!("expect 3 arguments"),
             Some((mut e, t)) => {
@@ -753,14 +753,14 @@ impl TypeUnifier {
 
         // obtain groups
         let mut group_l = self.groups.get(idx_l).unwrap().clone();
-        let mut group_h = self.groups.get(idx_h).unwrap().clone();
+        let group_h = self.groups.get(idx_h).unwrap().clone();
 
         // unify the equivalence set
         if !group_l.vars.is_disjoint(&group_h.vars) {
             // this is an invariant violation
             bail!("[invariant] non-disjoint equivalence set");
         }
-        group_l.vars.extend(group_h.vars.into_iter());
+        group_l.vars.extend(group_h.vars);
 
         // check whether they unity to the same type, if any
         let inferred = match (group_l.ty.as_ref(), group_h.ty.as_ref()) {

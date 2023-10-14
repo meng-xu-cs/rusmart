@@ -390,7 +390,7 @@ impl ContextWithSig {
         let mut body_impls = BTreeMap::new();
         for (name, (sig, stmts)) in &self.impls {
             trace!("handling impl body: {}", name);
-            let body = ExprParserRoot::new(&self, Kind::Impl, &sig).parse(stmts)?;
+            let body = ExprParserRoot::new(&self, Kind::Impl, sig).parse(stmts)?;
             trace!("impl body analyzed: {}", name);
             body_impls.insert(name.clone(), body);
         }
@@ -399,7 +399,7 @@ impl ContextWithSig {
         let mut body_specs = BTreeMap::new();
         for (name, (sig, stmts)) in &self.specs {
             trace!("handling spec body: {}", name);
-            let body = ExprParserRoot::new(&self, Kind::Spec, &sig).parse(stmts)?;
+            let body = ExprParserRoot::new(&self, Kind::Spec, sig).parse(stmts)?;
             trace!("spec body analyzed: {}", name);
             body_specs.insert(name.clone(), body);
         }
