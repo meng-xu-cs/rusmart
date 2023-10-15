@@ -508,13 +508,15 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     }
                     FuncName::Usr(name) => {
                         // qualifier should never be a type parameter or an intrinsic type
-                        let (qualifier, qsegment) = match class {
-                            None => bail_on!(ident, "expect qualifier"),
-                            Some(q) => q,
+                        let qualifier_opt = match class {
+                            None => None,
+                            Some((tname, qsegment)) => {
+                                if matches!(tname, TypeName::Param(_)) {
+                                    bail_on!(qsegment, "type parameter cannot be a qualifier");
+                                }
+                                Some(tname)
+                            }
                         };
-                        if !matches!(qualifier, TypeName::Usr(_)) {
-                            bail_on!(qsegment, "user-defined type qualifier only");
-                        }
 
                         // collect type arguments
                         let ty_args_opt = match arguments {
@@ -540,7 +542,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         let inferred = self.root.ctxt.infer.get_inference(
                             unifier,
                             &name,
-                            Some(qualifier).as_ref(),
+                            qualifier_opt.as_ref(),
                             ty_args_opt.as_deref(),
                             parsed_args,
                             &self.exp_ty,
@@ -745,4 +747,16 @@ mod tests {
             x.eq(y).ne(T::ne(x, y))
         }
     });
+
+    unit_test!(call_another, {
+        #[smt_impl]
+        fn foo<T: SMT>(x: T, y: T) -> Boolean {
+            x.eq(y).ne(T::ne(x, y))
+        }
+
+        #[smt_impl]
+        fn bar() -> Boolean {
+            foo(true.into(), false.into())
+        }
+    });j
 }
