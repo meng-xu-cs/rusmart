@@ -10,20 +10,20 @@ use crate::parser::infer::TypeRef;
 pub enum Intrinsic {
     /// `Boolean::from`
     BoolVal(bool),
+    /// `Boolean::eq`
+    BoolEq(Expr, Expr),
+    /// `Boolean::ne`
+    BoolNe(Expr, Expr),
     /// `Boolean::not`
-    Not(Expr),
+    BoolNot(Expr),
     /// `Boolean::and`
-    And(Expr, Expr),
+    BoolAnd(Expr, Expr),
     /// `Boolean::or`
-    Or(Expr, Expr),
+    BoolOr(Expr, Expr),
     /// `Boolean::xor`
-    Xor(Expr, Expr),
+    BoolXor(Expr, Expr),
     /// `Integer::from`
     IntVal(i128),
-    /// `Integer::eq`
-    IntEq(Expr, Expr),
-    /// `Integer::ne`
-    IntNe(Expr, Expr),
     /// `Integer::lt`
     IntLt(Expr, Expr),
     /// `Integer::le`
@@ -44,10 +44,6 @@ pub enum Intrinsic {
     IntRem(Expr, Expr),
     /// `Rational::from`
     NumVal(f64),
-    /// `Rational::eq`
-    NumEq(Expr, Expr),
-    /// `Rational::ne`
-    NumNe(Expr, Expr),
     /// `Rational::lt`
     NumLt(Expr, Expr),
     /// `Rational::le`
@@ -66,10 +62,6 @@ pub enum Intrinsic {
     NumDiv(Expr, Expr),
     /// `Text::from`
     StrVal(String),
-    /// `Text::eq`
-    StrEq(Expr, Expr),
-    /// `Text::ne`
-    StrNe(Expr, Expr),
     /// `Text::lt`
     StrLt(Expr, Expr),
     /// `Text::le`
@@ -110,6 +102,10 @@ pub enum Intrinsic {
     ErrFresh,
     /// `Error::merge`
     ErrMerge(Expr, Expr),
+    /// `<any-smt-type>::eq`
+    SmtEq(Expr, Expr),
+    /// `<any-smt-type>::ne`
+    SmtNe(Expr, Expr),
 }
 
 impl Intrinsic {

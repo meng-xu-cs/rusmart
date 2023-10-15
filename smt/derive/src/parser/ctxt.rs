@@ -346,12 +346,6 @@ impl ContextWithType {
 
         // populate the inference database
         let mut infer = InferDatabase::with_intrinsics();
-
-        // register SMT types as they all implement the SMT trait
-        for (ty, def) in &types {
-            infer.register_user_type(ty, def.head());
-        }
-        // register user-implemented functions
         for (name, (sig, _)) in unpacked_impls.iter() {
             infer.register_user_func(name, sig);
         }

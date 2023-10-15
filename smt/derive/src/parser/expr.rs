@@ -403,50 +403,79 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                 // case on function names
                 match FuncName::try_from(ident)? {
-                    FuncName::Sys(SysFuncName::From) => {
-                        // handle literal conversion
+                    FuncName::Sys(name) => {
+                        // none of the smt-system functions take path arguments
                         if !matches!(arguments, PathArguments::None) {
                             bail_on!(arguments, "unexpected type arguments");
                         }
                         bail_if_non_empty!(args);
 
-                        let (intrinsic, ty) = match class {
-                            None => bail_on!(ident, "expect qualifier"),
-                            Some((TypeName::Param(_) | TypeName::Usr(_), segment)) => {
-                                bail_on!(segment, "expect an intrinsic qualifier");
-                            }
-                            Some((TypeName::Sys(tname), segment)) => match tname {
-                                SysTypeName::Boolean => (
-                                    Intrinsic::BoolVal(Intrinsic::unpack_lit_bool(args)?),
-                                    TypeRef::Boolean,
-                                ),
-                                SysTypeName::Integer => (
-                                    Intrinsic::IntVal(Intrinsic::unpack_lit_int(args)?),
-                                    TypeRef::Integer,
-                                ),
-                                SysTypeName::Rational => (
-                                    Intrinsic::NumVal(Intrinsic::unpack_lit_float(args)?),
-                                    TypeRef::Rational,
-                                ),
-                                SysTypeName::Text => (
-                                    Intrinsic::StrVal(Intrinsic::unpack_lit_str(args)?),
-                                    TypeRef::Text,
-                                ),
-                                _ => bail_on!(segment, "expect a literal-enabled qualifier"),
-                            },
-                        };
+                        match name {
+                            SysFuncName::From => {
+                                // handle literal conversion
+                                let (intrinsic, ty) = match class {
+                                    None => bail_on!(ident, "expect qualifier"),
+                                    Some((TypeName::Param(_) | TypeName::Usr(_), segment)) => {
+                                        bail_on!(segment, "expect an intrinsic qualifier");
+                                    }
+                                    Some((TypeName::Sys(tname), segment)) => match tname {
+                                        SysTypeName::Boolean => (
+                                            Intrinsic::BoolVal(Intrinsic::unpack_lit_bool(args)?),
+                                            TypeRef::Boolean,
+                                        ),
+                                        SysTypeName::Integer => (
+                                            Intrinsic::IntVal(Intrinsic::unpack_lit_int(args)?),
+                                            TypeRef::Integer,
+                                        ),
+                                        SysTypeName::Rational => (
+                                            Intrinsic::NumVal(Intrinsic::unpack_lit_float(args)?),
+                                            TypeRef::Rational,
+                                        ),
+                                        SysTypeName::Text => (
+                                            Intrinsic::StrVal(Intrinsic::unpack_lit_str(args)?),
+                                            TypeRef::Text,
+                                        ),
+                                        _ => {
+                                            bail_on!(segment, "expect a literal-enabled qualifier")
+                                        }
+                                    },
+                                };
 
-                        // unity the type and then build the instruction
-                        let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
-                            Ok(unified) => unified,
-                            Err(e) => bail_on!(target, "{}", e),
-                        };
-                        Inst {
-                            op: Op::Intrinsic(intrinsic).into(),
-                            ty: ty_unified,
+                                // unity the type and then build the instruction
+                                let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
+                                    Ok(unified) => unified,
+                                    Err(e) => bail_on!(target, "{}", e),
+                                };
+                                Inst {
+                                    op: Op::Intrinsic(intrinsic).into(),
+                                    ty: ty_unified,
+                                }
+                            }
+                            SysFuncName::Into => bail_on!(expr_call, "unexpected"),
+                            SysFuncName::Eq | SysFuncName::Ne => {
+                                // collect arguments
+                                let mut iter = args.iter();
+                                let lhs = bail_if_missing!(iter.next(), args, "expect 2 arguments");
+                                let rhs = bail_if_missing!(iter.next(), args, "expect 2 arguments");
+                                bail_if_exists!(iter.next());
+
+                                // process it
+                                let (parsed_lhs, parsed_rhs) =
+                                    self.handle_equality_inequality(unifier, lhs, rhs, target)?;
+
+                                // construct the operator
+                                let intrinsic = match name {
+                                    SysFuncName::Eq => Intrinsic::SmtEq(parsed_lhs, parsed_rhs),
+                                    SysFuncName::Ne => Intrinsic::SmtNe(parsed_lhs, parsed_rhs),
+                                    _ => panic!("invariant violation"),
+                                };
+                                Inst {
+                                    op: Op::Intrinsic(intrinsic).into(),
+                                    ty: TypeRef::Boolean,
+                                }
+                            }
                         }
                     }
-                    FuncName::Sys(SysFuncName::Into) => bail_on!(expr_call, "unexpected"),
                     FuncName::Usr(name) => {
                         // collect type arguments
                         let ty_args_opt = match arguments {
@@ -499,23 +528,49 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 } = expr_method;
 
                 match FuncName::try_from(method)? {
-                    FuncName::Sys(SysFuncName::Into) => {
-                        // handle literal conversion
+                    FuncName::Sys(name) => {
+                        // none of the smt-system functions take path arguments
                         bail_if_exists!(turbofish);
-                        bail_if_non_empty!(args);
-                        let (intrinsic, ty) = Intrinsic::parse_literal_into(receiver)?;
 
-                        // unity the type and then build the instruction
-                        let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
-                            Ok(unified) => unified,
-                            Err(e) => bail_on!(target, "{}", e),
-                        };
-                        Inst {
-                            op: Op::Intrinsic(intrinsic).into(),
-                            ty: ty_unified,
+                        match name {
+                            SysFuncName::Into => {
+                                bail_if_non_empty!(args);
+                                let (intrinsic, ty) = Intrinsic::parse_literal_into(receiver)?;
+
+                                // unity the type and then build the instruction
+                                let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
+                                    Ok(unified) => unified,
+                                    Err(e) => bail_on!(target, "{}", e),
+                                };
+                                Inst {
+                                    op: Op::Intrinsic(intrinsic).into(),
+                                    ty: ty_unified,
+                                }
+                            }
+                            SysFuncName::From => bail_on!(expr_method, "unexpected"),
+                            SysFuncName::Eq | SysFuncName::Ne => {
+                                // collect arguments
+                                let mut iter = args.iter();
+                                let rhs = bail_if_missing!(iter.next(), args, "expect 1 argument");
+                                bail_if_exists!(iter.next());
+
+                                // process it
+                                let (parsed_lhs, parsed_rhs) = self
+                                    .handle_equality_inequality(unifier, receiver, rhs, target)?;
+
+                                // construct the operator
+                                let intrinsic = match name {
+                                    SysFuncName::Eq => Intrinsic::SmtEq(parsed_lhs, parsed_rhs),
+                                    SysFuncName::Ne => Intrinsic::SmtNe(parsed_lhs, parsed_rhs),
+                                    _ => panic!("invariant violation"),
+                                };
+                                Inst {
+                                    op: Op::Intrinsic(intrinsic).into(),
+                                    ty: TypeRef::Boolean,
+                                }
+                            }
                         }
                     }
-                    FuncName::Sys(SysFuncName::From) => bail_on!(expr_method, "unexpected"),
                     FuncName::Usr(name) => {
                         // collect type arguments, if any
                         let ty_args_opt = match turbofish {
@@ -569,6 +624,38 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
             }
         };
         Ok(converted)
+    }
+
+    /// Utility function on parsing equality and inequalities
+    fn handle_equality_inequality(
+        &self,
+        unifier: &mut TypeUnifier,
+        lhs: &Exp,
+        rhs: &Exp,
+        host: &Exp,
+    ) -> Result<(Expr, Expr)> {
+        // parse the arguments by making their types as variables
+        let mut parsed_lhs = self
+            .fork(TypeRef::Var(unifier.mk_var()))
+            .convert_expr(unifier, lhs)?;
+        let mut parsed_rhs = self
+            .fork(TypeRef::Var(unifier.mk_var()))
+            .convert_expr(unifier, rhs)?;
+
+        // unify the types
+        match unifier.unify(&TypeRef::Boolean, &self.exp_ty) {
+            Ok(t) => t,
+            Err(e) => bail_on!(host, "{}", e),
+        };
+        let arg_ty = match unifier.unify(parsed_lhs.ty(), parsed_rhs.ty()) {
+            Ok(t) => t,
+            Err(e) => bail_on!(host, "{}", e),
+        };
+        parsed_lhs.set_ty(arg_ty.clone());
+        parsed_rhs.set_ty(arg_ty);
+
+        // return the expressions
+        Ok((parsed_lhs, parsed_rhs))
     }
 }
 

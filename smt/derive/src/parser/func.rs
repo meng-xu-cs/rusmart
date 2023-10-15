@@ -10,11 +10,13 @@ use crate::parser::name::{ReservedIdent, UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
 use crate::parser::util::PatUtil;
 
-/// Reserved func name
+/// Reserved function name
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SysFuncName {
     From,
     Into,
+    Eq,
+    Ne,
 }
 
 impl ReservedIdent for SysFuncName {
@@ -22,6 +24,8 @@ impl ReservedIdent for SysFuncName {
         let matched = match ident.to_string().as_str() {
             "from" => Self::From,
             "into" => Self::Into,
+            "eq" => Self::Eq,
+            "ne" => Self::Ne,
             _ => return None,
         };
         Some(matched)

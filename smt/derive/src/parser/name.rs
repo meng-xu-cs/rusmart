@@ -115,7 +115,7 @@ impl UsrFuncName {
             // arithmetic
             | "add" | "sub" | "mul" | "div" | "rem"
             // comparison
-            | "eq" | "ne" | "lt" | "le" | "ge" | "gt"
+            | "lt" | "le" | "ge" | "gt"
             // error
             | "fresh" | "merge"
             // cloak

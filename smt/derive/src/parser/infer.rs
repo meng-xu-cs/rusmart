@@ -33,7 +33,7 @@ impl InferDatabase {
         }
     }
 
-    /// Register an intrinsic
+    /// Register a built-in intrinsic function
     fn builtin(
         &mut self,
         ident: &str,
@@ -67,10 +67,10 @@ impl InferDatabase {
         let t = || Parameter(TypeParamName::intrinsic("T"));
         let k = || Parameter(TypeParamName::intrinsic("K"));
         let v = || Parameter(TypeParamName::intrinsic("V"));
-        let box_t = || Cloak(t().into());
-        let seq_t = || Seq(t().into());
-        let set_t = || Set(t().into());
-        let map_kv = || Map(k().into(), v().into());
+        let box_t = || Cloak(Box::new(t()));
+        let seq_t = || Seq(Box::new(t()));
+        let set_t = || Set(Box::new(t()));
+        let map_kv = || Map(Box::new(k()), Box::new(v()));
 
         let na = || Generics::intrinsic(vec![]);
         let with_t = || Generics::intrinsic(vec![TypeParamName::intrinsic("T")]);
@@ -104,27 +104,6 @@ impl InferDatabase {
         db.builtin("div", Q::Rational, na(), vec![Rational, Rational], Rational);
 
         db.builtin("rem", Q::Integer, na(), vec![Integer, Integer], Integer);
-
-        // (in)equality operators
-        db.builtin("eq", Q::Boolean, na(), vec![Boolean, Boolean], Boolean);
-        db.builtin("eq", Q::Integer, na(), vec![Integer, Integer], Boolean);
-        db.builtin("eq", Q::Rational, na(), vec![Rational, Rational], Boolean);
-        db.builtin("eq", Q::Text, na(), vec![Text, Text], Boolean);
-        db.builtin("eq", Q::Cloak, with_t(), vec![box_t(), box_t()], Boolean);
-        db.builtin("eq", Q::Seq, with_t(), vec![seq_t(), seq_t()], Boolean);
-        db.builtin("eq", Q::Set, with_t(), vec![set_t(), set_t()], Boolean);
-        db.builtin("eq", Q::Map, with_kv(), vec![map_kv(), map_kv()], Boolean);
-        db.builtin("eq", Q::Error, na(), vec![Error, Error], Boolean);
-
-        db.builtin("ne", Q::Boolean, na(), vec![Boolean, Boolean], Boolean);
-        db.builtin("ne", Q::Integer, na(), vec![Integer, Integer], Boolean);
-        db.builtin("ne", Q::Rational, na(), vec![Rational, Rational], Boolean);
-        db.builtin("ne", Q::Text, na(), vec![Text, Text], Boolean);
-        db.builtin("ne", Q::Cloak, with_t(), vec![box_t(), box_t()], Boolean);
-        db.builtin("ne", Q::Seq, with_t(), vec![seq_t(), seq_t()], Boolean);
-        db.builtin("ne", Q::Set, with_t(), vec![set_t(), set_t()], Boolean);
-        db.builtin("ne", Q::Map, with_kv(), vec![map_kv(), map_kv()], Boolean);
-        db.builtin("ne", Q::Error, na(), vec![Error, Error], Boolean);
 
         // comparison operators
         db.builtin("lt", Q::Integer, na(), vec![Integer, Integer], Boolean);
@@ -194,38 +173,6 @@ impl InferDatabase {
         db
     }
 
-    /// Register a user-defined SMT type
-    pub fn register_user_type(&mut self, name: &UsrTypeName, generics: &Generics) {
-        let ty_params = generics.vec();
-        let ty_tag = TypeTag::User(
-            name.clone(),
-            ty_params
-                .iter()
-                .map(|p| TypeTag::Parameter(p.clone()))
-                .collect(),
-        );
-
-        let mut register = |builtin: &str| {
-            let func = TypeFn {
-                qualifier: Some(TypeName::Usr(name.clone())),
-                generics: generics.clone(),
-                params: vec![ty_tag.clone(), ty_tag.clone()],
-                ret_ty: TypeTag::Boolean,
-            };
-            let inserted = self
-                .methods
-                .entry(UsrFuncName::intrinsic(builtin))
-                .or_default()
-                .insert(func);
-            if !inserted {
-                panic!("duplicated registration of smt type: {}::{}", name, builtin);
-            }
-        };
-
-        register("eq");
-        register("ne");
-    }
-
     /// Register a user-defined function (spec or impl)
     pub fn register_user_func(&mut self, name: &UsrFuncName, sig: &FuncSig) {
         let params = sig.param_vec().iter().map(|(_, ty)| ty.clone()).collect();
@@ -237,6 +184,7 @@ impl InferDatabase {
             _ => None,
         };
 
+        // register this function
         let func = TypeFn {
             qualifier,
             generics: sig.generics().clone(),
@@ -350,29 +298,21 @@ impl InferDatabase {
                     // boolean
                     (Boolean, "not") => {
                         let a1 = Self::unpack_expr_1(args, unified_args)?;
-                        Not(a1)
+                        BoolNot(a1)
                     }
                     (Boolean, "and") => {
                         let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        And(a1, a2)
+                        BoolAnd(a1, a2)
                     }
                     (Boolean, "or") => {
                         let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        Or(a1, a2)
+                        BoolOr(a1, a2)
                     }
                     (Boolean, "xor") => {
                         let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        Xor(a1, a2)
+                        BoolXor(a1, a2)
                     }
                     // integer
-                    (Integer, "eq") => {
-                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        IntEq(a1, a2)
-                    }
-                    (Integer, "ne") => {
-                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        IntNe(a1, a2)
-                    }
                     (Integer, "lt") => {
                         let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
                         IntLt(a1, a2)
@@ -410,14 +350,6 @@ impl InferDatabase {
                         IntRem(a1, a2)
                     }
                     // rational
-                    (Rational, "eq") => {
-                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        NumEq(a1, a2)
-                    }
-                    (Rational, "ne") => {
-                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        NumNe(a1, a2)
-                    }
                     (Rational, "lt") => {
                         let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
                         NumLt(a1, a2)
@@ -451,14 +383,6 @@ impl InferDatabase {
                         NumDiv(a1, a2)
                     }
                     // text
-                    (Text, "eq") => {
-                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        StrEq(a1, a2)
-                    }
-                    (Text, "ne") => {
-                        let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
-                        StrNe(a1, a2)
-                    }
                     (Text, "lt") => {
                         let (a1, a2) = Self::unpack_expr_2(args, unified_args)?;
                         StrLt(a1, a2)
