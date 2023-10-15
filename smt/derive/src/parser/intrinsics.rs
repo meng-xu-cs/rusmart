@@ -10,10 +10,6 @@ use crate::parser::infer::TypeRef;
 pub enum Intrinsic {
     /// `Boolean::from`
     BoolVal(bool),
-    /// `Boolean::eq`
-    BoolEq(Expr, Expr),
-    /// `Boolean::ne`
-    BoolNe(Expr, Expr),
     /// `Boolean::not`
     BoolNot(Expr),
     /// `Boolean::and`

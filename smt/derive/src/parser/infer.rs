@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 
 use crate::parser::expr::{Expr, Op};
 use crate::parser::func::FuncSig;
@@ -206,7 +206,7 @@ impl InferDatabase {
         ty_args_opt: Option<&[TypeTag]>,
         args: Vec<Expr>,
         rval: &TypeRef,
-    ) -> anyhow::Result<(Op, TypeRef)> {
+    ) -> Result<(Op, TypeRef)> {
         let mut suitable = None;
         for candidate in self
             .methods
@@ -254,7 +254,7 @@ impl InferDatabase {
                 .params
                 .iter()
                 .map(|t| TypeRef::substitute_params(t, &param_substitutes))
-                .collect::<anyhow::Result<Vec<_>>>()?;
+                .collect::<Result<Vec<_>>>()?;
             let ret_ty = TypeRef::substitute_params(&candidate.ret_ty, &param_substitutes)?;
 
             // unify all types
@@ -469,7 +469,7 @@ impl InferDatabase {
     }
 
     /// Utility to unpack 1 argument
-    fn unpack_expr_1(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<Expr> {
+    fn unpack_expr_1(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> Result<Expr> {
         assert_eq!(exprs.len(), tys.len());
         let mut iter = exprs.into_iter().zip(tys);
         let e1 = match iter.next() {
@@ -486,7 +486,7 @@ impl InferDatabase {
     }
 
     /// Utility to unpack 2 arguments
-    fn unpack_expr_2(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<(Expr, Expr)> {
+    fn unpack_expr_2(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> Result<(Expr, Expr)> {
         assert_eq!(exprs.len(), tys.len());
         let mut iter = exprs.into_iter().zip(tys);
         let e1 = match iter.next() {
@@ -510,7 +510,7 @@ impl InferDatabase {
     }
 
     /// Utility to unpack 3 arguments
-    fn unpack_expr_3(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> anyhow::Result<(Expr, Expr, Expr)> {
+    fn unpack_expr_3(exprs: Vec<Expr>, tys: Vec<TypeRef>) -> Result<(Expr, Expr, Expr)> {
         assert_eq!(exprs.len(), tys.len());
         let mut iter = exprs.into_iter().zip(tys);
         let e1 = match iter.next() {
@@ -606,7 +606,7 @@ impl TypeRef {
     pub fn substitute_params(
         tag: &TypeTag,
         substitute: &BTreeMap<TypeParamName, TypeRef>,
-    ) -> anyhow::Result<TypeRef> {
+    ) -> Result<TypeRef> {
         let updated = match tag {
             TypeTag::Boolean => TypeRef::Boolean,
             TypeTag::Integer => TypeRef::Integer,
@@ -624,7 +624,7 @@ impl TypeRef {
                 name.clone(),
                 args.iter()
                     .map(|t| Self::substitute_params(t, substitute))
-                    .collect::<anyhow::Result<_>>()?,
+                    .collect::<Result<_>>()?,
             ),
             TypeTag::Parameter(name) => substitute
                 .get(name)
@@ -681,7 +681,7 @@ impl TypeUnifier {
     }
 
     /// merge the type constrains
-    fn merge_group(&mut self, l: &TypeVar, h: &TypeVar) -> anyhow::Result<TypeRef> {
+    fn merge_group(&mut self, l: &TypeVar, h: &TypeVar) -> Result<TypeRef> {
         let idx_l = *self.params.get(&l.0).unwrap();
         let idx_h = *self.params.get(&h.0).unwrap();
 
@@ -737,7 +737,7 @@ impl TypeUnifier {
     }
 
     /// Assign the constraint
-    fn update_group(&mut self, v: &TypeVar, t: &TypeRef) -> anyhow::Result<TypeRef> {
+    fn update_group(&mut self, v: &TypeVar, t: &TypeRef) -> Result<TypeRef> {
         // obtain the group
         let idx = *self.params.get(&v.0).unwrap();
         let mut group = self.groups.get(idx).unwrap().clone();
@@ -766,7 +766,7 @@ impl TypeUnifier {
     }
 
     /// Unify two types
-    pub fn unify(&mut self, lhs: &TypeRef, rhs: &TypeRef) -> anyhow::Result<TypeRef> {
+    pub fn unify(&mut self, lhs: &TypeRef, rhs: &TypeRef) -> Result<TypeRef> {
         use TypeRef::*;
 
         let inferred = match (lhs, rhs) {
@@ -819,5 +819,21 @@ impl TypeUnifier {
             _ => bail!("type mismatch"),
         };
         Ok(inferred)
+    }
+
+    /// Retrieve the assigned type for a type variable
+    pub fn retrieve_type_assigned(&self, var: &TypeVar) -> Result<TypeRef> {
+        let index = *self
+            .params
+            .get(&var.0)
+            .ok_or_else(|| anyhow!("no such type var"))?;
+        let group = self
+            .groups
+            .get(index)
+            .ok_or_else(|| anyhow!("no such equivalence group"))?;
+        group
+            .ty
+            .clone()
+            .ok_or_else(|| anyhow!("unable to infer type"))
     }
 }

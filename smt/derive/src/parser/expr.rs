@@ -67,6 +67,132 @@ impl Expr {
             Self::Block { lets: _, body } => body.ty = ty,
         }
     }
+
+    /// Visitor in pre-order
+    pub fn visit_preorder_mut<F>(&mut self, mut f: F) -> anyhow::Result<()>
+    where
+        F: FnMut(&mut Self) -> anyhow::Result<()> + Copy,
+    {
+        // pre-order invocation
+        f(self)?;
+
+        // descend into children
+        let inst = match self {
+            Expr::Unit(inst) => inst,
+            Expr::Block { lets, body } => {
+                for (_, sub) in lets {
+                    sub.visit_preorder_mut(f)?;
+                }
+                body
+            }
+        };
+
+        match inst.op.as_mut() {
+            Op::Var(_) => (),
+            Op::Phi { nodes, default } => {
+                for node in nodes {
+                    node.cond.visit_preorder_mut(f)?;
+                    node.body.visit_preorder_mut(f)?;
+                }
+                default.visit_preorder_mut(f)?;
+            }
+            Op::Intrinsic(intrinsic) => match intrinsic {
+                // boolean
+                Intrinsic::BoolVal(_) => (),
+                Intrinsic::BoolNot(e1) => e1.visit_preorder_mut(f)?,
+                Intrinsic::BoolAnd(e1, e2)
+                | Intrinsic::BoolOr(e1, e2)
+                | Intrinsic::BoolXor(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                // integer
+                Intrinsic::IntVal(_) => (),
+                Intrinsic::IntLt(e1, e2)
+                | Intrinsic::IntLe(e1, e2)
+                | Intrinsic::IntGe(e1, e2)
+                | Intrinsic::IntGt(e1, e2)
+                | Intrinsic::IntAdd(e1, e2)
+                | Intrinsic::IntSub(e1, e2)
+                | Intrinsic::IntMul(e1, e2)
+                | Intrinsic::IntDiv(e1, e2)
+                | Intrinsic::IntRem(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                // rational
+                Intrinsic::NumVal(_) => (),
+                Intrinsic::NumLt(e1, e2)
+                | Intrinsic::NumLe(e1, e2)
+                | Intrinsic::NumGe(e1, e2)
+                | Intrinsic::NumGt(e1, e2)
+                | Intrinsic::NumAdd(e1, e2)
+                | Intrinsic::NumSub(e1, e2)
+                | Intrinsic::NumMul(e1, e2)
+                | Intrinsic::NumDiv(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                // string
+                Intrinsic::StrVal(_) => (),
+                Intrinsic::StrLt(e1, e2) | Intrinsic::StrLe(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                // cloak
+                Intrinsic::BoxReveal(e) | Intrinsic::BoxShield(e) => {
+                    e.visit_preorder_mut(f)?;
+                }
+                // seq
+                Intrinsic::SeqEmpty => (),
+                Intrinsic::SeqLength(e) => e.visit_preorder_mut(f)?,
+                Intrinsic::SeqAppend(e1, e2)
+                | Intrinsic::SeqAt(e1, e2)
+                | Intrinsic::SeqIncludes(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                // set
+                Intrinsic::SetEmpty => (),
+                Intrinsic::SetLength(e) => e.visit_preorder_mut(f)?,
+                Intrinsic::SetInsert(e1, e2) | Intrinsic::SetContains(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                // map
+                Intrinsic::MapEmpty => (),
+                Intrinsic::MapLength(e) => e.visit_preorder_mut(f)?,
+                Intrinsic::MapGet(e1, e2) | Intrinsic::MapContainsKey(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                Intrinsic::MapPut(e1, e2, e3) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                    e3.visit_preorder_mut(f)?;
+                }
+                // error
+                Intrinsic::ErrFresh => (),
+                Intrinsic::ErrMerge(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+                // smt
+                Intrinsic::SmtEq(e1, e2) | Intrinsic::SmtNe(e1, e2) => {
+                    e1.visit_preorder_mut(f)?;
+                    e2.visit_preorder_mut(f)?;
+                }
+            },
+            Op::Procedure { name: _, args } => {
+                for arg in args {
+                    arg.visit_preorder_mut(f)?;
+                }
+            }
+        }
+
+        // done
+        Ok(())
+    }
 }
 
 /// Marks whether this expression is for impl or spec
@@ -132,9 +258,20 @@ impl<'ctx> ExprParserRoot<'ctx> {
             vars: self.params.clone(),
             bindings: vec![],
         };
-        let parsed = parser.convert_stmts(&mut unifier, stmts)?;
+        let mut parsed = parser.convert_stmts(&mut unifier, stmts)?;
 
-        // TODO: check type completeness
+        // check type completeness of the expression
+        let result = parsed.visit_preorder_mut(|expr| {
+            if let TypeRef::Var(v) = expr.ty() {
+                let assigned = unifier.retrieve_type_assigned(v)?;
+                expr.set_ty(assigned)
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => (),
+            Err(e) => bail_on!(stmts.last().expect("at least one statement"), "{}", e),
+        }
 
         // things look good
         Ok(parsed)
@@ -758,5 +895,5 @@ mod tests {
         fn bar() -> Boolean {
             foo(true.into(), false.into())
         }
-    });j
+    });
 }
