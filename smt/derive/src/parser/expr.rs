@@ -404,6 +404,12 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 // case on function names
                 match FuncName::try_from(ident)? {
                     FuncName::Sys(name) => {
+                        // qualifier required
+                        let (qualifier, qsegment) = match class {
+                            None => bail_on!(ident, "expect qualifier"),
+                            Some(q) => q,
+                        };
+
                         // none of the smt-system functions take path arguments
                         if !matches!(arguments, PathArguments::None) {
                             bail_on!(arguments, "unexpected type arguments");
@@ -413,12 +419,11 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         match name {
                             SysFuncName::From => {
                                 // handle literal conversion
-                                let (intrinsic, ty) = match class {
-                                    None => bail_on!(ident, "expect qualifier"),
-                                    Some((TypeName::Param(_) | TypeName::Usr(_), segment)) => {
-                                        bail_on!(segment, "expect an intrinsic qualifier");
+                                let (intrinsic, ty) = match qualifier {
+                                    TypeName::Param(_) | TypeName::Usr(_) => {
+                                        bail_on!(qsegment, "expect an intrinsic qualifier");
                                     }
-                                    Some((TypeName::Sys(tname), segment)) => match tname {
+                                    TypeName::Sys(tname) => match tname {
                                         SysTypeName::Boolean => (
                                             Intrinsic::BoolVal(Intrinsic::unpack_lit_bool(args)?),
                                             TypeRef::Boolean,
@@ -436,7 +441,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                             TypeRef::Text,
                                         ),
                                         _ => {
-                                            bail_on!(segment, "expect a literal-enabled qualifier")
+                                            bail_on!(qsegment, "expect a literal-enabled qualifier")
                                         }
                                     },
                                 };
@@ -463,6 +468,32 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 let (parsed_lhs, parsed_rhs) =
                                     self.handle_equality_inequality(unifier, lhs, rhs, target)?;
 
+                                // check qualifier consistency
+                                let consistent = match (&qualifier, parsed_lhs.ty()) {
+                                    (TypeName::Sys(SysTypeName::Boolean), TypeRef::Boolean)
+                                    | (TypeName::Sys(SysTypeName::Integer), TypeRef::Integer)
+                                    | (TypeName::Sys(SysTypeName::Rational), TypeRef::Rational)
+                                    | (TypeName::Sys(SysTypeName::Text), TypeRef::Text)
+                                    | (TypeName::Sys(SysTypeName::Cloak), TypeRef::Cloak(_))
+                                    | (TypeName::Sys(SysTypeName::Seq), TypeRef::Seq(_))
+                                    | (TypeName::Sys(SysTypeName::Set), TypeRef::Set(_))
+                                    | (TypeName::Sys(SysTypeName::Map), TypeRef::Map(_, _))
+                                    | (TypeName::Sys(SysTypeName::Error), TypeRef::Error) => true,
+                                    (TypeName::Usr(name1), TypeRef::User(name2, _)) => {
+                                        name1 == name2
+                                    }
+                                    (TypeName::Param(name1), TypeRef::Parameter(name2)) => {
+                                        name1 == name2
+                                    }
+                                    _ => false,
+                                };
+                                if !consistent {
+                                    bail_on!(
+                                        expr_call,
+                                        "qualifier and argument type does not match"
+                                    );
+                                }
+
                                 // construct the operator
                                 let intrinsic = match name {
                                     SysFuncName::Eq => Intrinsic::SmtEq(parsed_lhs, parsed_rhs),
@@ -477,6 +508,15 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
                     }
                     FuncName::Usr(name) => {
+                        // qualifier should never be a type parameter or an intrinsic type
+                        let (qualifier, qsegment) = match class {
+                            None => bail_on!(ident, "expect qualifier"),
+                            Some(q) => q,
+                        };
+                        if !matches!(qualifier, TypeName::Usr(_)) {
+                            bail_on!(qsegment, "user-defined type qualifier only");
+                        }
+
                         // collect type arguments
                         let ty_args_opt = match arguments {
                             PathArguments::None => None,
@@ -488,7 +528,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             }
                         };
 
-                        // parse the arguments by making their types as variables
+                        // parse the arguments by tentatively marking their types as variables
                         let mut parsed_args = vec![];
                         for arg in args {
                             let parsed = self
@@ -501,7 +541,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         let inferred = self.root.ctxt.infer.get_inference(
                             unifier,
                             &name,
-                            class.as_ref().map(|(tn, _)| tn),
+                            Some(qualifier).as_ref(),
                             ty_args_opt.as_deref(),
                             parsed_args,
                             &self.exp_ty,
@@ -578,7 +618,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Some(ty_args) => Some(TypeTag::from_generics(self.root, ty_args)?),
                         };
 
-                        // parse the arguments by making their types as variables
+                        // parse the arguments by tentatively marking their types as variables
                         let mut parsed_args = vec![];
                         let parsed_receiver = self
                             .fork(TypeRef::Var(unifier.mk_var()))
@@ -634,7 +674,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
         rhs: &Exp,
         host: &Exp,
     ) -> Result<(Expr, Expr)> {
-        // parse the arguments by making their types as variables
+        // parse the arguments tentatively by marking their types as variables
         let mut parsed_lhs = self
             .fork(TypeRef::Var(unifier.mk_var()))
             .convert_expr(unifier, lhs)?;
