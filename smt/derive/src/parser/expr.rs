@@ -414,7 +414,6 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         if !matches!(arguments, PathArguments::None) {
                             bail_on!(arguments, "unexpected type arguments");
                         }
-                        bail_if_non_empty!(args);
 
                         match name {
                             SysFuncName::From => {
@@ -736,7 +735,14 @@ mod tests {
     unit_test!(bool_basics, {
         #[smt_impl]
         fn foo(x: Boolean, y: Boolean) -> Boolean {
-            x.not().and(false.into()).or(true.into()).xor(y)
+            x.not().and(false.into()).or(true.into()).xor(y).eq(x.ne(y))
+        }
+    });
+
+    unit_test!(type_param_equal, {
+        #[smt_impl]
+        fn foo<T: SMT>(x: T, y: T) -> Boolean {
+            x.eq(y).ne(T::ne(x, y))
         }
     });
 }
