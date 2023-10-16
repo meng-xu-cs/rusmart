@@ -8,7 +8,7 @@ use syn::{
     Stmt, UnOp,
 };
 
-use crate::parser::adt::{ADTBranch, MatchAnalyzer};
+use crate::parser::adt::{ADTBranch, ADTPath, MatchAnalyzer, MatchOrganizer};
 use crate::parser::ctxt::ContextWithSig;
 use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
@@ -26,6 +26,15 @@ use crate::parser::util::{ExprPathStandalone, PatUtil, PathUtil};
 pub trait CtxtForExpr: CtxtForType {
     /// Retrieve the definition of a user-defined type
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
+
+    /// Retrieve the definition of an enum variant
+    fn get_adt_variant(&self, branch: &ADTBranch) -> Option<&EnumVariant> {
+        let def = self.get_type_def(branch.ty_name())?;
+        match def.body() {
+            TypeBody::Enum(adt) => adt.variants().get(branch.variant()),
+            _ => None,
+        }
+    }
 }
 
 /// Bindings through unpacking during match
@@ -77,7 +86,7 @@ pub enum Op {
     /// `<var>`
     Var(VarName),
     /// `<adt>::<branch>`
-    EnumUnit(ADTBranch),
+    EnumUnit(ADTPath),
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
     Match {
         heads: Vec<Expr>,
@@ -487,7 +496,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
         // case on expression type
         let inst = match target {
             Exp::Path(expr_path) => {
-                match ExprPathStandalone::parse(expr_path)? {
+                match ExprPathStandalone::parse(self.root, unifier, expr_path)? {
                     ExprPathStandalone::Var(name) => {
                         let ty = match self.vars.get(&name) {
                             None => bail_on!(expr_path, "unknown local variable"),
@@ -504,8 +513,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             ty: ty_unified,
                         }
                     }
-                    ExprPathStandalone::EnumUnit(branch) => {
-                        let (generics, variant) = match branch.to_definition(self.root) {
+                    ExprPathStandalone::EnumUnit(adt) => {
+                        let variant = match self.root.get_adt_variant(adt.branch()) {
                             None => bail_on!(expr_path, "unknown type"),
                             Some(details) => details,
                         };
@@ -514,18 +523,12 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
 
                         // unify the type and then build the instruction
-                        let mut ty_args = vec![];
-                        for _ in 0..generics.len() {
-                            ty_args.push(TypeRef::Var(unifier.mk_var()));
-                        }
-                        let ty_unified = match unifier
-                            .unify(&TypeRef::User(branch.adt().clone(), ty_args), &self.exp_ty)
-                        {
+                        let ty_unified = match unifier.unify(&adt.as_type_ref(), &self.exp_ty) {
                             Ok(unified) => unified,
                             Err(e) => bail_on!(target, "{}", e),
                         };
                         Inst {
-                            op: Op::EnumUnit(branch).into(),
+                            op: Op::EnumUnit(adt).into(),
                             ty: ty_unified,
                         }
                     }
@@ -635,30 +638,16 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 };
 
                 let mut heads = vec![];
-                let mut heads_options = vec![];
                 for elem in head_exprs {
                     // parser the headers by tentatively marking their types as variables
-                    let head = self
+                    let converted = self
                         .fork(TypeRef::Var(unifier.mk_var()))
                         .convert_expr(unifier, elem)?;
-                    let (adt_name, adt_variants): (_, BTreeSet<_>) = match head.ty() {
-                        TypeRef::User(name, _) => match self.root.get_type_def(name) {
-                            None => bail_on!(elem, "no such type"),
-                            Some(def) => match def.body() {
-                                TypeBody::Enum(adt) => {
-                                    (name.clone(), adt.variants().keys().cloned().collect())
-                                }
-                                _ => bail_on!(elem, "not an ADT on match head"),
-                            },
-                        },
-                        _ => bail_on!(elem, "not a user-defined type"),
-                    };
-                    heads.push(head);
-                    heads_options.push((adt_name, adt_variants));
+                    heads.push((converted, elem));
                 }
 
                 // go over the arms
-                let mut analyzer = MatchAnalyzer::new(self.root);
+                let mut organizer = MatchOrganizer::new();
                 for arm in arms {
                     let Arm {
                         attrs: _,
@@ -690,7 +679,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     let mut atoms = vec![];
                     let mut bindings = BTreeMap::new();
                     for elem in elem_pats {
-                        let (atom, partial) = analyzer.analyze_pat_match_head(elem)?;
+                        let (atom, partial) =
+                            MatchAnalyzer::analyze_pat_match_head(self.root, unifier, elem)?;
                         for (var_name, var_ty) in partial {
                             if bindings.insert(var_name, var_ty).is_some() {
                                 bail_on!(elem, "naming conflict");
@@ -709,17 +699,42 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     let body_expr = new_ctxt.convert_expr(unifier, body)?;
 
                     // save the match arm
-                    analyzer.add_arm(atoms, body_expr);
+                    organizer.add_arm(atoms, body_expr);
+                }
+
+                // list options of the head
+                let mut heads_exprs = vec![];
+                let mut heads_options = vec![];
+                for (converted, original) in heads {
+                    // retrieve all variants of the ADT
+                    let (adt_name, adt_variants): (_, BTreeSet<_>) =
+                        match unifier.instantiate_if_possible(converted.ty()) {
+                            TypeRef::User(name, _) => match self.root.get_type_def(&name) {
+                                None => bail_on!(original, "no such type"),
+                                Some(def) => match def.body() {
+                                    TypeBody::Enum(adt) => {
+                                        (name.clone(), adt.variants().keys().cloned().collect())
+                                    }
+                                    _ => bail_on!(original, "not an ADT on match head"),
+                                },
+                            },
+                            _ => bail_on!(original, "not a user-defined type"),
+                        };
+                    heads_exprs.push(converted);
+                    heads_options.push((adt_name, adt_variants));
                 }
 
                 // organize the entire match expression with exhaustive expansion
-                let combo = analyzer.into_organized(expr_match, &heads_options)?;
+                let combo = organizer.into_organized(expr_match, &heads_options)?;
 
                 // retrieve the unified type after parsing all match arms
                 let unified_ty = unifier.instantiate_if_possible(&self.exp_ty);
 
                 // construct the operator
-                let op = Op::Match { heads, combo };
+                let op = Op::Match {
+                    heads: heads_exprs,
+                    combo,
+                };
                 Inst {
                     op: op.into(),
                     ty: unified_ty,

@@ -142,7 +142,7 @@ pub enum TypeTag {
 
 impl TypeTag {
     /// Convert from a type argument pack
-    fn from_args<CTX: CtxtForType>(
+    pub fn from_args<CTX: CtxtForType>(
         ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<Vec<Self>> {

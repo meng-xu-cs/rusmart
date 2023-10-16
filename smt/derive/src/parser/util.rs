@@ -1,7 +1,9 @@
 use syn::{Error, ExprPath, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
 
-use crate::parser::adt::ADTBranch;
+use crate::parser::adt::ADTPath;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::parser::expr::CtxtForExpr;
+use crate::parser::infer::TypeUnifier;
 use crate::parser::name::{ReservedIdent, VarName};
 
 /// A convenience wrapper for parsing paths
@@ -74,13 +76,16 @@ pub enum ExprPathStandalone {
     /// a local variable
     Var(VarName),
     /// a unit variant in an enum
-    EnumUnit(ADTBranch),
+    EnumUnit(ADTPath),
 }
 
 impl ExprPathStandalone {
     /// Parse from an expression
-    pub fn parse(expr_path: &ExprPath) -> Result<Self> {
-        // extract segments
+    pub fn parse<T: CtxtForExpr>(
+        ctxt: &T,
+        unifier: &mut TypeUnifier,
+        expr_path: &ExprPath,
+    ) -> Result<Self> {
         let ExprPath {
             attrs: _,
             qself,
@@ -88,36 +93,10 @@ impl ExprPathStandalone {
         } = expr_path;
         bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
 
-        let Path {
-            leading_colon,
-            segments,
-        } = path;
-        bail_if_exists!(leading_colon);
-
-        // collect segments
-        let mut idents = vec![];
-        for segment in segments {
-            let PathSegment { ident, arguments } = segment;
-            if !matches!(arguments, PathArguments::None) {
-                bail_on!(arguments, "unexpected arguments");
-            }
-            idents.push(ident);
-        }
-
-        // decide on what to do with the idents
-        let parsed = match idents.len() {
-            1 => {
-                // handle variable reference
-                let name = idents.into_iter().next().unwrap().try_into()?;
-                Self::Var(name)
-            }
-            2 => {
-                // handle adt construction
-                let mut iter = idents.into_iter();
-                let adt = iter.next().unwrap().try_into()?;
-                let variant = iter.next().unwrap().to_string();
-                Self::EnumUnit(ADTBranch::new(adt, variant))
-            }
+        // case by number of path segments
+        let parsed = match path.segments.len() {
+            1 => Self::Var(PathUtil::expect_ident(path)?.try_into()?),
+            2 => Self::EnumUnit(ADTPath::from_path(ctxt, unifier, path)?),
             _ => bail_on!(expr_path, "unrecognized path"),
         };
         Ok(parsed)
