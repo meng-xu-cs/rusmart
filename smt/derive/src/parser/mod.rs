@@ -11,5 +11,6 @@ mod ty;
 
 mod infer;
 
+mod adt;
 mod expr;
 mod intrinsics;

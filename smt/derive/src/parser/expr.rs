@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use syn::{
-    Block, Expr as Exp, ExprBlock, ExprCall, ExprIf, ExprMethodCall, ExprPath, ExprUnary, Local,
-    LocalInit, Pat, PatType, Path, PathArguments, PathSegment, Result, Stmt, UnOp,
+    Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprIf, ExprMatch, ExprMethodCall, ExprPath,
+    ExprTuple, ExprUnary, Local, LocalInit, Pat, PatTuple, PatType, Path, PathArguments,
+    PathSegment, Result, Stmt, UnOp,
 };
 
+use crate::parser::adt::MatchAnalyzer;
 use crate::parser::ctxt::ContextWithSig;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::func::{FuncName, FuncSig, SysFuncName};
@@ -12,19 +14,73 @@ use crate::parser::generics::Generics;
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
-use crate::parser::ty::{CtxtForType, SysTypeName, TypeName, TypeTag};
+use crate::parser::ty::{CtxtForType, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag};
 use crate::parser::util::{ExprUtil, PatUtil};
 
+/// A context suitable for expr analysis
+pub trait CtxtForExpr: CtxtForType {
+    /// Retrieve the definition of a user-defined type
+    fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
+}
+
+/// Bindings through unpacking during match
+#[derive(Clone)]
+pub enum Unpack {
+    Unit,
+    Tuple(BTreeMap<usize, VarName>),
+    Record(BTreeMap<String, VarName>),
+}
+
+/// Marks how a variable of an ADT type is matched
+#[derive(Clone)]
+pub struct MatchVariant {
+    adt: UsrTypeName,
+    branch: String,
+    unpack: Unpack,
+}
+
+impl MatchVariant {
+    /// Create a new variant
+    pub fn new(adt: UsrTypeName, branch: String, unpack: Unpack) -> Self {
+        Self {
+            adt,
+            branch,
+            unpack,
+        }
+    }
+}
+
+/// Marks how all variables in the match head are matched
+#[derive(Clone)]
+pub struct MatchCombo {
+    variants: Vec<MatchVariant>,
+    body: Expr,
+}
+
+impl MatchCombo {
+    /// Create a new variant
+    pub fn new(variants: Vec<MatchVariant>, body: Expr) -> Self {
+        Self { variants, body }
+    }
+}
+
 /// Phi node, guarded by condition
+#[derive(Clone)]
 pub struct PhiNode {
     cond: Expr,
     body: Expr,
 }
 
 /// Operations
+#[derive(Clone)]
 pub enum Op {
     /// `<var>`
     Var(VarName),
+    /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
+    Match {
+        heads: Vec<Expr>,
+        combo: Vec<MatchCombo>,
+    },
     /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
     Phi { nodes: Vec<PhiNode>, default: Expr },
     /// `<class>::<method>(<a1>, <a2>, ...)`
@@ -34,12 +90,14 @@ pub enum Op {
 }
 
 /// Instructions (operations with type)
+#[derive(Clone)]
 pub struct Inst {
     op: Box<Op>,
     ty: TypeRef,
 }
 
 /// Expressions
+#[derive(Clone)]
 pub enum Expr {
     /// a single instruction
     Unit(Inst),
@@ -90,6 +148,14 @@ impl Expr {
 
         match inst.op.as_mut() {
             Op::Var(_) => (),
+            Op::Match { heads, combo } => {
+                for head in heads {
+                    head.visit(pre, post)?;
+                }
+                for item in combo {
+                    item.body.visit(pre, post)?;
+                }
+            }
             Op::Phi { nodes, default } => {
                 for node in nodes {
                     node.cond.visit(pre, post)?;
@@ -295,6 +361,12 @@ impl CtxtForType for ExprParserRoot<'_> {
     }
 }
 
+impl CtxtForExpr for ExprParserRoot<'_> {
+    fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef> {
+        self.ctxt.get_type_def(name)
+    }
+}
+
 impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
     /// Fork a child parser
     fn fork(&self, exp_ty: TypeRef) -> Self {
@@ -484,12 +556,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 };
 
                 // check consistency of body type
-                let ref_ty = default_expr.ty().clone();
-                for item in &phi_nodes {
-                    if item.body.ty() != &ref_ty {
-                        bail_on!(expr_if, "phi node type mismatch");
-                    }
-                }
+                let unified_ty = match unifier.unify(default_expr.ty(), &self.exp_ty) {
+                    Ok(t) => t,
+                    Err(e) => bail_on!(expr_if, "{}", e),
+                };
 
                 // construct the operator
                 let op = Op::Phi {
@@ -498,7 +568,124 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 };
                 Inst {
                     op: op.into(),
-                    ty: ref_ty,
+                    ty: unified_ty,
+                }
+            }
+            Exp::Match(expr_match) => {
+                let ExprMatch {
+                    attrs: _,
+                    match_token: _,
+                    expr: base,
+                    brace_token: _,
+                    arms,
+                } = expr_match;
+
+                // collects heads of the match case
+                let (is_tuple, head_exprs) = match base.as_ref() {
+                    Exp::Tuple(expr_tuple) => {
+                        let ExprTuple {
+                            attrs: _,
+                            paren_token: _,
+                            elems,
+                        } = expr_tuple;
+                        (true, elems.iter().collect::<Vec<_>>())
+                    }
+                    _ => (false, vec![base.as_ref()]),
+                };
+
+                let mut heads = vec![];
+                let mut heads_options = vec![];
+                for elem in head_exprs {
+                    // parser the headers by tentatively marking their types as variables
+                    let head = self
+                        .fork(TypeRef::Var(unifier.mk_var()))
+                        .convert_expr(unifier, elem)?;
+                    let (adt_name, adt_variants): (_, BTreeSet<_>) = match head.ty() {
+                        TypeRef::User(name, _) => match self.root.get_type_def(name) {
+                            None => bail_on!(elem, "no such type"),
+                            Some(def) => match def.body() {
+                                TypeBody::Enum(adt) => {
+                                    (name.clone(), adt.variants().keys().cloned().collect())
+                                }
+                                _ => bail_on!(elem, "not an ADT on match head"),
+                            },
+                        },
+                        _ => bail_on!(elem, "not a user-defined type"),
+                    };
+                    heads.push(head);
+                    heads_options.push((adt_name, adt_variants));
+                }
+
+                // go over the arms
+                let mut analyzer = MatchAnalyzer::new(self.root);
+                for arm in arms {
+                    let Arm {
+                        attrs: _,
+                        pat,
+                        guard,
+                        fat_arrow_token: _,
+                        body,
+                        comma: _,
+                    } = arm;
+                    bail_if_exists!(guard.as_ref().map(|(if_token, _)| if_token));
+
+                    // find the bindings
+                    let elem_pats = if is_tuple {
+                        match pat {
+                            Pat::Tuple(pat_tuple) => {
+                                let PatTuple {
+                                    attrs: _,
+                                    paren_token: _,
+                                    elems,
+                                } = pat_tuple;
+                                elems.iter().collect()
+                            }
+                            _ => bail_on!(pat, "expect tuple"),
+                        }
+                    } else {
+                        vec![pat]
+                    };
+
+                    let mut atoms = vec![];
+                    let mut bindings = BTreeMap::new();
+                    for elem in elem_pats {
+                        let (atom, partial) = analyzer.analyze_pat_match_head(elem)?;
+                        for (var_name, var_ty) in partial {
+                            if bindings.insert(var_name, var_ty).is_some() {
+                                bail_on!(elem, "naming conflict");
+                            }
+                        }
+                        atoms.push(atom);
+                    }
+
+                    // use the new bindings to analyze the body
+                    let mut new_ctxt = self.fork(self.exp_ty.clone());
+                    for (var_name, var_ty) in bindings {
+                        if new_ctxt.vars.insert(var_name, (&var_ty).into()).is_some() {
+                            bail_on!(pat, "naming conflict");
+                        }
+                    }
+                    let body_expr = new_ctxt.convert_expr(unifier, body)?;
+
+                    // save the match arm
+                    analyzer.add_arm(atoms, body_expr);
+                }
+
+                // return the expression
+                let combo = analyzer.into_organized(expr_match, &heads_options)?;
+                let ref_ty = match combo.first() {
+                    None => bail_on!(expr_match, "invalid match"),
+                    Some(matched) => matched.body.ty(),
+                };
+                let unified_ty = match unifier.unify(ref_ty, &self.exp_ty) {
+                    Ok(t) => t,
+                    Err(e) => bail_on!(expr_match, "{}", e),
+                };
+
+                let op = Op::Match { heads, combo };
+                Inst {
+                    op: op.into(),
+                    ty: unified_ty,
                 }
             }
             Exp::Call(expr_call) => {

@@ -7,6 +7,7 @@ use crate::parser::expr::Expr;
 use crate::parser::infer::TypeRef;
 
 /// Intrinsic procedure
+#[derive(Clone)]
 pub enum Intrinsic {
     /// `Boolean::from`
     BoolVal(bool),

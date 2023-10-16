@@ -14,6 +14,7 @@ use crate::parser::ty::{TypeBody, TypeDef};
 
 use crate::parser::expr::{ExprParserRoot, Kind};
 use crate::parser::infer::InferDatabase;
+
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -376,6 +377,11 @@ impl ContextWithSig {
     /// Get the generics declaration for a type
     pub fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
         self.types.get(name).map(|def| def.head())
+    }
+
+    /// Get type definition
+    pub fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef> {
+        self.types.get(name)
     }
 
     /// Parse function body
