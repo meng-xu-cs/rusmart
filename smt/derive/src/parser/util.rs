@@ -1,7 +1,8 @@
-use syn::{Error, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
+use syn::{Error, ExprPath, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
 
+use crate::parser::adt::ADTBranch;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
-use crate::parser::name::ReservedIdent;
+use crate::parser::name::{ReservedIdent, VarName};
 
 /// A convenience wrapper for parsing paths
 pub struct PathUtil;
@@ -65,5 +66,60 @@ impl PatUtil {
     /// Expect a name that can be converted from an ident
     pub fn expect_name<'a, T: TryFrom<&'a Ident, Error = Error>>(pat: &'a Pat) -> Result<T> {
         Self::expect_ident(pat).and_then(T::try_from)
+    }
+}
+
+/// Marks what a path serving as a standalone expr can be
+pub enum ExprPathStandalone {
+    /// a local variable
+    Var(VarName),
+    /// a unit variant in an enum
+    EnumUnit(ADTBranch),
+}
+
+impl ExprPathStandalone {
+    /// Parse from an expression
+    pub fn parse(expr_path: &ExprPath) -> Result<Self> {
+        // extract segments
+        let ExprPath {
+            attrs: _,
+            qself,
+            path,
+        } = expr_path;
+        bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        // collect segments
+        let mut idents = vec![];
+        for segment in segments {
+            let PathSegment { ident, arguments } = segment;
+            if !matches!(arguments, PathArguments::None) {
+                bail_on!(arguments, "unexpected arguments");
+            }
+            idents.push(ident);
+        }
+
+        // decide on what to do with the idents
+        let parsed = match idents.len() {
+            1 => {
+                // handle variable reference
+                let name = idents.into_iter().next().unwrap().try_into()?;
+                Self::Var(name)
+            }
+            2 => {
+                // handle adt construction
+                let mut iter = idents.into_iter();
+                let adt = iter.next().unwrap().try_into()?;
+                let variant = iter.next().unwrap().to_string();
+                Self::EnumUnit(ADTBranch::new(adt, variant))
+            }
+            _ => bail_on!(expr_path, "unrecognized path"),
+        };
+        Ok(parsed)
     }
 }

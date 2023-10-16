@@ -20,7 +20,7 @@ use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{
     CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag,
 };
-use crate::parser::util::{PatUtil, PathUtil};
+use crate::parser::util::{ExprPathStandalone, PatUtil, PathUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -487,35 +487,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
         // case on expression type
         let inst = match target {
             Exp::Path(expr_path) => {
-                // extract segments
-                let ExprPath {
-                    attrs: _,
-                    qself,
-                    path,
-                } = expr_path;
-                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
-
-                let Path {
-                    leading_colon,
-                    segments,
-                } = path;
-                bail_if_exists!(leading_colon);
-
-                // collect segments
-                let mut idents = vec![];
-                for segment in segments {
-                    let PathSegment { ident, arguments } = segment;
-                    if !matches!(arguments, PathArguments::None) {
-                        bail_on!(arguments, "unexpected arguments");
-                    }
-                    idents.push(ident);
-                }
-
-                // decide on what to do with the idents
-                match idents.len() {
-                    1 => {
-                        // handle variable reference
-                        let name = idents.into_iter().next().unwrap().try_into()?;
+                match ExprPathStandalone::parse(expr_path)? {
+                    ExprPathStandalone::Var(name) => {
                         let ty = match self.vars.get(&name) {
                             None => bail_on!(expr_path, "unknown local variable"),
                             Some(t) => t.clone(),
@@ -531,23 +504,13 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             ty: ty_unified,
                         }
                     }
-                    2 => {
-                        // handle adt construction
-                        let mut iter = idents.into_iter();
-                        let adt = iter.next().unwrap().try_into()?;
-                        let (generics, variants) = match self.root.get_type_def(&adt) {
-                            None => bail_on!(path, "unknown type"),
-                            Some(def) => match def.body() {
-                                TypeBody::Enum(body) => (def.head(), body.variants()),
-                                _ => bail_on!(path, "not an ADT"),
-                            },
+                    ExprPathStandalone::EnumUnit(branch) => {
+                        let (generics, variant) = match branch.to_definition(self.root) {
+                            None => bail_on!(expr_path, "unknown type"),
+                            Some(details) => details,
                         };
-
-                        let branch = iter.next().unwrap().to_string();
-                        match variants.get(&branch) {
-                            None => bail_on!(path, "unknown branch"),
-                            Some(EnumVariant::Unit) => (),
-                            Some(_) => bail_on!(path, "not a unit variant"),
+                        if !matches!(variant, EnumVariant::Unit) {
+                            bail_on!(expr_path, "not a unit variant");
                         }
 
                         // unify the type and then build the instruction
@@ -556,17 +519,16 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             ty_args.push(TypeRef::Var(unifier.mk_var()));
                         }
                         let ty_unified = match unifier
-                            .unify(&TypeRef::User(adt.clone(), ty_args), &self.exp_ty)
+                            .unify(&TypeRef::User(branch.adt().clone(), ty_args), &self.exp_ty)
                         {
                             Ok(unified) => unified,
                             Err(e) => bail_on!(target, "{}", e),
                         };
                         Inst {
-                            op: Op::EnumUnit(ADTBranch::new(adt, branch)).into(),
+                            op: Op::EnumUnit(branch).into(),
                             ty: ty_unified,
                         }
                     }
-                    _ => bail_on!(expr_path, "unrecognized path"),
                 }
             }
             Exp::Block(expr_block) => {

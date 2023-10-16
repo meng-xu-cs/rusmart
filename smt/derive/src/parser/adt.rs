@@ -8,6 +8,7 @@ use syn::{
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::{CtxtForExpr, Expr, ExprParserRoot, MatchCombo, MatchVariant, Unpack};
+use crate::parser::generics::Generics;
 use crate::parser::name::{UsrTypeName, VarName};
 use crate::parser::ty::{EnumVariant, TypeBody, TypeTag};
 use crate::parser::util::PatUtil;
@@ -53,6 +54,27 @@ impl ADTBranch {
             variant: variant_name,
         })
     }
+
+    /// Retrieve the corresponding definition for this variant
+    pub fn to_definition<'ctx>(
+        &self,
+        ctxt: &'ctx ExprParserRoot<'ctx>,
+    ) -> Option<(&'ctx Generics, &'ctx EnumVariant)> {
+        let def = ctxt.get_type_def(&self.adt)?;
+
+        let tparams = def.head();
+        let variant = match def.body() {
+            TypeBody::Enum(adt) => adt.variants().get(&self.variant)?,
+            _ => return None,
+        };
+
+        Some((tparams, variant))
+    }
+
+    /// Getter to the type
+    pub fn adt(&self) -> &UsrTypeName {
+        &self.adt
+    }
 }
 
 /// An atom for a specific variable in the match head
@@ -81,28 +103,6 @@ impl<'a, 'ctx: 'a> MatchAnalyzer<'a, 'ctx> {
         Self { ctxt, arms: vec![] }
     }
 
-    /// Retrieve a type variant by path
-    fn get_adt_variant_by_path(&self, path: &Path) -> Result<(ADTBranch, &EnumVariant)> {
-        let branch = ADTBranch::from_path(path)?;
-
-        // look-up
-        let type_body = match self.ctxt.get_type_def(&branch.adt) {
-            None => bail_on!(path, "no such type"),
-            Some(def) => def.body(),
-        };
-
-        let variant_def = match type_body {
-            TypeBody::Enum(adt) => match adt.variants().get(&branch.variant) {
-                None => bail_on!(path, "no such variant"),
-                Some(variant) => variant,
-            },
-            _ => bail_on!(path, "not an ADT"),
-        };
-
-        // done
-        Ok((branch, variant_def))
-    }
-
     /// Analyze a pattern for: match arm -> head -> case -> binding
     fn analyze_pat_match_binding(&self, pat: &Pat) -> Result<Option<VarName>> {
         let binding = match pat {
@@ -128,7 +128,11 @@ impl<'a, 'ctx: 'a> MatchAnalyzer<'a, 'ctx> {
                 } = pat_path;
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
-                let (branch, variant) = self.get_adt_variant_by_path(path)?;
+                let branch = ADTBranch::from_path(path)?;
+                let variant = match branch.to_definition(self.ctxt) {
+                    None => bail_on!(path, "not a valid enum branch"),
+                    Some((_, def)) => def,
+                };
                 match variant {
                     EnumVariant::Unit => (),
                     _ => bail_on!(pat, "unexpected pattern"),
@@ -145,7 +149,11 @@ impl<'a, 'ctx: 'a> MatchAnalyzer<'a, 'ctx> {
                 } = pat_tuple;
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
-                let (branch, variant) = self.get_adt_variant_by_path(path)?;
+                let branch = ADTBranch::from_path(path)?;
+                let variant = match branch.to_definition(self.ctxt) {
+                    None => bail_on!(path, "not a valid enum branch"),
+                    Some((_, def)) => def,
+                };
                 match variant {
                     EnumVariant::Tuple(def_tuple) => {
                         let slots = def_tuple.slots();
@@ -185,7 +193,11 @@ impl<'a, 'ctx: 'a> MatchAnalyzer<'a, 'ctx> {
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
                 bail_if_exists!(rest);
 
-                let (branch, variant) = self.get_adt_variant_by_path(path)?;
+                let branch = ADTBranch::from_path(path)?;
+                let variant = match branch.to_definition(self.ctxt) {
+                    None => bail_on!(path, "not a valid enum branch"),
+                    Some((_, def)) => def,
+                };
                 match variant {
                     EnumVariant::Record(def_record) => {
                         let records = def_record.fields();
