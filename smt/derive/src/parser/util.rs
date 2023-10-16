@@ -8,7 +8,7 @@ pub struct PathUtil;
 
 impl PathUtil {
     /// Expect a plain identifier from the path
-    pub fn expect_ident(path: &Path) -> Result<&Ident> {
+    fn expect_ident(path: &Path) -> Result<&Ident> {
         let Path {
             leading_colon,
             segments,
@@ -41,7 +41,7 @@ pub struct PatUtil;
 
 impl PatUtil {
     /// Expect a plain identifier from the pattern
-    pub fn expect_ident(pat: &Pat) -> Result<&Ident> {
+    fn expect_ident(pat: &Pat) -> Result<&Ident> {
         match pat {
             Pat::Ident(decl) => {
                 let PatIdent {
@@ -73,7 +73,7 @@ pub struct ExprUtil;
 
 impl ExprUtil {
     /// Extract a variable name from an expression path
-    pub fn expect_ident_from_path(expr_path: &ExprPath) -> Result<&Ident> {
+    fn expect_ident_from_path(expr_path: &ExprPath) -> Result<&Ident> {
         let ExprPath {
             attrs: _,
             qself,

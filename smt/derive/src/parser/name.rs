@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use syn::{Ident, Result};
 
+use crate::parser::dsl::SysMacroName;
 use crate::parser::err::bail_on;
 use crate::parser::func::SysFuncName;
 use crate::parser::generics::SysTrait;
@@ -27,19 +28,14 @@ fn validate_user_ident(ident: &Ident) -> Result<String> {
     if SysFuncName::from_str(&name).is_some() {
         bail_on!(ident, "reserved method name");
     }
-
-    // TODO: check the rest
-
-    let name = ident.to_string();
-    match name.as_str() {
-        "forall" | "exists" => {
-            bail_on!(ident, "reserved macro name");
-        }
-        "_" => {
-            bail_on!(ident, "underscore not allowed");
-        }
-        _ => Ok(name),
+    if SysMacroName::from_str(&name).is_some() {
+        bail_on!(ident, "reserved macro name");
     }
+    if name.as_str() == "_" {
+        bail_on!(ident, "underscore not allowed");
+    }
+
+    Ok(name)
 }
 
 /// Utility macro to define a name
