@@ -17,8 +17,10 @@ use crate::parser::generics::Generics;
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
-use crate::parser::ty::{CtxtForType, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag};
-use crate::parser::util::{ExprUtil, PatUtil, PathUtil};
+use crate::parser::ty::{
+    CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag,
+};
+use crate::parser::util::{PatUtil, PathUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -79,6 +81,8 @@ pub struct PhiNode {
 pub enum Op {
     /// `<var>`
     Var(VarName),
+    /// `<adt>::<branch>`
+    EnumUnit { adt: UsrTypeName, branch: String },
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
     Match {
         heads: Vec<Expr>,
@@ -161,6 +165,7 @@ impl Expr {
 
         match inst.op.as_mut() {
             Op::Var(_) => (),
+            Op::EnumUnit { .. } => (),
             Op::Match { heads, combo } => {
                 for head in heads {
                     head.visit(pre, post)?;
@@ -487,20 +492,86 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
         // case on expression type
         let inst = match target {
             Exp::Path(expr_path) => {
-                let name = ExprUtil::expect_name_from_path(expr_path)?;
-                let ty = match self.vars.get(&name) {
-                    None => bail_on!(expr_path, "unknown local variable"),
-                    Some(t) => t.clone(),
-                };
+                // extract segments
+                let ExprPath {
+                    attrs: _,
+                    qself,
+                    path,
+                } = expr_path;
+                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
 
-                // unity the type and then build the instruction
-                let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
-                    Ok(unified) => unified,
-                    Err(e) => bail_on!(target, "{}", e),
-                };
-                Inst {
-                    op: Op::Var(name).into(),
-                    ty: ty_unified,
+                let Path {
+                    leading_colon,
+                    segments,
+                } = path;
+                bail_if_exists!(leading_colon);
+
+                // collect segments
+                let mut idents = vec![];
+                for segment in segments {
+                    let PathSegment { ident, arguments } = segment;
+                    if !matches!(arguments, PathArguments::None) {
+                        bail_on!(arguments, "unexpected arguments");
+                    }
+                    idents.push(ident);
+                }
+
+                // decide on what to do with the idents
+                match idents.len() {
+                    1 => {
+                        // handle variable reference
+                        let name = idents.into_iter().next().unwrap().try_into()?;
+                        let ty = match self.vars.get(&name) {
+                            None => bail_on!(expr_path, "unknown local variable"),
+                            Some(t) => t.clone(),
+                        };
+
+                        // unity the type and then build the instruction
+                        let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
+                            Ok(unified) => unified,
+                            Err(e) => bail_on!(target, "{}", e),
+                        };
+                        Inst {
+                            op: Op::Var(name).into(),
+                            ty: ty_unified,
+                        }
+                    }
+                    2 => {
+                        // handle adt construction
+                        let mut iter = idents.into_iter();
+                        let adt = iter.next().unwrap().try_into()?;
+                        let (generics, variants) = match self.root.get_type_def(&adt) {
+                            None => bail_on!(path, "unknown type"),
+                            Some(def) => match def.body() {
+                                TypeBody::Enum(body) => (def.head(), body.variants()),
+                                _ => bail_on!(path, "not an ADT"),
+                            },
+                        };
+
+                        let branch = iter.next().unwrap().to_string();
+                        match variants.get(&branch) {
+                            None => bail_on!(path, "unknown branch"),
+                            Some(EnumVariant::Unit) => (),
+                            Some(_) => bail_on!(path, "not a unit variant"),
+                        }
+
+                        // unify the type and then build the instruction
+                        let mut ty_args = vec![];
+                        for _ in 0..generics.len() {
+                            ty_args.push(TypeRef::Var(unifier.mk_var()));
+                        }
+                        let ty_unified = match unifier
+                            .unify(&TypeRef::User(adt.clone(), ty_args), &self.exp_ty)
+                        {
+                            Ok(unified) => unified,
+                            Err(e) => bail_on!(target, "{}", e),
+                        };
+                        Inst {
+                            op: Op::EnumUnit { adt, branch }.into(),
+                            ty: ty_unified,
+                        }
+                    }
+                    _ => bail_on!(expr_path, "unrecognized path"),
                 }
             }
             Exp::Block(expr_block) => {
