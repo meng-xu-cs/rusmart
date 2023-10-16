@@ -555,11 +555,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     }
                 };
 
-                // check consistency of body type
-                let unified_ty = match unifier.unify(default_expr.ty(), &self.exp_ty) {
-                    Ok(t) => t,
-                    Err(e) => bail_on!(expr_if, "{}", e),
-                };
+                // retrieve the unified type after parsing all phi nodes
+                let unified_ty = unifier.instantiate_if_possible(&self.exp_ty);
 
                 // construct the operator
                 let op = Op::Phi {
@@ -671,17 +668,13 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     analyzer.add_arm(atoms, body_expr);
                 }
 
-                // return the expression
+                // organize the entire match expression with exhaustive expansion
                 let combo = analyzer.into_organized(expr_match, &heads_options)?;
-                let ref_ty = match combo.first() {
-                    None => bail_on!(expr_match, "invalid match"),
-                    Some(matched) => matched.body.ty(),
-                };
-                let unified_ty = match unifier.unify(ref_ty, &self.exp_ty) {
-                    Ok(t) => t,
-                    Err(e) => bail_on!(expr_match, "{}", e),
-                };
 
+                // retrieve the unified type after parsing all match arms
+                let unified_ty = unifier.instantiate_if_possible(&self.exp_ty);
+
+                // construct the operator
                 let op = Op::Match { heads, combo };
                 Inst {
                     op: op.into(),

@@ -823,17 +823,29 @@ impl TypeUnifier {
 
     /// Retrieve the assigned type for a type variable
     pub fn retrieve_type_assigned(&self, var: &TypeVar) -> Result<TypeRef> {
-        let index = *self
-            .params
-            .get(&var.0)
-            .ok_or_else(|| anyhow!("no such type var"))?;
-        let group = self
-            .groups
-            .get(index)
-            .ok_or_else(|| anyhow!("no such equivalence group"))?;
+        let index = *self.params.get(&var.0).expect("type var");
+        let group = self.groups.get(index).expect("equivalence group");
         group
             .ty
             .clone()
             .ok_or_else(|| anyhow!("unable to infer type"))
+    }
+
+    /// Retrieve either the assigned type or the variable itself for a type variable
+    fn retrieve_type_assigned_or_variable(&self, var: &TypeVar) -> TypeRef {
+        let index = *self.params.get(&var.0).expect("type var");
+        let group = self.groups.get(index).expect("equivalence group");
+        group
+            .ty
+            .clone()
+            .unwrap_or_else(|| TypeRef::Var(var.clone()))
+    }
+
+    /// Try to instantiate a type when needed
+    pub fn instantiate_if_possible(&self, ty: &TypeRef) -> TypeRef {
+        match ty {
+            TypeRef::Var(var) => self.retrieve_type_assigned_or_variable(var),
+            _ => ty.clone(),
+        }
     }
 }
