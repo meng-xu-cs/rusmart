@@ -1,13 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use proc_macro2::TokenStream;
 use syn::{
-    Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprIf, ExprMatch, ExprMethodCall, ExprPath,
-    ExprTuple, ExprUnary, Local, LocalInit, Pat, PatTuple, PatType, Path, PathArguments,
-    PathSegment, Result, Stmt, UnOp,
+    parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprMacro,
+    ExprMatch, ExprMethodCall, ExprPath, ExprTuple, ExprUnary, Local, LocalInit, Macro,
+    MacroDelimiter, Pat, PatTuple, PatType, Path, PathArguments, PathSegment, Result, ReturnType,
+    Stmt, UnOp,
 };
 
 use crate::parser::adt::MatchAnalyzer;
 use crate::parser::ctxt::ContextWithSig;
+use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::func::{FuncName, FuncSig, SysFuncName};
 use crate::parser::generics::Generics;
@@ -15,7 +18,7 @@ use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag};
-use crate::parser::util::{ExprUtil, PatUtil};
+use crate::parser::util::{ExprUtil, PatUtil, PathUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -83,6 +86,16 @@ pub enum Op {
     },
     /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
     Phi { nodes: Vec<PhiNode>, default: Expr },
+    /// `forall(|<v>: <t>| {<expr>})`
+    Forall {
+        vars: BTreeMap<VarName, TypeTag>,
+        body: Expr,
+    },
+    /// `exists(|<v>: <t>| {<expr>})`
+    Exists {
+        vars: BTreeMap<VarName, TypeTag>,
+        body: Expr,
+    },
     /// `<class>::<method>(<a1>, <a2>, ...)`
     Intrinsic(Intrinsic),
     /// `<function>(<a1>, <a2>, ...)`
@@ -162,6 +175,9 @@ impl Expr {
                     node.body.visit(pre, post)?;
                 }
                 default.visit(pre, post)?;
+            }
+            Op::Forall { vars: _, body } | Op::Exists { vars: _, body } => {
+                body.visit(pre, post)?;
             }
             Op::Intrinsic(intrinsic) => match intrinsic {
                 // boolean
@@ -976,7 +992,36 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     }
                 }
             }
-            _ => todo!(),
+            // SMT-specific macro (i.e., DSL)
+            Exp::Macro(expr_macro) => {
+                let ExprMacro {
+                    attrs: _,
+                    mac:
+                        Macro {
+                            path,
+                            bang_token: _,
+                            delimiter,
+                            tokens,
+                        },
+                } = expr_macro;
+                if !matches!(delimiter, MacroDelimiter::Paren(_)) {
+                    bail_on!(expr_macro, "expect macro invocation with parenthesis");
+                }
+
+                let quant = PathUtil::expect_ident_reserved(path)?;
+                let (vars, body) = self.parse_dsl_quantifier(unifier, tokens)?;
+
+                // pack into expression
+                let op = match quant {
+                    SysMacroName::Exists => Op::Exists { vars, body },
+                    SysMacroName::Forall => Op::Forall { vars, body },
+                };
+                Inst {
+                    op: op.into(),
+                    ty: TypeRef::Boolean,
+                }
+            }
+            _ => bail_on!(target, "invalid expression"),
         };
 
         // decide to go with an instruction or a block
@@ -1021,6 +1066,73 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
         // return the expressions
         Ok((parsed_lhs, parsed_rhs))
+    }
+
+    /// Convert a DSL macro to a quantifier body
+    fn parse_dsl_quantifier(
+        &self,
+        unifier: &mut TypeUnifier,
+        raw: &TokenStream,
+    ) -> Result<(BTreeMap<VarName, TypeTag>, Expr)> {
+        let stream = raw.clone();
+        let closure = parse2::<ExprClosure>(stream)?;
+        let ExprClosure {
+            attrs: _,
+            lifetimes,
+            constness,
+            movability,
+            asyncness,
+            capture,
+            or1_token: _,
+            inputs,
+            or2_token: _,
+            output,
+            body,
+        } = &closure;
+        bail_if_exists!(lifetimes);
+        bail_if_exists!(constness);
+        bail_if_exists!(movability);
+        bail_if_exists!(asyncness);
+        bail_if_exists!(capture);
+
+        // parameters
+        let mut param_decls = BTreeMap::new();
+        for param in inputs {
+            match param {
+                Pat::Type(typed) => {
+                    let PatType {
+                        attrs: _,
+                        pat,
+                        colon_token: _,
+                        ty,
+                    } = typed;
+
+                    let name = PatUtil::expect_name(pat)?;
+                    if self.vars.contains_key(&name) || param_decls.contains_key(&name) {
+                        bail_on!(pat, "conflicting quantifier variable name");
+                    }
+                    let ty = TypeTag::from_type(self.root, ty)?;
+                    param_decls.insert(name, ty);
+                }
+                _ => bail_on!(param, "invalid quantifier variable declaration"),
+            }
+        }
+
+        // expect no return type
+        match output {
+            ReturnType::Default => (),
+            ReturnType::Type(_, rty) => bail_on!(rty, "unexpected return type"),
+        };
+
+        // analyze the body
+        let mut parser = self.fork(TypeRef::Boolean);
+        parser
+            .vars
+            .extend(param_decls.iter().map(|(k, v)| (k.clone(), v.into())));
+        let body_expr = parser.convert_expr(unifier, body)?;
+
+        // return the parsed result
+        Ok((param_decls, body_expr))
     }
 }
 
