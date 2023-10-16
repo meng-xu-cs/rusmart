@@ -8,7 +8,7 @@ use syn::{
     Stmt, UnOp,
 };
 
-use crate::parser::adt::{ADTBranch, ADTPath, MatchAnalyzer, MatchOrganizer};
+use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
 use crate::parser::ctxt::ContextWithSig;
 use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
@@ -86,7 +86,7 @@ pub enum Op {
     /// `<var>`
     Var(VarName),
     /// `<adt>::<branch>`
-    EnumUnit(ADTPath),
+    EnumUnit(ADTBranch),
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
     Match {
         heads: Vec<Expr>,
@@ -528,7 +528,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Err(e) => bail_on!(target, "{}", e),
                         };
                         Inst {
-                            op: Op::EnumUnit(adt).into(),
+                            op: Op::EnumUnit(adt.branch().clone()).into(),
                             ty: ty_unified,
                         }
                     }
@@ -675,12 +675,20 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     } else {
                         vec![pat]
                     };
+                    if elem_pats.len() != heads.len() {
+                        bail_on!(pat, "pattern number mismatch");
+                    }
 
+                    // analyze each atom
                     let mut atoms = vec![];
                     let mut bindings = BTreeMap::new();
-                    for elem in elem_pats {
-                        let (atom, partial) =
-                            MatchAnalyzer::analyze_pat_match_head(self.root, unifier, elem)?;
+                    for (elem, (head, _)) in elem_pats.iter().zip(heads.iter()) {
+                        let (atom, partial) = MatchAnalyzer::analyze_pat_match_head(
+                            self.root,
+                            unifier,
+                            head.ty(),
+                            elem,
+                        )?;
                         for (var_name, var_ty) in partial {
                             if bindings.insert(var_name, var_ty).is_some() {
                                 bail_on!(elem, "naming conflict");

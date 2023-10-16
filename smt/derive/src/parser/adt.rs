@@ -99,11 +99,6 @@ impl ADTPath {
         &self.branch
     }
 
-    /// Getter to the type arguments
-    pub fn ty_args(&self) -> &[TypeRef] {
-        &self.ty_args
-    }
-
     /// Create a type reference
     pub fn as_type_ref(&self) -> TypeRef {
         TypeRef::User(self.branch.ty_name.clone(), self.ty_args.clone())
@@ -275,6 +270,7 @@ impl MatchAnalyzer {
     pub fn analyze_pat_match_head<T: CtxtForExpr>(
         ctxt: &T,
         unifier: &mut TypeUnifier,
+        ety: &TypeRef,
         pat: &Pat,
     ) -> Result<(MatchAtom, BTreeMap<VarName, TypeTag>)> {
         let (atom, bindings) = match pat {
@@ -288,30 +284,53 @@ impl MatchAnalyzer {
                 bail_if_exists!(leading_vert);
 
                 let mut variants = BTreeMap::new();
-
                 let mut iter = cases.iter();
                 let pat_case = bail_if_missing!(iter.next(), pat_or, "case patterns");
+
+                // analyze the bindings
                 let (adt, unpack, ref_bindings) =
                     Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
+                // unify the type
+                match unifier.unify(ety, &adt.as_type_ref()) {
+                    Ok(_) => (),
+                    Err(e) => bail_on!(pat_case, "{}", e),
+                };
+                // save it
                 if variants.insert(adt.branch, unpack).is_some() {
                     bail_on!(cases, "duplicated adt variant");
                 }
 
                 for pat_case in iter.by_ref() {
+                    // analyze the bindings
                     let (adt, unpack, new_bindings) =
                         Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
-                    if variants.insert(adt.branch, unpack).is_some() {
-                        bail_on!(cases, "duplicated adt variant");
-                    }
+                    // unify the type
+                    match unifier.unify(ety, &adt.as_type_ref()) {
+                        Ok(_) => (),
+                        Err(e) => bail_on!(pat_case, "{}", e),
+                    };
+                    // check binding consistency
                     if ref_bindings != new_bindings {
                         bail_on!(pat_case, "case patterns do not bind the same variable set");
                     }
+                    // save it
+                    if variants.insert(adt.branch, unpack).is_some() {
+                        bail_on!(cases, "duplicated adt variant");
+                    }
                 }
 
+                // done
                 (MatchAtom::Binding(variants), ref_bindings)
             }
             _ => {
+                // analyze the bindings
                 let (adt, unpack, bindings) = Self::analyze_pat_match_case(ctxt, unifier, pat)?;
+                // unify the type
+                match unifier.unify(ety, &adt.as_type_ref()) {
+                    Ok(_) => (),
+                    Err(e) => bail_on!(pat, "{}", e),
+                };
+                // done
                 (
                     MatchAtom::Binding(std::iter::once((adt.branch, unpack)).collect()),
                     bindings,
