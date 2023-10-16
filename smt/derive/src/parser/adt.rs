@@ -13,16 +13,16 @@ use crate::parser::ty::{EnumVariant, TypeBody, TypeTag};
 use crate::parser::util::PatUtil;
 
 /// An identifier for a ADT variant
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct ADTBranch {
     adt: UsrTypeName,
-    branch: String,
+    variant: String,
 }
 
 impl ADTBranch {
     /// Build manually
-    pub fn new(adt: UsrTypeName, branch: String) -> Self {
-        Self { adt, branch }
+    pub fn new(adt: UsrTypeName, variant: String) -> Self {
+        Self { adt, variant }
     }
 
     /// Extract a call target from a path
@@ -50,7 +50,7 @@ impl ADTBranch {
         // done
         Ok(Self {
             adt: type_name,
-            branch: variant_name,
+            variant: variant_name,
         })
     }
 }
@@ -92,7 +92,7 @@ impl<'a, 'ctx: 'a> MatchAnalyzer<'a, 'ctx> {
         };
 
         let variant_def = match type_body {
-            TypeBody::Enum(adt) => match adt.variants().get(&branch.branch) {
+            TypeBody::Enum(adt) => match adt.variants().get(&branch.variant) {
                 None => bail_on!(path, "no such variant"),
                 Some(variant) => variant,
             },
@@ -317,7 +317,7 @@ impl<'a, 'ctx: 'a> MatchAnalyzer<'a, 'ctx> {
                             if adt_name != &branch.adt {
                                 bail_on!(expr, "atoms and heads ADT name mismatch");
                             }
-                            if !adt_variants.contains(&branch.branch) {
+                            if !adt_variants.contains(&branch.variant) {
                                 bail_on!(expr, "atoms and heads ADT variant mismatch");
                             }
                         }
@@ -362,11 +362,8 @@ impl<'a, 'ctx: 'a> MatchAnalyzer<'a, 'ctx> {
                                 break;
                             }
                             Some(unpack) => {
-                                let variant = MatchVariant::new(
-                                    combo_branch.adt.clone(),
-                                    combo_branch.branch.to_string(),
-                                    unpack.clone(),
-                                );
+                                let variant =
+                                    MatchVariant::new(combo_branch.clone(), unpack.clone());
                                 variants.push(variant);
                             }
                         },

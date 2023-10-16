@@ -8,7 +8,7 @@ use syn::{
     Stmt, UnOp,
 };
 
-use crate::parser::adt::MatchAnalyzer;
+use crate::parser::adt::{ADTBranch, MatchAnalyzer};
 use crate::parser::ctxt::ContextWithSig;
 use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
@@ -39,19 +39,14 @@ pub enum Unpack {
 /// Marks how a variable of an ADT type is matched
 #[derive(Clone)]
 pub struct MatchVariant {
-    adt: UsrTypeName,
-    branch: String,
+    branch: ADTBranch,
     unpack: Unpack,
 }
 
 impl MatchVariant {
     /// Create a new variant
-    pub fn new(adt: UsrTypeName, branch: String, unpack: Unpack) -> Self {
-        Self {
-            adt,
-            branch,
-            unpack,
-        }
+    pub fn new(branch: ADTBranch, unpack: Unpack) -> Self {
+        Self { branch, unpack }
     }
 }
 
@@ -82,7 +77,7 @@ pub enum Op {
     /// `<var>`
     Var(VarName),
     /// `<adt>::<branch>`
-    EnumUnit { adt: UsrTypeName, branch: String },
+    EnumUnit(ADTBranch),
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
     Match {
         heads: Vec<Expr>,
@@ -567,7 +562,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Err(e) => bail_on!(target, "{}", e),
                         };
                         Inst {
-                            op: Op::EnumUnit { adt, branch }.into(),
+                            op: Op::EnumUnit(ADTBranch::new(adt, branch)).into(),
                             ty: ty_unified,
                         }
                     }
