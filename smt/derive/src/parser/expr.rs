@@ -24,8 +24,14 @@ use crate::parser::util::{ExprPathAsTarget, PatUtil, PathUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
+    /// Kind of the current context
+    fn kind(&self) -> Kind;
+
     /// Retrieve the definition of a user-defined type
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
+
+    /// Retrieve the signature of a user-defined function
+    fn get_func_sig(&self, name: &UsrFuncName, kind: Kind) -> Option<&FuncSig>;
 
     /// Retrieve all variants of an enum
     fn get_adt_variants(&self, name: &UsrTypeName) -> Option<&BTreeMap<String, EnumVariant>> {
@@ -411,8 +417,16 @@ impl CtxtForType for ExprParserRoot<'_> {
 }
 
 impl CtxtForExpr for ExprParserRoot<'_> {
+    fn kind(&self) -> Kind {
+        self.kind
+    }
+
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef> {
         self.ctxt.get_type_def(name)
+    }
+
+    fn get_func_sig(&self, name: &UsrFuncName, kind: Kind) -> Option<&FuncSig> {
+        self.ctxt.get_func_sig(name, kind)
     }
 }
 

@@ -86,7 +86,7 @@ impl ReservedIdent for SysTypeName {
 }
 
 /// A type name
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum TypeName {
     Sys(SysTypeName),
     Usr(UsrTypeName),

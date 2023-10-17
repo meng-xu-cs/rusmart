@@ -1,12 +1,13 @@
-use syn::{Error, ExprPath, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
+use syn::{
+    Error, Expr as Exp, ExprPath, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result,
+};
 
 use crate::parser::adt::{ADTPath, TuplePath};
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::CtxtForExpr;
-use crate::parser::func::FuncName;
-use crate::parser::infer::{TypeRef, TypeUnifier};
-use crate::parser::name::{ReservedIdent, UsrFuncName, VarName};
-use crate::parser::ty::TypeName;
+use crate::parser::func::{FuncPath, QualifiedPath};
+use crate::parser::infer::TypeUnifier;
+use crate::parser::name::{ReservedIdent, VarName};
 
 /// A convenience wrapper for parsing paths
 pub struct PathUtil;
@@ -108,11 +109,67 @@ impl ExprPathAsTarget {
 /// Marks what a path serving as a callee expr can be
 pub enum ExprPathAsCallee {
     /// `<type-name>::<func-name>::<ty-args?>(...)`
-    FuncWithType(TypeName, FuncName, Option<Vec<TypeRef>>),
+    FuncWithType(QualifiedPath),
     /// `<usr-func-name>::<ty-args?>(...)`
-    FuncNoPrefix(UsrFuncName, Option<Vec<TypeRef>>),
+    FuncNoPrefix(FuncPath),
     /// `<adt>::<ty-args?>::<variant>(...)`
     CtorEnum(ADTPath),
     /// `<tuple>::<ty-args?>(...)`
     CtorTuple(TuplePath),
+}
+
+impl ExprPathAsCallee {
+    /// Parse from an expression
+    pub fn parse<T: CtxtForExpr>(ctxt: &T, unifier: &mut TypeUnifier, expr: &Exp) -> Result<Self> {
+        let path = match expr {
+            Exp::Path(p) => {
+                let ExprPath {
+                    attrs: _,
+                    qself,
+                    path,
+                } = p;
+                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+                path
+            }
+            _ => bail_on!(expr, "invalid callee"),
+        };
+
+        // case by number of path segments
+        let parsed = match path.segments.len() {
+            1 => {
+                // type takes first priority
+                match TuplePath::from_path(ctxt, unifier, path) {
+                    Ok(tuple) => Self::CtorTuple(tuple),
+                    Err(mut e1) => {
+                        // try to see whether this is a function call
+                        match FuncPath::from_path(ctxt, unifier, path) {
+                            Ok(func) => Self::FuncNoPrefix(func),
+                            Err(e2) => {
+                                e1.combine(e2);
+                                return Err(e1);
+                            }
+                        }
+                    }
+                }
+            }
+            2 => {
+                // type takes first priority
+                match ADTPath::from_path(ctxt, unifier, path) {
+                    Ok(adt) => Self::CtorEnum(adt),
+                    Err(mut e1) => {
+                        // try to see whether this is a function call
+                        match QualifiedPath::from_path(ctxt, path) {
+                            Ok(qualified) => Self::FuncWithType(qualified.clone()),
+                            Err(e2) => {
+                                e1.combine(e2);
+                                return Err(e1);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => bail_on!(expr, "unrecognized callee"),
+        };
+        Ok(parsed)
+    }
 }

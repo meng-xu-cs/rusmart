@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use syn::{FnArg, Ident, PatType, Result, ReturnType, Signature};
+use syn::{FnArg, Ident, PatType, Path, PathArguments, PathSegment, Result, ReturnType, Signature};
 
 use crate::parser::ctxt::ContextWithType;
-use crate::parser::err::{bail_if_exists, bail_on};
-use crate::parser::expr::Expr;
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::parser::expr::{CtxtForExpr, Expr};
 use crate::parser::generics::Generics;
+use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::name::{ReservedIdent, UsrFuncName, UsrTypeName, VarName};
-use crate::parser::ty::{CtxtForType, TypeTag};
+use crate::parser::ty::{CtxtForType, TypeName, TypeTag};
 use crate::parser::util::PatUtil;
 
 /// Reserved function name
@@ -33,7 +34,7 @@ impl ReservedIdent for SysFuncName {
 }
 
 /// A function name
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum FuncName {
     Sys(SysFuncName),
     Usr(UsrFuncName),
@@ -178,6 +179,147 @@ impl FuncDef {
     /// Create a new function definition
     pub fn new(sig: FuncSig, body: Expr) -> Self {
         Self { sig, body }
+    }
+}
+
+/// An identifier for a function with type variables
+#[derive(Clone)]
+pub struct FuncPath {
+    fn_name: UsrFuncName,
+    ty_args: Vec<TypeRef>,
+}
+
+impl FuncPath {
+    /// Extract a reference to a function from a path
+    pub fn from_path<T: CtxtForExpr>(
+        ctxt: &T,
+        unifier: &mut TypeUnifier,
+        path: &Path,
+    ) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        let mut iter = segments.iter();
+
+        // func
+        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
+        let fn_name = ident.try_into()?;
+        let ty_params_size = match ctxt.get_func_sig(&fn_name, ctxt.kind()) {
+            None => bail_on!(ident, "no such function"),
+            Some(sig) => sig.generics.len(),
+        };
+
+        let ty_args = match arguments {
+            PathArguments::None => (0..ty_params_size)
+                .map(|_| TypeRef::Var(unifier.mk_var()))
+                .collect(),
+            PathArguments::AngleBracketed(pack) => {
+                let ty_args = TypeTag::from_args(ctxt, pack)?;
+                if ty_args.len() != ty_params_size {
+                    bail_on!(pack, "type argument number mismatch");
+                }
+                ty_args.iter().map(|t| t.into()).collect()
+            }
+            PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
+        };
+
+        // ensure that there are no more tokens
+        bail_if_exists!(iter.next());
+
+        // done
+        Ok(Self { fn_name, ty_args })
+    }
+
+    /// Getter to the function name
+    pub fn fn_name(&self) -> &UsrFuncName {
+        &self.fn_name
+    }
+
+    /// Getter to the type arguments
+    pub fn ty_args(&self) -> &[TypeRef] {
+        &self.ty_args
+    }
+}
+
+/// An identifier for a function with type variables
+#[derive(Clone)]
+pub struct QualifiedPath {
+    ty_name: TypeName,
+    fn_name: FuncName,
+    ty_args: Option<Vec<TypeTag>>,
+}
+
+impl QualifiedPath {
+    /// Extract a reference to a qualified call from a path
+    pub fn from_path<T: CtxtForExpr>(ctxt: &T, path: &Path) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        let mut iter = segments.iter();
+
+        // type
+        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
+        let ty_name = TypeName::try_from(ctxt.generics(), ident)?;
+        match &ty_name {
+            TypeName::Usr(name) => {
+                if ctxt.get_type_def(name).is_none() {
+                    bail_on!(ident, "no such type");
+                }
+            }
+            _ => (),
+        }
+        if !matches!(arguments, PathArguments::None) {
+            bail_on!(arguments, "unexpected type arguments");
+        }
+
+        // func
+        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
+        let fn_name = FuncName::try_from(ident)?;
+        match &fn_name {
+            FuncName::Sys(_) => (),
+            FuncName::Usr(name) => {
+                if ctxt.get_func_sig(name, ctxt.kind()).is_none() {
+                    bail_on!(ident, "no such function");
+                }
+            }
+        }
+
+        let ty_args = match arguments {
+            PathArguments::None => None,
+            PathArguments::AngleBracketed(pack) => Some(TypeTag::from_args(ctxt, pack)?),
+            PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
+        };
+
+        // ensure that there are no more tokens
+        bail_if_exists!(iter.next());
+
+        // done
+        Ok(Self {
+            ty_name,
+            fn_name,
+            ty_args,
+        })
+    }
+
+    /// Getter to the type name
+    pub fn ty_name(&self) -> &TypeName {
+        &self.ty_name
+    }
+
+    /// Getter to the func name
+    pub fn fn_name(&self) -> &FuncName {
+        &self.fn_name
+    }
+
+    /// Getter to the type arguments
+    pub fn ty_args(&self) -> Option<&[TypeTag]> {
+        self.ty_args.as_deref()
     }
 }
 

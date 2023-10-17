@@ -384,6 +384,18 @@ impl ContextWithSig {
         self.types.get(name)
     }
 
+    /// Get function signature
+    pub fn get_func_sig(&self, name: &UsrFuncName, kind: Kind) -> Option<&FuncSig> {
+        match kind {
+            Kind::Impl => self.impls.get(name).map(|(sig, _)| sig),
+            Kind::Spec => self
+                .specs
+                .get(name)
+                .or_else(|| self.impls.get(name))
+                .map(|(sig, _)| sig),
+        }
+    }
+
     /// Parse function body
     pub fn parse_func_body(self) -> Result<ContextWithFunc> {
         // impl
