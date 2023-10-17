@@ -99,6 +99,11 @@ impl ADTPath {
         &self.branch
     }
 
+    /// Getter to the type arguments
+    pub fn ty_args(&self) -> &[TypeRef] {
+        &self.ty_args
+    }
+
     /// Create a type reference
     pub fn as_type_ref(&self) -> TypeRef {
         TypeRef::User(self.branch.ty_name.clone(), self.ty_args.clone())
@@ -135,7 +140,7 @@ impl MatchAnalyzer {
         ctxt: &T,
         unifier: &mut TypeUnifier,
         pat: &Pat,
-    ) -> Result<(ADTPath, Unpack, BTreeMap<VarName, TypeTag>)> {
+    ) -> Result<(ADTPath, Unpack, BTreeMap<VarName, TypeRef>)> {
         let mut bindings = BTreeMap::new();
 
         let (adt, unpack) = match pat {
@@ -148,7 +153,7 @@ impl MatchAnalyzer {
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
                 let adt = ADTPath::from_path(ctxt, unifier, path)?;
-                let variant = match ctxt.get_adt_variant(adt.branch()) {
+                let (_, variant) = match ctxt.get_adt_variant_details(&adt) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
@@ -169,7 +174,7 @@ impl MatchAnalyzer {
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
                 let adt = ADTPath::from_path(ctxt, unifier, path)?;
-                let variant = match ctxt.get_adt_variant(adt.branch()) {
+                let (ty_inst, variant) = match ctxt.get_adt_variant_details(&adt) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
@@ -185,7 +190,12 @@ impl MatchAnalyzer {
                             match Self::analyze_pat_match_binding(elem)? {
                                 None => (),
                                 Some(var) => {
-                                    match bindings.insert(var.clone(), slot.clone()) {
+                                    let ty_substitute =
+                                        match TypeRef::substitute_params(slot, &ty_inst) {
+                                            Ok(t) => t,
+                                            Err(e) => bail_on!(elem, "{}", e),
+                                        };
+                                    match bindings.insert(var.clone(), ty_substitute) {
                                         None => (),
                                         Some(_) => {
                                             bail_on!(elem, "duplicated name");
@@ -213,7 +223,7 @@ impl MatchAnalyzer {
                 bail_if_exists!(rest);
 
                 let adt = ADTPath::from_path(ctxt, unifier, path)?;
-                let variant = match ctxt.get_adt_variant(adt.branch()) {
+                let (ty_inst, variant) = match ctxt.get_adt_variant_details(&adt) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
@@ -241,11 +251,16 @@ impl MatchAnalyzer {
                                 None => bail_on!(member, "no such field"),
                                 Some(t) => t,
                             };
+                            let ty_substitute =
+                                match TypeRef::substitute_params(field_type, &ty_inst) {
+                                    Ok(t) => t,
+                                    Err(e) => bail_on!(member, "{}", e),
+                                };
 
                             match Self::analyze_pat_match_binding(pat)? {
                                 None => (),
                                 Some(var) => {
-                                    match bindings.insert(var.clone(), field_type.clone()) {
+                                    match bindings.insert(var.clone(), ty_substitute) {
                                         None => (),
                                         Some(_) => {
                                             bail_on!(pat, "duplicated name");
@@ -272,7 +287,7 @@ impl MatchAnalyzer {
         unifier: &mut TypeUnifier,
         ety: &TypeRef,
         pat: &Pat,
-    ) -> Result<(MatchAtom, BTreeMap<VarName, TypeTag>)> {
+    ) -> Result<(MatchAtom, BTreeMap<VarName, TypeRef>)> {
         let (atom, bindings) = match pat {
             Pat::Wild(_) => (MatchAtom::Default, BTreeMap::new()),
             Pat::Or(pat_or) => {
@@ -331,10 +346,8 @@ impl MatchAnalyzer {
                     Err(e) => bail_on!(pat, "{}", e),
                 };
                 // done
-                (
-                    MatchAtom::Binding(std::iter::once((adt.branch, unpack)).collect()),
-                    bindings,
-                )
+                let variants = std::iter::once((adt.branch, unpack)).collect();
+                (MatchAtom::Binding(variants), bindings)
             }
         };
         Ok((atom, bindings))

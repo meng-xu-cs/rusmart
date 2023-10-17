@@ -72,14 +72,14 @@ impl PatUtil {
 }
 
 /// Marks what a path serving as a standalone expr can be
-pub enum ExprPathStandalone {
+pub enum ExprPathAsTarget {
     /// a local variable
     Var(VarName),
     /// a unit variant in an enum
     EnumUnit(ADTPath),
 }
 
-impl ExprPathStandalone {
+impl ExprPathAsTarget {
     /// Parse from an expression
     pub fn parse<T: CtxtForExpr>(
         ctxt: &T,

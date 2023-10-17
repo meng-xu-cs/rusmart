@@ -8,7 +8,7 @@ use syn::{
     Stmt, UnOp,
 };
 
-use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
+use crate::parser::adt::{ADTBranch, ADTPath, MatchAnalyzer, MatchOrganizer};
 use crate::parser::ctxt::ContextWithSig;
 use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
@@ -16,11 +16,11 @@ use crate::parser::func::{FuncName, FuncSig, SysFuncName};
 use crate::parser::generics::Generics;
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
-use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
+use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{
     CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag,
 };
-use crate::parser::util::{ExprPathStandalone, PatUtil, PathUtil};
+use crate::parser::util::{ExprPathAsTarget, PatUtil, PathUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -28,12 +28,27 @@ pub trait CtxtForExpr: CtxtForType {
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
 
     /// Retrieve the definition of an enum variant
-    fn get_adt_variant(&self, branch: &ADTBranch) -> Option<&EnumVariant> {
-        let def = self.get_type_def(branch.ty_name())?;
-        match def.body() {
-            TypeBody::Enum(adt) => adt.variants().get(branch.variant()),
-            _ => None,
+    fn get_adt_variant_details(
+        &self,
+        path: &ADTPath,
+    ) -> Option<(BTreeMap<TypeParamName, TypeRef>, &EnumVariant)> {
+        let def = self.get_type_def(path.branch().ty_name())?;
+        let variant = match def.body() {
+            TypeBody::Enum(adt) => adt.variants().get(path.branch().variant())?,
+            _ => return None,
+        };
+
+        let generics = def.head();
+        if generics.len() != path.ty_args().len() {
+            return None;
         }
+
+        let ty_inst = generics
+            .vec()
+            .into_iter()
+            .zip(path.ty_args().iter().cloned())
+            .collect();
+        Some((ty_inst, variant))
     }
 }
 
@@ -496,8 +511,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
         // case on expression type
         let inst = match target {
             Exp::Path(expr_path) => {
-                match ExprPathStandalone::parse(self.root, unifier, expr_path)? {
-                    ExprPathStandalone::Var(name) => {
+                match ExprPathAsTarget::parse(self.root, unifier, expr_path)? {
+                    ExprPathAsTarget::Var(name) => {
                         let ty = match self.vars.get(&name) {
                             None => bail_on!(expr_path, "unknown local variable"),
                             Some(t) => t.clone(),
@@ -513,8 +528,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             ty: ty_unified,
                         }
                     }
-                    ExprPathStandalone::EnumUnit(adt) => {
-                        let variant = match self.root.get_adt_variant(adt.branch()) {
+                    ExprPathAsTarget::EnumUnit(adt) => {
+                        let (_, variant) = match self.root.get_adt_variant_details(&adt) {
                             None => bail_on!(expr_path, "unknown type"),
                             Some(details) => details,
                         };
@@ -700,7 +715,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     // use the new bindings to analyze the body
                     let mut new_ctxt = self.fork(self.exp_ty.clone());
                     for (var_name, var_ty) in bindings {
-                        if new_ctxt.vars.insert(var_name, (&var_ty).into()).is_some() {
+                        if new_ctxt.vars.insert(var_name, var_ty).is_some() {
                             bail_on!(pat, "naming conflict");
                         }
                     }
