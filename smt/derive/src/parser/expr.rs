@@ -27,6 +27,15 @@ pub trait CtxtForExpr: CtxtForType {
     /// Retrieve the definition of a user-defined type
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
 
+    /// Retrieve all variants of an enum
+    fn get_adt_variants(&self, name: &UsrTypeName) -> Option<&BTreeMap<String, EnumVariant>> {
+        let def = self.get_type_def(name)?;
+        match def.body() {
+            TypeBody::Enum(adt) => Some(adt.variants()),
+            _ => None,
+        }
+    }
+
     /// Retrieve the definition of an enum variant
     fn get_adt_variant_details(
         &self,
@@ -732,14 +741,9 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     // retrieve all variants of the ADT
                     let (adt_name, adt_variants): (_, BTreeSet<_>) =
                         match unifier.instantiate_if_possible(converted.ty()) {
-                            TypeRef::User(name, _) => match self.root.get_type_def(&name) {
-                                None => bail_on!(original, "no such type"),
-                                Some(def) => match def.body() {
-                                    TypeBody::Enum(adt) => {
-                                        (name.clone(), adt.variants().keys().cloned().collect())
-                                    }
-                                    _ => bail_on!(original, "not an ADT on match head"),
-                                },
+                            TypeRef::User(name, _) => match self.root.get_adt_variants(&name) {
+                                None => bail_on!(original, "no scuch enum type"),
+                                Some(variants) => (name, variants.keys().cloned().collect()),
                             },
                             _ => bail_on!(original, "not a user-defined type"),
                         };

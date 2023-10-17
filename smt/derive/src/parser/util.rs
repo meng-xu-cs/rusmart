@@ -1,10 +1,12 @@
 use syn::{Error, ExprPath, Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
 
-use crate::parser::adt::ADTPath;
+use crate::parser::adt::{ADTPath, TuplePath};
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::CtxtForExpr;
-use crate::parser::infer::TypeUnifier;
-use crate::parser::name::{ReservedIdent, VarName};
+use crate::parser::func::FuncName;
+use crate::parser::infer::{TypeRef, TypeUnifier};
+use crate::parser::name::{ReservedIdent, UsrFuncName, VarName};
+use crate::parser::ty::TypeName;
 
 /// A convenience wrapper for parsing paths
 pub struct PathUtil;
@@ -101,4 +103,16 @@ impl ExprPathAsTarget {
         };
         Ok(parsed)
     }
+}
+
+/// Marks what a path serving as a callee expr can be
+pub enum ExprPathAsCallee {
+    /// `<type-name>::<func-name>::<ty-args?>(...)`
+    FuncWithType(TypeName, FuncName, Option<Vec<TypeRef>>),
+    /// `<usr-func-name>::<ty-args?>(...)`
+    FuncNoPrefix(UsrFuncName, Option<Vec<TypeRef>>),
+    /// `<adt>::<ty-args?>::<variant>(...)`
+    CtorEnum(ADTPath),
+    /// `<tuple>::<ty-args?>(...)`
+    CtorTuple(TuplePath),
 }

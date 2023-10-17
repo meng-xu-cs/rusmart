@@ -10,7 +10,7 @@ use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::{CtxtForExpr, Expr, MatchCombo, MatchVariant, Unpack};
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::name::{UsrTypeName, VarName};
-use crate::parser::ty::{EnumVariant, TypeTag};
+use crate::parser::ty::{EnumVariant, TypeBody, TypeTag};
 use crate::parser::util::PatUtil;
 
 /// An identifier for a ADT variant
@@ -37,7 +37,7 @@ impl ADTBranch {
     }
 }
 
-/// An identifier for a ADT variant with type variables
+/// An identifier for an ADT variant with type variables
 #[derive(Clone)]
 pub struct ADTPath {
     branch: ADTBranch,
@@ -57,21 +57,100 @@ impl ADTPath {
         } = path;
         bail_if_exists!(leading_colon);
 
-        let mut iter = segments.iter().rev();
-
-        // variant
-        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "branch");
-        if !matches!(arguments, PathArguments::None) {
-            bail_on!(arguments, "unexpected arguments");
-        }
-        let variant = ident.to_string();
+        let mut iter = segments.iter();
 
         // type
         let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
         let ty_name = ident.try_into()?;
-        let ty_params_size = match ctxt.get_type_generics(&ty_name) {
+        let (ty_params_size, variants) = match ctxt.get_type_def(&ty_name) {
             None => bail_on!(ident, "no such type"),
-            Some(generics) => generics.len(),
+            Some(def) => match def.body() {
+                TypeBody::Enum(details) => (def.head().len(), details.variants()),
+                _ => bail_on!(ident, "not an enum type"),
+            },
+        };
+
+        let ty_args = match arguments {
+            PathArguments::None => (0..ty_params_size)
+                .map(|_| TypeRef::Var(unifier.mk_var()))
+                .collect(),
+            PathArguments::AngleBracketed(pack) => {
+                let ty_args = TypeTag::from_args(ctxt, pack)?;
+                if ty_args.len() != ty_params_size {
+                    bail_on!(pack, "type argument number mismatch");
+                }
+                ty_args.iter().map(|t| t.into()).collect()
+            }
+            PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
+        };
+
+        // variant
+        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "branch");
+        let variant = ident.to_string();
+        if !variants.contains_key(&variant) {
+            bail_on!(ident, "no such variant");
+        }
+        if !matches!(arguments, PathArguments::None) {
+            bail_on!(arguments, "unexpected arguments");
+        }
+
+        // ensure that there are no more tokens
+        bail_if_exists!(iter.next());
+
+        // done
+        let branch = ADTBranch { ty_name, variant };
+        Ok(Self { branch, ty_args })
+    }
+
+    /// Getter to the branch
+    pub fn branch(&self) -> &ADTBranch {
+        &self.branch
+    }
+
+    /// Getter to the type arguments
+    pub fn ty_args(&self) -> &[TypeRef] {
+        &self.ty_args
+    }
+
+    /// Create a type reference
+    pub fn as_type_ref(&self) -> TypeRef {
+        TypeRef::User(self.branch.ty_name.clone(), self.ty_args.clone())
+    }
+}
+
+/// An identifier for a tuple with type variables
+#[derive(Clone)]
+pub struct TuplePath {
+    ty_name: UsrTypeName,
+    ty_args: Vec<TypeRef>,
+}
+
+impl TuplePath {
+    /// Extract a reference to a tuple from a path
+    pub fn from_path<T: CtxtForExpr>(
+        ctxt: &T,
+        unifier: &mut TypeUnifier,
+        path: &Path,
+    ) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+
+        let mut iter = segments.iter().rev();
+
+        // type
+        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
+        let ty_name = ident.try_into()?;
+        let ty_params_size = match ctxt.get_type_def(&ty_name) {
+            None => bail_on!(ident, "no such type"),
+            Some(def) => {
+                if !matches!(def.body(), TypeBody::Tuple(_)) {
+                    bail_on!(ident, "not a tuple type");
+                }
+                def.head().len()
+            }
         };
 
         let ty_args = match arguments {
@@ -90,13 +169,14 @@ impl ADTPath {
 
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
-        let branch = ADTBranch { ty_name, variant };
-        Ok(Self { branch, ty_args })
+
+        // done
+        Ok(Self { ty_name, ty_args })
     }
 
     /// Getter to the branch
-    pub fn branch(&self) -> &ADTBranch {
-        &self.branch
+    pub fn ty_name(&self) -> &UsrTypeName {
+        &self.ty_name
     }
 
     /// Getter to the type arguments
@@ -106,7 +186,7 @@ impl ADTPath {
 
     /// Create a type reference
     pub fn as_type_ref(&self) -> TypeRef {
-        TypeRef::User(self.branch.ty_name.clone(), self.ty_args.clone())
+        TypeRef::User(self.ty_name.clone(), self.ty_args.clone())
     }
 }
 
