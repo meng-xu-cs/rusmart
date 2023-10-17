@@ -8,6 +8,7 @@ use crate::parser::func::FuncSig;
 use crate::parser::generics::Generics;
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
+use crate::parser::path::GenericsInstantiated;
 use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
 
 /// A function type, with inference allowed
@@ -231,31 +232,20 @@ impl InferDatabase {
             let mut probing = unifier.clone();
 
             // collect the type param substitution
-            let ty_params = candidate.generics.vec();
-            let param_substitutes: BTreeMap<_, _> = match ty_args_opt {
-                None => ty_params
-                    .into_iter()
-                    .map(|name| (name, TypeRef::Var(probing.mk_var())))
-                    .collect(),
-                Some(ty_args) => {
-                    if ty_params.len() != ty_args.len() {
-                        continue;
-                    }
-                    ty_params
-                        .into_iter()
-                        .zip(ty_args.iter())
-                        .map(|(name, ty_arg)| (name, ty_arg.into()))
-                        .collect()
-                }
-            };
+            let param_substitutes =
+                match GenericsInstantiated::new(&candidate.generics, ty_args_opt) {
+                    None => continue,
+                    Some(subst) => subst,
+                };
 
             // substitute types in function signature
             let params = candidate
                 .params
                 .iter()
-                .map(|t| TypeRef::substitute_params(t, &param_substitutes))
+                .map(|t| TypeRef::substitute_params(unifier, t, &param_substitutes))
                 .collect::<Result<Vec<_>>>()?;
-            let ret_ty = TypeRef::substitute_params(&candidate.ret_ty, &param_substitutes)?;
+            let ret_ty =
+                TypeRef::substitute_params(unifier, &candidate.ret_ty, &param_substitutes)?;
 
             // unify all types
             let mut unified_args = vec![];
@@ -604,32 +594,42 @@ impl From<&TypeTag> for TypeRef {
 impl TypeRef {
     /// Apply type parameter substitution
     pub fn substitute_params(
+        unifier: &mut TypeUnifier,
         tag: &TypeTag,
-        substitute: &BTreeMap<TypeParamName, TypeRef>,
+        substitute: &GenericsInstantiated,
     ) -> Result<TypeRef> {
         let updated = match tag {
             TypeTag::Boolean => TypeRef::Boolean,
             TypeTag::Integer => TypeRef::Integer,
             TypeTag::Rational => TypeRef::Rational,
             TypeTag::Text => TypeRef::Text,
-            TypeTag::Cloak(sub) => TypeRef::Cloak(Self::substitute_params(sub, substitute)?.into()),
-            TypeTag::Seq(sub) => TypeRef::Seq(Self::substitute_params(sub, substitute)?.into()),
-            TypeTag::Set(sub) => TypeRef::Set(Self::substitute_params(sub, substitute)?.into()),
+            TypeTag::Cloak(sub) => {
+                TypeRef::Cloak(Self::substitute_params(unifier, sub, substitute)?.into())
+            }
+            TypeTag::Seq(sub) => {
+                TypeRef::Seq(Self::substitute_params(unifier, sub, substitute)?.into())
+            }
+            TypeTag::Set(sub) => {
+                TypeRef::Set(Self::substitute_params(unifier, sub, substitute)?.into())
+            }
             TypeTag::Map(key, val) => TypeRef::Map(
-                Self::substitute_params(key, substitute)?.into(),
-                Self::substitute_params(val, substitute)?.into(),
+                Self::substitute_params(unifier, key, substitute)?.into(),
+                Self::substitute_params(unifier, val, substitute)?.into(),
             ),
             TypeTag::Error => TypeRef::Error,
             TypeTag::User(name, args) => TypeRef::User(
                 name.clone(),
                 args.iter()
-                    .map(|t| Self::substitute_params(t, substitute))
+                    .map(|t| Self::substitute_params(unifier, t, substitute))
                     .collect::<Result<_>>()?,
             ),
-            TypeTag::Parameter(name) => substitute
+            TypeTag::Parameter(name) => match substitute
                 .get(name)
                 .ok_or_else(|| anyhow!("no such type parameter"))?
-                .clone(),
+            {
+                None => TypeRef::Var(unifier.mk_var()),
+                Some(t) => t.into(),
+            },
         };
         Ok(updated)
     }

@@ -1,16 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
-use syn::{
-    ExprMatch, ExprPath, FieldPat, Member, Pat, PatOr, PatStruct, PatTupleStruct, Path,
-    PathArguments, PathSegment, Result,
-};
+use syn::{ExprMatch, ExprPath, FieldPat, Member, Pat, PatOr, PatStruct, PatTupleStruct, Result};
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::{CtxtForExpr, Expr, MatchCombo, MatchVariant, Unpack};
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::name::{UsrTypeName, VarName};
-use crate::parser::ty::{EnumVariant, TypeBody, TypeTag};
+use crate::parser::path::ADTPath;
+use crate::parser::ty::EnumVariant;
 use crate::parser::util::PatUtil;
 
 /// An identifier for a ADT variant
@@ -34,159 +32,6 @@ impl ADTBranch {
     /// Getter to the variant
     pub fn variant(&self) -> &String {
         &self.variant
-    }
-}
-
-/// An identifier for an ADT variant with type variables
-#[derive(Clone)]
-pub struct ADTPath {
-    branch: ADTBranch,
-    ty_args: Vec<TypeRef>,
-}
-
-impl ADTPath {
-    /// Extract a reference to an ADT branch from a path
-    pub fn from_path<T: CtxtForExpr>(
-        ctxt: &T,
-        unifier: &mut TypeUnifier,
-        path: &Path,
-    ) -> Result<Self> {
-        let Path {
-            leading_colon,
-            segments,
-        } = path;
-        bail_if_exists!(leading_colon);
-
-        let mut iter = segments.iter();
-
-        // type
-        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
-        let ty_name = ident.try_into()?;
-        let (ty_params_size, variants) = match ctxt.get_type_def(&ty_name) {
-            None => bail_on!(ident, "no such type"),
-            Some(def) => match def.body() {
-                TypeBody::Enum(details) => (def.head().len(), details.variants()),
-                _ => bail_on!(ident, "not an enum type"),
-            },
-        };
-
-        let ty_args = match arguments {
-            PathArguments::None => (0..ty_params_size)
-                .map(|_| TypeRef::Var(unifier.mk_var()))
-                .collect(),
-            PathArguments::AngleBracketed(pack) => {
-                let ty_args = TypeTag::from_args(ctxt, pack)?;
-                if ty_args.len() != ty_params_size {
-                    bail_on!(pack, "type argument number mismatch");
-                }
-                ty_args.iter().map(|t| t.into()).collect()
-            }
-            PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
-        };
-
-        // variant
-        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "branch");
-        let variant = ident.to_string();
-        if !variants.contains_key(&variant) {
-            bail_on!(ident, "no such variant");
-        }
-        if !matches!(arguments, PathArguments::None) {
-            bail_on!(arguments, "unexpected arguments");
-        }
-
-        // ensure that there are no more tokens
-        bail_if_exists!(iter.next());
-
-        // done
-        let branch = ADTBranch { ty_name, variant };
-        Ok(Self { branch, ty_args })
-    }
-
-    /// Getter to the branch
-    pub fn branch(&self) -> &ADTBranch {
-        &self.branch
-    }
-
-    /// Getter to the type arguments
-    pub fn ty_args(&self) -> &[TypeRef] {
-        &self.ty_args
-    }
-
-    /// Create a type reference
-    pub fn as_type_ref(&self) -> TypeRef {
-        TypeRef::User(self.branch.ty_name.clone(), self.ty_args.clone())
-    }
-}
-
-/// An identifier for a tuple with type variables
-#[derive(Clone)]
-pub struct TuplePath {
-    ty_name: UsrTypeName,
-    ty_args: Vec<TypeRef>,
-}
-
-impl TuplePath {
-    /// Extract a reference to a tuple from a path
-    pub fn from_path<T: CtxtForExpr>(
-        ctxt: &T,
-        unifier: &mut TypeUnifier,
-        path: &Path,
-    ) -> Result<Self> {
-        let Path {
-            leading_colon,
-            segments,
-        } = path;
-        bail_if_exists!(leading_colon);
-
-        let mut iter = segments.iter().rev();
-
-        // type
-        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
-        let ty_name = ident.try_into()?;
-        let ty_params_size = match ctxt.get_type_def(&ty_name) {
-            None => bail_on!(ident, "no such type"),
-            Some(def) => {
-                if !matches!(def.body(), TypeBody::Tuple(_)) {
-                    bail_on!(ident, "not a tuple type");
-                }
-                def.head().len()
-            }
-        };
-
-        let ty_args = match arguments {
-            PathArguments::None => (0..ty_params_size)
-                .map(|_| TypeRef::Var(unifier.mk_var()))
-                .collect(),
-            PathArguments::AngleBracketed(pack) => {
-                let ty_args = TypeTag::from_args(ctxt, pack)?;
-                if ty_args.len() != ty_params_size {
-                    bail_on!(pack, "type argument number mismatch");
-                }
-                ty_args.iter().map(|t| t.into()).collect()
-            }
-            PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
-        };
-
-        // ensure that there are no more tokens
-        bail_if_exists!(iter.next());
-
-        // done
-        Ok(Self { ty_name, ty_args })
-    }
-
-    /// Getter to the branch
-    pub fn ty_name(&self) -> &UsrTypeName {
-        &self.ty_name
-    }
-
-    /// Getter to the type arguments
-    pub fn ty_args(&self) -> &[TypeRef] {
-        &self.ty_args
-    }
-
-    /// Create a type reference
-    pub fn as_type_ref(&self) -> TypeRef {
-        TypeRef::User(self.ty_name.clone(), self.ty_args.clone())
     }
 }
 
@@ -232,8 +77,8 @@ impl MatchAnalyzer {
                 } = pat_path;
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
-                let adt = ADTPath::from_path(ctxt, unifier, path)?;
-                let (_, variant) = match ctxt.get_adt_variant_details(&adt) {
+                let adt = ADTPath::from_path(ctxt, path)?;
+                let variant = match ctxt.get_adt_variant_details(&adt) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
@@ -253,8 +98,8 @@ impl MatchAnalyzer {
                 } = pat_tuple;
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
-                let adt = ADTPath::from_path(ctxt, unifier, path)?;
-                let (ty_inst, variant) = match ctxt.get_adt_variant_details(&adt) {
+                let adt = ADTPath::from_path(ctxt, path)?;
+                let variant = match ctxt.get_adt_variant_details(&adt) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
@@ -270,11 +115,14 @@ impl MatchAnalyzer {
                             match Self::analyze_pat_match_binding(elem)? {
                                 None => (),
                                 Some(var) => {
-                                    let ty_substitute =
-                                        match TypeRef::substitute_params(slot, &ty_inst) {
-                                            Ok(t) => t,
-                                            Err(e) => bail_on!(elem, "{}", e),
-                                        };
+                                    let ty_substitute = match TypeRef::substitute_params(
+                                        unifier,
+                                        slot,
+                                        adt.ty_args(),
+                                    ) {
+                                        Ok(t) => t,
+                                        Err(e) => bail_on!(elem, "{}", e),
+                                    };
                                     match bindings.insert(var.clone(), ty_substitute) {
                                         None => (),
                                         Some(_) => {
@@ -302,8 +150,8 @@ impl MatchAnalyzer {
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
                 bail_if_exists!(rest);
 
-                let adt = ADTPath::from_path(ctxt, unifier, path)?;
-                let (ty_inst, variant) = match ctxt.get_adt_variant_details(&adt) {
+                let adt = ADTPath::from_path(ctxt, path)?;
+                let variant = match ctxt.get_adt_variant_details(&adt) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
@@ -331,11 +179,14 @@ impl MatchAnalyzer {
                                 None => bail_on!(member, "no such field"),
                                 Some(t) => t,
                             };
-                            let ty_substitute =
-                                match TypeRef::substitute_params(field_type, &ty_inst) {
-                                    Ok(t) => t,
-                                    Err(e) => bail_on!(member, "{}", e),
-                                };
+                            let ty_substitute = match TypeRef::substitute_params(
+                                unifier,
+                                field_type,
+                                adt.ty_args(),
+                            ) {
+                                Ok(t) => t,
+                                Err(e) => bail_on!(member, "{}", e),
+                            };
 
                             match Self::analyze_pat_match_binding(pat)? {
                                 None => (),
@@ -386,12 +237,13 @@ impl MatchAnalyzer {
                 let (adt, unpack, ref_bindings) =
                     Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
                 // unify the type
-                match unifier.unify(ety, &adt.as_type_ref()) {
+                let ty_ref = adt.as_ty_ref(unifier);
+                match unifier.unify(ety, &ty_ref) {
                     Ok(_) => (),
                     Err(e) => bail_on!(pat_case, "{}", e),
                 };
                 // save it
-                if variants.insert(adt.branch, unpack).is_some() {
+                if variants.insert(adt.branch(), unpack).is_some() {
                     bail_on!(cases, "duplicated adt variant");
                 }
 
@@ -400,7 +252,8 @@ impl MatchAnalyzer {
                     let (adt, unpack, new_bindings) =
                         Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
                     // unify the type
-                    match unifier.unify(ety, &adt.as_type_ref()) {
+                    let ty_ref = adt.as_ty_ref(unifier);
+                    match unifier.unify(ety, &ty_ref) {
                         Ok(_) => (),
                         Err(e) => bail_on!(pat_case, "{}", e),
                     };
@@ -409,7 +262,7 @@ impl MatchAnalyzer {
                         bail_on!(pat_case, "case patterns do not bind the same variable set");
                     }
                     // save it
-                    if variants.insert(adt.branch, unpack).is_some() {
+                    if variants.insert(adt.branch(), unpack).is_some() {
                         bail_on!(cases, "duplicated adt variant");
                     }
                 }
@@ -421,12 +274,13 @@ impl MatchAnalyzer {
                 // analyze the bindings
                 let (adt, unpack, bindings) = Self::analyze_pat_match_case(ctxt, unifier, pat)?;
                 // unify the type
-                match unifier.unify(ety, &adt.as_type_ref()) {
+                let ty_ref = adt.as_ty_ref(unifier);
+                match unifier.unify(ety, &ty_ref) {
                     Ok(_) => (),
                     Err(e) => bail_on!(pat, "{}", e),
                 };
                 // done
-                let variants = std::iter::once((adt.branch, unpack)).collect();
+                let variants = std::iter::once((adt.branch(), unpack)).collect();
                 (MatchAtom::Binding(variants), bindings)
             }
         };

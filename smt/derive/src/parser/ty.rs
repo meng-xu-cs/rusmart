@@ -85,6 +85,24 @@ impl ReservedIdent for SysTypeName {
     }
 }
 
+impl SysTypeName {
+    /// Create an generics for intrinsic types
+    pub fn generics(&self) -> Generics {
+        match self {
+            Self::Boolean | Self::Integer | Self::Rational | Self::Text | Self::Error => {
+                Generics::intrinsic(vec![])
+            }
+            Self::Cloak | Self::Seq | Self::Set => {
+                Generics::intrinsic(vec![TypeParamName::intrinsic("T")])
+            }
+            Self::Map => Generics::intrinsic(vec![
+                TypeParamName::intrinsic("K"),
+                TypeParamName::intrinsic("V"),
+            ]),
+        }
+    }
+}
+
 /// A type name
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum TypeName {

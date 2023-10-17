@@ -15,3 +15,4 @@ mod adt;
 mod dsl;
 mod expr;
 mod intrinsics;
+mod path;
