@@ -131,3 +131,12 @@ impl UsrFuncName {
         }
     }
 }
+
+impl VarName {
+    /// Make a variable name for intrinsic usage
+    pub fn intrinsic(index: usize) -> Self {
+        Self {
+            ident: format!("_{}", index),
+        }
+    }
+}
