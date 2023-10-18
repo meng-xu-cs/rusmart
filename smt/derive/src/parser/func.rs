@@ -12,9 +12,25 @@ use crate::parser::util::PatUtil;
 
 /// Reserved function name
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub enum SysFuncName {
+pub enum CastFuncName {
     From,
     Into,
+}
+
+impl ReservedIdent for CastFuncName {
+    fn from_str(ident: &str) -> Option<Self> {
+        let matched = match ident.to_string().as_str() {
+            "from" => Self::From,
+            "into" => Self::Into,
+            _ => return None,
+        };
+        Some(matched)
+    }
+}
+
+/// Reserved function name
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub enum SysFuncName {
     Eq,
     Ne,
 }
@@ -22,8 +38,6 @@ pub enum SysFuncName {
 impl ReservedIdent for SysFuncName {
     fn from_str(ident: &str) -> Option<Self> {
         let matched = match ident.to_string().as_str() {
-            "from" => Self::From,
-            "into" => Self::Into,
             "eq" => Self::Eq,
             "ne" => Self::Ne,
             _ => return None,
@@ -35,6 +49,7 @@ impl ReservedIdent for SysFuncName {
 /// A function name
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum FuncName {
+    Cast(CastFuncName),
     Sys(SysFuncName),
     Usr(UsrFuncName),
 }
@@ -43,9 +58,12 @@ impl FuncName {
     /// Try to convert an ident into a function name
     pub fn try_from(ident: &Ident) -> Result<Self> {
         let name = ident.to_string();
-        let parsed = match SysFuncName::from_str(&name) {
-            None => Self::Usr(ident.try_into()?),
-            Some(n) => Self::Sys(n),
+        let parsed = match CastFuncName::from_str(&name) {
+            Some(n) => Self::Cast(n),
+            None => match SysFuncName::from_str(&name) {
+                Some(n) => Self::Sys(n),
+                None => Self::Usr(ident.try_into()?),
+            },
         };
         Ok(parsed)
     }

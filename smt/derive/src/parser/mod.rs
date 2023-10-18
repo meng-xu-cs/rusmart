@@ -9,6 +9,7 @@ mod func;
 mod generics;
 mod ty;
 
+mod apply;
 mod infer;
 
 mod adt;

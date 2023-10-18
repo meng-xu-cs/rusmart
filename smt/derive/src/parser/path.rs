@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 use syn::{Path, PathArguments, PathSegment, Result};
 
 use crate::parser::adt::ADTBranch;
-use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::expr::CtxtForExpr;
-use crate::parser::func::{FuncName, SysFuncName};
+use crate::parser::func::{CastFuncName, FuncName, SysFuncName};
 use crate::parser::generics::Generics;
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
@@ -231,7 +231,7 @@ impl FuncPath {
         // func
         let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
         let fn_name = ident.try_into()?;
-        let generics = match ctxt.get_func_sig(&fn_name, ctxt.kind()) {
+        let generics = match ctxt.get_func_sig(&fn_name) {
             None => bail_on!(ident, "no such function"),
             Some(sig) => sig.generics(),
         };
@@ -255,10 +255,21 @@ impl FuncPath {
 
 /// An identifier for a function with type variables
 #[derive(Clone)]
-pub struct QualifiedPath {
-    ty_name: TypeName,
-    fn_name: FuncName,
-    ty_args: GenericsInstantiated,
+pub enum QualifiedPath {
+    /// `Boolean::from(<literal>)`
+    CastFromBool,
+    /// `Integer::from(<literal>)`
+    CastFromInt,
+    /// `Rational::from(<literal>)`
+    CastFromFloat,
+    /// `Text::from(<literal>)`
+    CastFromStr,
+    /// `<type>::<sys-func>::<type-args?>(<args>)`
+    SysFunc(TypeName, SysFuncName, GenericsInstantiated),
+    /// `<sys-type>::<usr-func>::<type-args?>(<args>)`
+    UsrFuncOnSysType(SysTypeName, UsrFuncName, GenericsInstantiated),
+    /// `<sys-type>::<usr-func>::<type-args?>(<args>)`
+    UsrFuncOnUsrType(UsrTypeName, UsrFuncName, GenericsInstantiated),
 }
 
 impl QualifiedPath {
@@ -289,52 +300,45 @@ impl QualifiedPath {
         // func
         let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
         let fn_name = FuncName::try_from(ident)?;
-        let fn_generics = match &fn_name {
-            FuncName::Sys(name) => match name {
-                SysFuncName::Into => bail_on!(ident, "not allowed"),
-                SysFuncName::From => {
-                    if !matches!(
-                        ty_name,
-                        TypeName::Sys(SysTypeName::Boolean)
-                            | TypeName::Sys(SysTypeName::Integer)
-                            | TypeName::Sys(SysTypeName::Rational)
-                            | TypeName::Sys(SysTypeName::Text)
-                    ) {
-                        bail_on!(ident, "not a literal type");
+        let converted = match &fn_name {
+            FuncName::Cast(name) => match name {
+                CastFuncName::Into => bail_on!(ident, "not allowed"),
+                CastFuncName::From => {
+                    bail_if_non_empty!(arguments);
+                    match ty_name {
+                        TypeName::Sys(SysTypeName::Boolean) => Self::CastFromBool,
+                        TypeName::Sys(SysTypeName::Integer) => Self::CastFromInt,
+                        TypeName::Sys(SysTypeName::Rational) => Self::CastFromFloat,
+                        TypeName::Sys(SysTypeName::Text) => Self::CastFromStr,
+                        _ => bail_on!(ident, "not a literal type"),
                     }
-                    // does not take any type arguments
-                    Generics::intrinsic(vec![])
                 }
-                SysFuncName::Eq | SysFuncName::Ne => ty_generics,
             },
-            FuncName::Usr(name) => match ctxt.get_func_sig(name, ctxt.kind()) {
+            FuncName::Sys(name) => {
+                let ty_args = GenericsInstantiated::from_args(ctxt, &ty_generics, arguments)?;
+                Self::SysFunc(ty_name, name.clone(), ty_args)
+            }
+            FuncName::Usr(name) => match ctxt.get_func_sig(name) {
                 None => bail_on!(ident, "no such function"),
-                Some(sig) => sig.generics().clone(),
+                Some(sig) => {
+                    let ty_args = GenericsInstantiated::from_args(ctxt, sig.generics(), arguments)?;
+                    match ty_name {
+                        TypeName::Sys(sys_name) => {
+                            Self::UsrFuncOnSysType(sys_name, name.clone(), ty_args)
+                        }
+                        TypeName::Usr(usr_name) => {
+                            Self::UsrFuncOnUsrType(usr_name, name.clone(), ty_args)
+                        }
+                        TypeName::Param(_) => {
+                            bail_on!(ident, "user-defined function on type parameter")
+                        }
+                    }
+                }
             },
         };
-        let ty_args = GenericsInstantiated::from_args(ctxt, &fn_generics, arguments)?;
 
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
-        Ok(Self {
-            ty_name,
-            fn_name,
-            ty_args,
-        })
-    }
-
-    /// Getter to the type name
-    pub fn ty_name(&self) -> &TypeName {
-        &self.ty_name
-    }
-
-    /// Getter to the func name
-    pub fn fn_name(&self) -> &FuncName {
-        &self.fn_name
-    }
-
-    /// Getter to the type arguments
-    pub fn ty_args(&self) -> &GenericsInstantiated {
-        &self.ty_args
+        Ok(converted)
     }
 }

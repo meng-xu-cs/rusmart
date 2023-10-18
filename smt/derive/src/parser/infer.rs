@@ -204,7 +204,7 @@ impl InferDatabase {
         unifier: &mut TypeUnifier,
         name: &UsrFuncName,
         qualifier: Option<&TypeName>,
-        ty_args_opt: Option<&[TypeTag]>,
+        inst_opt: Option<&GenericsInstantiated>,
         args: Vec<Expr>,
         rval: &TypeRef,
     ) -> Result<(Op, TypeRef)> {
@@ -671,7 +671,7 @@ impl TypeUnifier {
         };
         let group_index = self.groups.len();
 
-        // register the param and the gropu
+        // register the param and the group
         self.groups.push(group);
         let existing = self.params.insert(var_id, group_index);
         assert!(existing.is_none());
@@ -821,8 +821,24 @@ impl TypeUnifier {
         Ok(inferred)
     }
 
+    /// Instantiate a function signature
+    pub fn instantiate_func_sig(
+        &mut self,
+        sig: &FuncSig,
+        subst: &GenericsInstantiated,
+    ) -> Result<(Vec<TypeRef>, TypeRef)> {
+        // substitute types in function signature
+        let params: Vec<_> = sig
+            .param_vec()
+            .iter()
+            .map(|(_, t)| TypeRef::substitute_params(self, t, subst))
+            .collect::<anyhow::Result<_>>()?;
+        let ret_ty = TypeRef::substitute_params(self, sig.ret_ty(), subst)?;
+        Ok((params, ret_ty))
+    }
+
     /// Retrieve the assigned type for a type variable
-    pub fn retrieve_type_assigned(&self, var: &TypeVar) -> Result<TypeRef> {
+    pub fn retrieve_type_expect_assigned(&self, var: &TypeVar) -> Result<TypeRef> {
         let index = *self.params.get(&var.0).expect("type var");
         let group = self.groups.get(index).expect("equivalence group");
         group
@@ -842,10 +858,25 @@ impl TypeUnifier {
     }
 
     /// Try to instantiate a type when needed
-    pub fn instantiate_if_possible(&self, ty: &TypeRef) -> TypeRef {
+    pub fn refresh_type(&self, ty: &TypeRef) -> TypeRef {
         match ty {
             TypeRef::Var(var) => self.retrieve_type_assigned_or_variable(var),
-            _ => ty.clone(),
+            TypeRef::Boolean => TypeRef::Boolean,
+            TypeRef::Integer => TypeRef::Integer,
+            TypeRef::Rational => TypeRef::Rational,
+            TypeRef::Text => TypeRef::Text,
+            TypeRef::Cloak(sub) => TypeRef::Cloak(self.refresh_type(sub).into()),
+            TypeRef::Seq(sub) => TypeRef::Seq(self.refresh_type(sub).into()),
+            TypeRef::Set(sub) => TypeRef::Set(self.refresh_type(sub).into()),
+            TypeRef::Map(key, val) => {
+                TypeRef::Map(self.refresh_type(key).into(), self.refresh_type(val).into())
+            }
+            TypeRef::Error => TypeRef::Error,
+            TypeRef::User(name, tys) => TypeRef::User(
+                name.clone(),
+                tys.iter().map(|t| self.refresh_type(t)).collect(),
+            ),
+            TypeRef::Parameter(name) => TypeRef::Parameter(name.clone()),
         }
     }
 }

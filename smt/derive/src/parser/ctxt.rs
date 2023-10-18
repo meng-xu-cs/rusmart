@@ -7,13 +7,12 @@ use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Resu
 use walkdir::WalkDir;
 
 use crate::parser::err::{bail_on, bail_on_with_note};
+use crate::parser::expr::{ExprParserRoot, Kind};
 use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::generics::Generics;
+use crate::parser::infer::InferDatabase;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
-
-use crate::parser::expr::{ExprParserRoot, Kind};
-use crate::parser::infer::InferDatabase;
 
 #[cfg(test)]
 use proc_macro2::TokenStream;

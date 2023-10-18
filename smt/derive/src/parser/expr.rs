@@ -17,11 +17,11 @@ use crate::parser::generics::Generics;
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
-use crate::parser::path::ADTPath;
+use crate::parser::path::{ADTPath, QualifiedPath};
 use crate::parser::ty::{
     CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag,
 };
-use crate::parser::util::{ExprPathAsTarget, PatUtil, PathUtil};
+use crate::parser::util::{ExprPathAsCallee, ExprPathAsTarget, PatUtil, PathUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -32,7 +32,7 @@ pub trait CtxtForExpr: CtxtForType {
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
 
     /// Retrieve the signature of a user-defined function
-    fn get_func_sig(&self, name: &UsrFuncName, kind: Kind) -> Option<&FuncSig>;
+    fn get_func_sig(&self, name: &UsrFuncName) -> Option<&FuncSig>;
 
     /// Retrieve all variants of an enum
     fn get_adt_variants(&self, name: &UsrTypeName) -> Option<&BTreeMap<String, EnumVariant>> {
@@ -376,7 +376,7 @@ impl<'ctx> ExprParserRoot<'ctx> {
         let result = parsed.visit(
             |expr| {
                 if let TypeRef::Var(v) = expr.ty() {
-                    let assigned = unifier.retrieve_type_assigned(v)?;
+                    let assigned = unifier.retrieve_type_expect_assigned(v)?;
                     expr.set_ty(assigned)
                 }
                 Ok(())
@@ -412,8 +412,8 @@ impl CtxtForExpr for ExprParserRoot<'_> {
         self.ctxt.get_type_def(name)
     }
 
-    fn get_func_sig(&self, name: &UsrFuncName, kind: Kind) -> Option<&FuncSig> {
-        self.ctxt.get_func_sig(name, kind)
+    fn get_func_sig(&self, name: &UsrFuncName) -> Option<&FuncSig> {
+        self.ctxt.get_func_sig(name, self.kind)
     }
 }
 
@@ -629,7 +629,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 };
 
                 // retrieve the unified type after parsing all phi nodes
-                let unified_ty = unifier.instantiate_if_possible(&self.exp_ty);
+                let unified_ty = unifier.refresh_type(&self.exp_ty);
 
                 // construct the operator
                 let op = Op::Phi {
@@ -742,7 +742,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 for (converted, original) in heads {
                     // retrieve all variants of the ADT
                     let (adt_name, adt_variants): (_, BTreeSet<_>) =
-                        match unifier.instantiate_if_possible(converted.ty()) {
+                        match unifier.refresh_type(converted.ty()) {
                             TypeRef::User(name, _) => match self.root.get_adt_variants(&name) {
                                 None => bail_on!(original, "no scuch enum type"),
                                 Some(variants) => (name, variants.keys().cloned().collect()),
@@ -757,7 +757,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 let combo = organizer.into_organized(expr_match, &heads_options)?;
 
                 // retrieve the unified type after parsing all match arms
-                let unified_ty = unifier.instantiate_if_possible(&self.exp_ty);
+                let unified_ty = unifier.refresh_type(&self.exp_ty);
 
                 // construct the operator
                 let op = Op::Match {
@@ -778,6 +778,89 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 } = expr_call;
 
                 // extract the callee
+                let (op, ty) = match ExprPathAsCallee::parse(self.root, func)? {
+                    ExprPathAsCallee::FuncNoPrefix(path) => {
+                        // substitute types in function parameters
+                        let sig = match self.root.get_func_sig(path.fn_name()) {
+                            None => bail_on!(func, "[invariant] no such function"),
+                            Some(sig) => sig,
+                        };
+                        let (params, ret_ty) =
+                            match unifier.instantiate_func_sig(sig, path.ty_args()) {
+                                Ok(instantiated) => instantiated,
+                                Err(e) => bail_on!(func, "{}", e),
+                            };
+
+                        // parse the arguments
+                        if params.len() != args.len() {
+                            bail_on!(args, "argument number mismatch");
+                        }
+                        let mut parsed_args = vec![];
+                        for (param, arg) in params.into_iter().zip(args) {
+                            let parsed = self.fork(param).convert_expr(unifier, arg)?;
+                            parsed_args.push(parsed);
+                        }
+
+                        // unity the return type and then build the instruction
+                        let ty_unified = match unifier.unify(&ret_ty, &self.exp_ty) {
+                            Ok(unified) => unified,
+                            Err(e) => bail_on!(target, "{}", e),
+                        };
+                        (Op::Procedure {name: path.fn_name().clone(), args: parsed_args}, ty_unified)
+                    }
+                    ExprPathAsCallee::FuncWithType(path) => match path {
+                        // casts
+                        QualifiedPath::CastFromBool => {
+                            let intrinsic = Intrinsic::BoolVal(Intrinsic::unpack_lit_bool(args)?);
+                            let ty_unified = match unifier.unify(&TypeRef::Boolean, &self.exp_ty) {
+                                Ok(unified) => unified,
+                                Err(e) => bail_on!(target, "{}", e),
+                            };
+                            (Op::Intrinsic(intrinsic), ty_unified)
+                        }
+                        QualifiedPath::CastFromInt => {
+                            let intrinsic = Intrinsic::IntVal(Intrinsic::unpack_lit_int(args)?);
+                            let ty_unified = match unifier.unify(&TypeRef::Integer, &self.exp_ty) {
+                                Ok(unified) => unified,
+                                Err(e) => bail_on!(target, "{}", e),
+                            };
+                            (Op::Intrinsic(intrinsic), ty_unified)
+                        }
+                        QualifiedPath::CastFromFloat => {
+                            let intrinsic = Intrinsic::NumVal(Intrinsic::unpack_lit_float(args)?);
+                            let ty_unified = match unifier.unify(&TypeRef::Rational, &self.exp_ty) {
+                                Ok(unified) => unified,
+                                Err(e) => bail_on!(target, "{}", e),
+                            };
+                            (Op::Intrinsic(intrinsic), ty_unified)
+                        }
+                        QualifiedPath::CastFromStr => {
+                            let intrinsic = Intrinsic::StrVal(Intrinsic::unpack_lit_str(args)?);
+                            let ty_unified = match unifier.unify(&TypeRef::Text, &self.exp_ty) {
+                                Ok(unified) => unified,
+                                Err(e) => bail_on!(target, "{}", e),
+                            };
+                            (Op::Intrinsic(intrinsic), ty_unified)
+                        }
+                        // system function
+                        QualifiedPath::SysFunc(ty_name, fn_name, ty_args) => {
+                            todo!()
+                        }
+                        // user-defined function on a system type
+                        QualifiedPath::UsrFuncOnSysType(ty_name, fn_name, ty_args) => {
+                            todo!()
+                        }
+                        // user-defined function on a user-defined type
+                        QualifiedPath::UsrFuncOnUsrType(ty_name, fn_name, ty_args) => {
+                            todo!()
+                        }
+                    },
+                };
+                Inst {
+                    op: op.into(),
+                    ty,
+                }
+
                 let mut iter = match func.as_ref() {
                     Exp::Path(p) => {
                         let ExprPath {
@@ -828,46 +911,6 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
 
                         match name {
-                            SysFuncName::From => {
-                                // handle literal conversion
-                                let (intrinsic, ty) = match qualifier {
-                                    TypeName::Param(_) | TypeName::Usr(_) => {
-                                        bail_on!(qsegment, "expect an intrinsic qualifier");
-                                    }
-                                    TypeName::Sys(tname) => match tname {
-                                        SysTypeName::Boolean => (
-                                            Intrinsic::BoolVal(Intrinsic::unpack_lit_bool(args)?),
-                                            TypeRef::Boolean,
-                                        ),
-                                        SysTypeName::Integer => (
-                                            Intrinsic::IntVal(Intrinsic::unpack_lit_int(args)?),
-                                            TypeRef::Integer,
-                                        ),
-                                        SysTypeName::Rational => (
-                                            Intrinsic::NumVal(Intrinsic::unpack_lit_float(args)?),
-                                            TypeRef::Rational,
-                                        ),
-                                        SysTypeName::Text => (
-                                            Intrinsic::StrVal(Intrinsic::unpack_lit_str(args)?),
-                                            TypeRef::Text,
-                                        ),
-                                        _ => {
-                                            bail_on!(qsegment, "expect a literal-enabled qualifier")
-                                        }
-                                    },
-                                };
-
-                                // unity the type and then build the instruction
-                                let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
-                                    Ok(unified) => unified,
-                                    Err(e) => bail_on!(target, "{}", e),
-                                };
-                                Inst {
-                                    op: Op::Intrinsic(intrinsic).into(),
-                                    ty: ty_unified,
-                                }
-                            }
-                            SysFuncName::Into => bail_on!(expr_call, "unexpected"),
                             SysFuncName::Eq | SysFuncName::Ne => {
                                 // collect arguments
                                 let mut iter = args.iter();
