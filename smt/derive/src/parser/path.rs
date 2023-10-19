@@ -95,7 +95,6 @@ impl GenericsInstantiated {
 }
 
 /// An identifier to a tuple with optional type arguments
-#[derive(Clone)]
 pub struct TuplePath {
     ty_name: UsrTypeName,
     ty_args: GenericsInstantiated,
@@ -147,7 +146,6 @@ impl TuplePath {
 }
 
 /// An identifier to an ADT variant with optional type arguments
-#[derive(Clone)]
 pub struct ADTPath {
     ty_name: UsrTypeName,
     ty_args: GenericsInstantiated,
@@ -212,7 +210,6 @@ impl ADTPath {
 }
 
 /// An identifier to a function with optional type arguments
-#[derive(Clone)]
 pub struct FuncPath {
     fn_name: UsrFuncName,
     ty_args: GenericsInstantiated,
@@ -254,7 +251,6 @@ impl FuncPath {
 }
 
 /// An identifier for a function with type variables
-#[derive(Clone)]
 pub enum QualifiedPath {
     /// `Boolean::from(<literal>)`
     CastFromBool,
@@ -267,9 +263,9 @@ pub enum QualifiedPath {
     /// `<type>::<sys-func>::<type-args?>(<args>)`
     SysFunc(TypeName, SysFuncName, GenericsInstantiated),
     /// `<sys-type>::<usr-func>::<type-args?>(<args>)`
-    UsrFuncOnSysType(SysTypeName, UsrFuncName, GenericsInstantiated),
-    /// `<sys-type>::<usr-func>::<type-args?>(<args>)`
-    UsrFuncOnUsrType(UsrTypeName, UsrFuncName, GenericsInstantiated),
+    Intrinsic(SysTypeName, UsrFuncName, GenericsInstantiated),
+    /// `<usr-type>::<usr-func>::<type-args?>(<args>)`
+    UsrFunc(UsrTypeName, UsrFuncName, GenericsInstantiated),
 }
 
 impl QualifiedPath {
@@ -318,22 +314,26 @@ impl QualifiedPath {
                 let ty_args = GenericsInstantiated::from_args(ctxt, &ty_generics, arguments)?;
                 Self::SysFunc(ty_name, name.clone(), ty_args)
             }
-            FuncName::Usr(name) => match ctxt.get_func_sig(name) {
-                None => bail_on!(ident, "no such function"),
-                Some(sig) => {
-                    let ty_args = GenericsInstantiated::from_args(ctxt, sig.generics(), arguments)?;
-                    match ty_name {
-                        TypeName::Sys(sys_name) => {
-                            Self::UsrFuncOnSysType(sys_name, name.clone(), ty_args)
-                        }
-                        TypeName::Usr(usr_name) => {
-                            Self::UsrFuncOnUsrType(usr_name, name.clone(), ty_args)
-                        }
-                        TypeName::Param(_) => {
-                            bail_on!(ident, "user-defined function on type parameter")
-                        }
-                    }
+            FuncName::Usr(name) => match ty_name {
+                TypeName::Param(_) => {
+                    bail_on!(ident, "user-defined function on type parameter")
                 }
+                TypeName::Sys(ty_name) => match ctxt.lookup_intrinsic(&ty_name, name) {
+                    None => bail_on!(ident, "no such intrinsic function"),
+                    Some(fty) => {
+                        let ty_args =
+                            GenericsInstantiated::from_args(ctxt, fty.generics(), arguments)?;
+                        Self::Intrinsic(ty_name, name.clone(), ty_args)
+                    }
+                },
+                TypeName::Usr(ty_name) => match ctxt.get_func_sig(name) {
+                    None => bail_on!(ident, "no such function"),
+                    Some(sig) => {
+                        let ty_args =
+                            GenericsInstantiated::from_args(ctxt, sig.generics(), arguments)?;
+                        Self::UsrFunc(ty_name, name.clone(), ty_args)
+                    }
+                },
             },
         };
 

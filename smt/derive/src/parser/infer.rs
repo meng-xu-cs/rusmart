@@ -837,6 +837,22 @@ impl TypeUnifier {
         Ok((params, ret_ty))
     }
 
+    /// Instantiate a function type
+    pub fn instantiate_func_type(
+        &mut self,
+        fty: &TypeFn,
+        subst: &GenericsInstantiated,
+    ) -> Result<(Vec<TypeRef>, TypeRef)> {
+        // substitute types in function signature
+        let params: Vec<_> = fty
+            .param()
+            .iter()
+            .map(|(_, t)| TypeRef::substitute_params(self, t, subst))
+            .collect::<anyhow::Result<_>>()?;
+        let ret_ty = TypeRef::substitute_params(self, fty.ret_ty(), subst)?;
+        Ok((params, ret_ty))
+    }
+
     /// Retrieve the assigned type for a type variable
     pub fn retrieve_type_expect_assigned(&self, var: &TypeVar) -> Result<TypeRef> {
         let index = *self.params.get(&var.0).expect("type var");

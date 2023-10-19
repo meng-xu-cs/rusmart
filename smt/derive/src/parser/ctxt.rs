@@ -14,6 +14,7 @@ use crate::parser::infer::InferDatabase;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
 
+use crate::parser::apply::ApplyDatabase;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -344,7 +345,16 @@ impl ContextWithType {
             })
             .collect();
 
-        // populate the inference database
+        // populate the database
+        let mut fn_db = ApplyDatabase::with_intrinsics();
+        for (name, (sig, _)) in unpacked_impls.iter() {
+            fn_db.register_user_func(name, sig);
+        }
+        for (name, (sig, _)) in unpacked_specs.iter() {
+            fn_db.register_user_func(name, sig);
+        }
+        trace!("function database constructed");
+
         let mut infer = InferDatabase::with_intrinsics();
         for (name, (sig, _)) in unpacked_impls.iter() {
             infer.register_user_func(name, sig);
@@ -357,6 +367,7 @@ impl ContextWithType {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
+            fn_db,
             infer,
         };
         Ok(ctxt)
@@ -368,6 +379,8 @@ pub struct ContextWithSig {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
+    /// a database for functions
+    pub fn_db: ApplyDatabase,
     /// a database for inference
     pub infer: InferDatabase,
 }
@@ -419,6 +432,7 @@ impl ContextWithSig {
             types,
             impls,
             specs,
+            fn_db: _,
             infer: _,
         } = self;
 
