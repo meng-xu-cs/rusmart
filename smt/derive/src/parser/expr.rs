@@ -962,40 +962,80 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         };
 
                         // parse the arguments by tentatively marking their types as variables
-                        let mut parsed_args = vec![];
-                        let parsed_receiver = self
-                            .fork(TypeRef::Var(unifier.mk_var()))
+                        let operand_ty = TypeRef::Var(unifier.mk_var());
+                        let parsed_lhs = self
+                            .fork(operand_ty.clone())
                             .convert_expr(unifier, receiver)?;
-                        parsed_args.push(parsed_receiver);
 
-                        for arg in args {
-                            let parsed = self
-                                .fork(TypeRef::Var(unifier.mk_var()))
-                                .convert_expr(unifier, arg)?;
-                            parsed_args.push(parsed);
+                        let mut iter = args.iter();
+                        let rhs = bail_if_missing!(iter.next(), args, "expect 1 argument");
+                        bail_if_exists!(iter.next());
+                        let parsed_rhs =
+                            self.fork(operand_ty.clone()).convert_expr(unifier, rhs)?;
+
+                        // check consistency of type arguments
+                        let refreshed = unifier.refresh_type(&operand_ty);
+                        match ty_args_opt {
+                            None => (),
+                            Some(ty_args) => match refreshed {
+                                TypeRef::Boolean
+                                | TypeRef::Integer
+                                | TypeRef::Rational
+                                | TypeRef::Text
+                                | TypeRef::Error
+                                | TypeRef::Parameter(_)
+                                | TypeRef::Var(_) => {
+                                    bail_on!(turbofish, "unexpected");
+                                }
+                                TypeRef::Cloak(sub) | TypeRef::Seq(sub) | TypeRef::Set(sub) => {
+                                    if ty_args.len() != 1 {
+                                        bail_on!(turbofish, "type argument number mismatch");
+                                    }
+                                    ti_unify!(
+                                        unifier,
+                                        sub.as_ref(),
+                                        &ty_args.first().unwrap().into(),
+                                        turbofish
+                                    );
+                                }
+                                TypeRef::Map(key, val) => {
+                                    if ty_args.len() != 2 {
+                                        bail_on!(turbofish, "type argument number mismatch");
+                                    }
+                                    ti_unify!(
+                                        unifier,
+                                        key.as_ref(),
+                                        &ty_args.first().unwrap().into(),
+                                        turbofish
+                                    );
+                                    ti_unify!(
+                                        unifier,
+                                        val.as_ref(),
+                                        &ty_args.last().unwrap().into(),
+                                        turbofish
+                                    );
+                                }
+                                TypeRef::User(_, usr_args) => {
+                                    if usr_args.len() != ty_args.len() {
+                                        bail_on!(turbofish, "type argument number mismatch");
+                                    }
+                                    for (t1, t2) in usr_args.iter().zip(ty_args.iter()) {
+                                        ti_unify!(unifier, t1, &t2.into(), turbofish)
+                                    }
+                                }
+                            },
                         }
 
+                        // unity the return type
+                        ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
+
+                        // build the opcode
                         match name {
-                            SysFuncName::Eq | SysFuncName::Ne => {
-                                // collect arguments
-                                let mut iter = args.iter();
-                                let rhs = bail_if_missing!(iter.next(), args, "expect 1 argument");
-                                bail_if_exists!(iter.next());
-
-                                // process it
-                                let (parsed_lhs, parsed_rhs) = self
-                                    .handle_equality_inequality(unifier, receiver, rhs, target)?;
-
-                                // construct the operator
-                                let intrinsic = match name {
-                                    SysFuncName::Eq => Intrinsic::SmtEq(parsed_lhs, parsed_rhs),
-                                    SysFuncName::Ne => Intrinsic::SmtNe(parsed_lhs, parsed_rhs),
-                                    _ => panic!("invariant violation"),
-                                };
-                                Inst {
-                                    op: Op::Intrinsic(intrinsic).into(),
-                                    ty: TypeRef::Boolean,
-                                }
+                            SysFuncName::Eq => {
+                                Op::Intrinsic(Intrinsic::SmtEq(parsed_lhs, parsed_rhs))
+                            }
+                            SysFuncName::Ne => {
+                                Op::Intrinsic(Intrinsic::SmtNe(parsed_lhs, parsed_rhs))
                             }
                         }
                     }
