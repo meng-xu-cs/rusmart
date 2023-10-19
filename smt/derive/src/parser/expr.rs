@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use anyhow::{anyhow, bail};
 
 use proc_macro2::TokenStream;
 use syn::{
@@ -15,7 +16,7 @@ use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::func::{FuncName, FuncSig, SysFuncName};
 use crate::parser::generics::Generics;
-use crate::parser::infer::{TypeRef, TypeUnifier};
+use crate::parser::infer::{ti_unify, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::path::{ADTPath, QualifiedPath};
@@ -376,9 +377,9 @@ impl<'ctx> ExprParserRoot<'ctx> {
         // check type completeness of the expression
         let result = parsed.visit(
             |expr| {
-                if let TypeRef::Var(v) = expr.ty() {
-                    let assigned = unifier.retrieve_type_expect_assigned(v)?;
-                    expr.set_ty(assigned)
+                let refreshed = unifier.refresh_type(expr.ty());
+                if !refreshed.validate() {
+                    bail!("incomplete type");
                 }
                 Ok(())
             },
@@ -530,13 +531,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         };
 
                         // unity the type and then build the instruction
-                        let ty_unified = match unifier.unify(&ty, &self.exp_ty) {
-                            Ok(unified) => unified,
-                            Err(e) => bail_on!(target, "{}", e),
-                        };
+                        ti_unify!(unifier, &ty, &self.exp_ty, target);
                         Inst {
                             op: Op::Var(name).into(),
-                            ty: ty_unified,
+                            ty: unifier.refresh_type(&self.exp_ty),
                         }
                     }
                     ExprPathAsTarget::EnumUnit(adt) => {
@@ -550,13 +548,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                         // unify the type and then build the instruction
                         let ty_ref = adt.as_ty_ref(unifier);
-                        let ty_unified = match unifier.unify(&ty_ref, &self.exp_ty) {
-                            Ok(unified) => unified,
-                            Err(e) => bail_on!(target, "{}", e),
-                        };
+                        ti_unify!(unifier, &ty_ref, &self.exp_ty, target);
                         Inst {
                             op: Op::EnumUnit(adt.branch().clone()).into(),
-                            ty: ty_unified,
+                            ty: unifier.refresh_type(&self.exp_ty),
                         }
                     }
                 }

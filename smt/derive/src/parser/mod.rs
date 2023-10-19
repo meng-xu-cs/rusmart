@@ -12,8 +12,9 @@ mod ty;
 mod apply;
 mod infer;
 
-mod adt;
 mod dsl;
+mod path;
+
+mod adt;
 mod expr;
 mod intrinsics;
-mod path;
