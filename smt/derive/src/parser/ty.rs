@@ -18,6 +18,20 @@ pub trait CtxtForType {
 
     /// Retrieve the generics declared (if any) for a user-defined type
     fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics>;
+
+    /// Derive a type tag for a user-defined type
+    fn derive_type_tag(&self, name: &UsrTypeName) -> Option<TypeTag> {
+        let generics = self.get_type_generics(name)?;
+        let tag = TypeTag::User(
+            name.clone(),
+            generics
+                .vec()
+                .into_iter()
+                .map(|p| TypeTag::Parameter(p))
+                .collect(),
+        );
+        Some(tag)
+    }
 }
 
 /// A context provider for type parsing
@@ -99,6 +113,25 @@ impl SysTypeName {
                 TypeParamName::intrinsic("K"),
                 TypeParamName::intrinsic("V"),
             ]),
+        }
+    }
+
+    /// Convert an intrinsic type to a type tag
+    pub fn as_type_tag(&self) -> TypeTag {
+        let t = || Box::new(TypeTag::Parameter(TypeParamName::intrinsic("T")));
+        let k = || Box::new(TypeTag::Parameter(TypeParamName::intrinsic("K")));
+        let v = || Box::new(TypeTag::Parameter(TypeParamName::intrinsic("V")));
+
+        match self {
+            Self::Boolean => TypeTag::Boolean,
+            Self::Integer => TypeTag::Integer,
+            Self::Rational => TypeTag::Rational,
+            Self::Text => TypeTag::Text,
+            Self::Cloak => TypeTag::Cloak(t()),
+            Self::Seq => TypeTag::Seq(t()),
+            Self::Set => TypeTag::Set(t()),
+            Self::Map => TypeTag::Map(k(), v()),
+            Self::Error => TypeTag::Error,
         }
     }
 }

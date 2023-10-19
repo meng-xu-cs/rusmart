@@ -1,3 +1,4 @@
+use anyhow::bail;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::{Expr as Exp, ExprLit, Lit, Result};
@@ -5,6 +6,8 @@ use syn::{Expr as Exp, ExprLit, Lit, Result};
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::Expr;
 use crate::parser::infer::TypeRef;
+use crate::parser::name::UsrFuncName;
+use crate::parser::ty::SysTypeName;
 
 /// Intrinsic procedure
 #[derive(Clone)]
@@ -103,6 +106,34 @@ pub enum Intrinsic {
     SmtEq(Expr, Expr),
     /// `<any-smt-type>::ne`
     SmtNe(Expr, Expr),
+}
+
+macro_rules! mk0 {
+    ($op:ident, $args:expr) => {{
+        Intrinsic::unpack_expr_0($args)?;
+        Intrinsic::$op
+    }};
+}
+
+macro_rules! mk1 {
+    ($op:ident, $args:expr) => {{
+        let e1 = Intrinsic::unpack_expr_1($args)?;
+        Intrinsic::$op(e1)
+    }};
+}
+
+macro_rules! mk2 {
+    ($op:ident, $args:expr) => {{
+        let (e1, e2) = Intrinsic::unpack_expr_2($args)?;
+        Intrinsic::$op(e1, e2)
+    }};
+}
+
+macro_rules! mk3 {
+    ($op:ident, $args:expr) => {{
+        let (e1, e2, e3) = Intrinsic::unpack_expr_3($args)?;
+        Intrinsic::$op(e1, e2, e3)
+    }};
 }
 
 impl Intrinsic {
@@ -212,5 +243,130 @@ impl Intrinsic {
             _ => bail_on!(receiver, "not a literal"),
         };
         Ok((intrinsic, ty))
+    }
+
+    /// Create an intrinsic
+    pub fn new(
+        ty_name: &SysTypeName,
+        fn_name: &UsrFuncName,
+        args: Vec<Expr>,
+    ) -> anyhow::Result<Self> {
+        use SysTypeName as Q;
+
+        let intrinsic = match (ty_name, fn_name.as_ref()) {
+            // boolean
+            (Q::Boolean, "not") => mk1!(BoolNot, args),
+            (Q::Boolean, "and") => mk2!(BoolAnd, args),
+            (Q::Boolean, "or") => mk2!(BoolOr, args),
+            (Q::Boolean, "xor") => mk2!(BoolXor, args),
+            // integer
+            (Q::Integer, "add") => mk2!(IntAdd, args),
+            (Q::Integer, "sub") => mk2!(IntSub, args),
+            (Q::Integer, "mul") => mk2!(IntMul, args),
+            (Q::Integer, "div") => mk2!(IntDiv, args),
+            (Q::Integer, "rem") => mk2!(IntRem, args),
+            (Q::Integer, "lt") => mk2!(IntLt, args),
+            (Q::Integer, "le") => mk2!(IntLe, args),
+            (Q::Integer, "ge") => mk2!(IntGe, args),
+            (Q::Integer, "gt") => mk2!(IntGt, args),
+            // rational
+            (Q::Rational, "add") => mk2!(NumAdd, args),
+            (Q::Rational, "sub") => mk2!(NumSub, args),
+            (Q::Rational, "mul") => mk2!(NumMul, args),
+            (Q::Rational, "div") => mk2!(NumDiv, args),
+            (Q::Rational, "lt") => mk2!(NumLt, args),
+            (Q::Rational, "le") => mk2!(NumLe, args),
+            (Q::Rational, "ge") => mk2!(NumGe, args),
+            (Q::Rational, "gt") => mk2!(NumGt, args),
+            // text
+            (Q::Text, "lt") => mk2!(StrLt, args),
+            (Q::Text, "le") => mk2!(StrLe, args),
+            // cloak
+            (Q::Cloak, "shield") => mk1!(BoxShield, args),
+            (Q::Cloak, "reveal") => mk1!(BoxReveal, args),
+            // seq
+            (Q::Seq, "empty") => mk0!(SeqEmpty, args),
+            (Q::Seq, "length") => mk1!(SeqLength, args),
+            (Q::Seq, "append") => mk2!(SeqAppend, args),
+            (Q::Seq, "at_unchecked") => mk2!(SeqAt, args),
+            (Q::Seq, "includes") => mk2!(SeqIncludes, args),
+            // set
+            (Q::Set, "empty") => mk0!(SetEmpty, args),
+            (Q::Set, "length") => mk1!(SetLength, args),
+            (Q::Set, "insert") => mk2!(SetInsert, args),
+            (Q::Set, "contains") => mk2!(SetContains, args),
+            // map
+            (Q::Map, "empty") => mk0!(MapEmpty, args),
+            (Q::Map, "length") => mk1!(MapLength, args),
+            (Q::Map, "put_unchecked") => mk3!(MapPut, args),
+            (Q::Map, "get_unchecked") => mk2!(MapGet, args),
+            (Q::Map, "contains_key") => mk2!(MapContainsKey, args),
+            // error
+            (Q::Error, "fresh") => mk0!(ErrFresh, args),
+            (Q::Error, "merge") => mk2!(ErrMerge, args),
+            // others
+            _ => bail!("no such intrinsic"),
+        };
+        Ok(intrinsic)
+    }
+
+    /// Utility to unpack 0 argument
+    fn unpack_expr_0(exprs: Vec<Expr>) -> anyhow::Result<()> {
+        let mut iter = exprs.into_iter();
+        if iter.next().is_some() {
+            bail!("expect 0 argument");
+        }
+        Ok(())
+    }
+
+    /// Utility to unpack 1 argument
+    fn unpack_expr_1(exprs: Vec<Expr>) -> anyhow::Result<Expr> {
+        let mut iter = exprs.into_iter();
+        let e1 = match iter.next() {
+            None => bail!("expect 1 argument"),
+            Some(e) => e,
+        };
+        if iter.next().is_some() {
+            bail!("expect 1 argument");
+        }
+        Ok(e1)
+    }
+
+    /// Utility to unpack 2 arguments
+    fn unpack_expr_2(exprs: Vec<Expr>) -> anyhow::Result<(Expr, Expr)> {
+        let mut iter = exprs.into_iter();
+        let e1 = match iter.next() {
+            None => bail!("expect 2 arguments"),
+            Some(e) => e,
+        };
+        let e2 = match iter.next() {
+            None => bail!("expect 2 arguments"),
+            Some(e) => e,
+        };
+        if iter.next().is_some() {
+            bail!("expect 2 arguments");
+        }
+        Ok((e1, e2))
+    }
+
+    /// Utility to unpack 3 arguments
+    fn unpack_expr_3(exprs: Vec<Expr>) -> anyhow::Result<(Expr, Expr, Expr)> {
+        let mut iter = exprs.into_iter();
+        let e1 = match iter.next() {
+            None => bail!("expect 3 arguments"),
+            Some(e) => e,
+        };
+        let e2 = match iter.next() {
+            None => bail!("expect 3 arguments"),
+            Some(e) => e,
+        };
+        let e3 = match iter.next() {
+            None => bail!("expect 3 arguments"),
+            Some(e) => e,
+        };
+        if iter.next().is_some() {
+            bail!("expect 3 arguments");
+        }
+        Ok((e1, e2, e3))
     }
 }

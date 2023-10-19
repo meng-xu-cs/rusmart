@@ -200,7 +200,7 @@ impl ApplyDatabase {
         db.builtin("length", Q::Set, fn1_t(set_t(), Integer));
         db.builtin("insert", Q::Set, fn2_t(set_t(), t(), set_t()));
         db.builtin("contains", Q::Set, fn2_t(set_t(), t(), Boolean));
-        // seq
+        // map
         db.builtin("empty", Q::Map, fn0_kv(map_kv()));
         db.builtin("length", Q::Map, fn1_kv(map_kv(), Integer));
         db.builtin(
@@ -268,5 +268,14 @@ impl ApplyDatabase {
         fn_name: &UsrFuncName,
     ) -> Option<&TypeFn> {
         self.on_sys_type.get(fn_name).and_then(|s| s.get(ty_name))
+    }
+
+    /// Lookup a user-defined function with a user-defined type as potentially receiver
+    pub fn lookup_with_usr_ty(
+        &self,
+        ty_name: &UsrTypeName,
+        fn_name: &UsrFuncName,
+    ) -> Option<&TypeFn> {
+        self.on_usr_type.get(fn_name).and_then(|s| s.get(ty_name))
     }
 }

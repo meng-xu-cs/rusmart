@@ -1,21 +1,18 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Display, Formatter};
 
 use crate::parser::apply::TypeFn;
-use crate::parser::err::bail_on;
 use crate::parser::func::FuncSig;
 use crate::parser::name::{TypeParamName, UsrTypeName};
 use crate::parser::path::GenericsInstantiated;
 use crate::parser::ty::TypeTag;
 
 /// An error for type inference
-pub enum TypingError {
-    NoSuchParameter,
+pub enum TIError {
     CyclicUnification,
 }
 
-pub type TIResult<T> = Result<T, TypingError>;
+pub type TIResult<T> = Result<T, TIError>;
 
 macro_rules! ti_unwrap {
     ($item:expr) => {
@@ -30,10 +27,7 @@ macro_rules! ti_unwrap {
 macro_rules! ti_unify {
     ($unifier:expr, $lhs:expr, $rhs:expr, $spanned:expr) => {
         match $unifier.unify($lhs, $rhs) {
-            Err($crate::parser::infer::TypingError::NoSuchParameter) => {
-                $crate::parser::err::bail_on!($spanned, "no such type parameter");
-            }
-            Err($crate::parser::infer::TypingError::CyclicUnification) => {
+            Err($crate::parser::infer::TIError::CyclicUnification) => {
                 $crate::parser::err::bail_on!($spanned, "cyclic type unification");
             }
             Ok(None) => {
@@ -44,6 +38,26 @@ macro_rules! ti_unify {
     };
 }
 pub(crate) use ti_unify;
+
+/// An error for type substitution
+pub enum TSError {
+    NoSuchParameter,
+}
+
+pub type TSResult<T> = Result<T, TSError>;
+
+/// Try to substitute a type, bail on the spanned element if not unified
+macro_rules! bail_on_ts_err {
+    ($result:expr, $spanned:expr) => {
+        match $result {
+            Ok(__v) => __v,
+            Err($crate::parser::infer::TSError::NoSuchParameter) => {
+                $crate::parser::err::bail_on!($spanned, "no such type parameter");
+            }
+        }
+    };
+}
+pub(crate) use bail_on_ts_err;
 
 /// Represents a type variable participating in type unification
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -101,12 +115,28 @@ impl From<&TypeTag> for TypeRef {
 }
 
 impl TypeRef {
+    /// Validate whether the type is complete
+    pub fn validate(&self) -> bool {
+        match self {
+            Self::Var(_) => false,
+            Self::Boolean
+            | Self::Integer
+            | Self::Rational
+            | Self::Text
+            | Self::Error
+            | Self::Parameter(_) => true,
+            Self::Cloak(sub) | Self::Seq(sub) | Self::Set(sub) => sub.validate(),
+            Self::Map(key, val) => key.validate() && val.validate(),
+            Self::User(_, args) => args.iter().all(|t| t.validate()),
+        }
+    }
+
     /// Apply type parameter substitution
     pub fn substitute_params(
         unifier: &mut TypeUnifier,
         tag: &TypeTag,
         substitute: &GenericsInstantiated,
-    ) -> TIResult<TypeRef> {
+    ) -> TSResult<TypeRef> {
         let updated = match tag {
             TypeTag::Boolean => TypeRef::Boolean,
             TypeTag::Integer => TypeRef::Integer,
@@ -130,33 +160,17 @@ impl TypeRef {
                 name.clone(),
                 args.iter()
                     .map(|t| Self::substitute_params(unifier, t, substitute))
-                    .collect::<TIResult<_>>()?,
+                    .collect::<TSResult<_>>()?,
             ),
             TypeTag::Parameter(name) => match substitute
                 .get(name)
-                .ok_or_else(|| TypingError::NoSuchParameter)?
+                .ok_or_else(|| TSError::NoSuchParameter)?
             {
                 None => TypeRef::Var(unifier.mk_var()),
                 Some(t) => t.into(),
             },
         };
         Ok(updated)
-    }
-
-    /// Validate whether the type is complete
-    pub fn validate(&self) -> bool {
-        match self {
-            Self::Var(_) => false,
-            Self::Boolean
-            | Self::Integer
-            | Self::Rational
-            | Self::Text
-            | Self::Error
-            | Self::Parameter(_) => true,
-            Self::Cloak(sub) | Self::Seq(sub) | Self::Set(sub) => sub.validate(),
-            Self::Map(key, val) => key.validate() && val.validate(),
-            Self::User(_, args) => args.iter().all(|t| t.validate()),
-        }
     }
 }
 
@@ -234,12 +248,12 @@ impl Typing {
         // obtain groups
         let mut group_l = self.groups.get(idx_l).unwrap().clone();
         if !involved.is_disjoint(&group_l.vars) {
-            return Err(TypingError::CyclicUnification);
+            return Err(TIError::CyclicUnification);
         }
 
         let group_h = self.groups.get(idx_h).unwrap().clone();
         if !involved.is_disjoint(&group_h.vars) {
-            return Err(TypingError::CyclicUnification);
+            return Err(TIError::CyclicUnification);
         }
 
         // prevent recursive typing
@@ -459,12 +473,12 @@ impl TypeUnifier {
         &mut self,
         fty: &TypeFn,
         subst: &GenericsInstantiated,
-    ) -> TIResult<(Vec<TypeRef>, TypeRef)> {
+    ) -> TSResult<(Vec<TypeRef>, TypeRef)> {
         let params: Vec<_> = fty
             .params()
             .iter()
             .map(|t| TypeRef::substitute_params(self, t, subst))
-            .collect::<TIResult<_>>()?;
+            .collect::<TSResult<_>>()?;
         let ret_ty = TypeRef::substitute_params(self, fty.ret_ty(), subst)?;
         Ok((params, ret_ty))
     }
@@ -474,7 +488,7 @@ impl TypeUnifier {
         &mut self,
         sig: &FuncSig,
         subst: &GenericsInstantiated,
-    ) -> TIResult<(Vec<TypeRef>, TypeRef)> {
+    ) -> TSResult<(Vec<TypeRef>, TypeRef)> {
         let fty = TypeFn::from(sig);
         self.instantiate_func_ty(&fty, subst)
     }
