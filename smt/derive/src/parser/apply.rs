@@ -1,8 +1,13 @@
 use std::collections::BTreeMap;
 
+use anyhow::{bail, Result};
+
+use crate::parser::expr::Expr;
 use crate::parser::func::FuncSig;
 use crate::parser::generics::Generics;
+use crate::parser::infer::{TIError, TSError, TypeRef, TypeUnifier};
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
+use crate::parser::path::GenericsInstantiated;
 use crate::parser::ty::{SysTypeName, TypeTag};
 
 /// A function type, with inference allowed
@@ -277,5 +282,84 @@ impl ApplyDatabase {
         fn_name: &UsrFuncName,
     ) -> Option<&TypeFn> {
         self.on_usr_type.get(fn_name).and_then(|s| s.get(ty_name))
+    }
+
+    /// Get candidates given a function name
+    pub fn get_inference(
+        &self,
+        unifier: &mut TypeUnifier,
+        name: &UsrFuncName,
+        inst: Option<&[TypeTag]>,
+        args: Vec<Expr>,
+        rval: &TypeRef,
+    ) -> Result<()> {
+        // collect candidates
+        let mut candidates = vec![];
+        match self.on_sys_type.get(name) {
+            None => (),
+            Some(options) => candidates.extend(options.values()),
+        }
+        match self.on_usr_type.get(name) {
+            None => (),
+            Some(options) => candidates.extend(options.values()),
+        }
+
+        // probe candidates
+        let mut suitable = vec![];
+        for fty in candidates {
+            // early filtering
+            if fty.params.len() != args.len() {
+                continue;
+            }
+
+            // instantiation
+            let inst_pack = match GenericsInstantiated::new(fty.generics(), inst) {
+                None => continue,
+                Some(pack) => pack,
+            };
+
+            // use a probing unifier to check
+            let mut probing = unifier.clone();
+
+            // try to match the function
+            let (params, ret_ty) = match probing.instantiate_func_ty(fty, &inst_pack) {
+                Ok(instantiated) => instantiated,
+                Err(TSError::NoSuchParameter) => bail!("no such type parameter"),
+            };
+
+            // unify parameter types
+            let mut unified = true;
+            for (param_ty, arg) in params.iter().zip(args.iter()) {
+                match probing.unify(param_ty, arg.ty()) {
+                    Ok(Some(_)) => {
+                        // type unified successfully, do nothing
+                    }
+                    Ok(None) => {
+                        unified = false;
+                        break;
+                    }
+                    Err(TIError::CyclicUnification) => bail!("cyclic type unification"),
+                };
+            }
+            if !unified {
+                continue;
+            }
+
+            // unify the return type
+            match probing.unify(&ret_ty, rval) {
+                Ok(Some(_)) => {
+                    // type unified successfully, do nothing
+                }
+                Ok(None) => {
+                    continue;
+                }
+                Err(TIError::CyclicUnification) => bail!("cyclic type unification"),
+            }
+
+            // mark this as a viable candidate
+            suitable.push(fty);
+        }
+
+        todo!()
     }
 }

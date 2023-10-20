@@ -418,6 +418,7 @@ impl Typing {
 }
 
 /// Context manager for type unification
+#[derive(Clone)]
 pub struct TypeUnifier {
     /// instances surviving so far
     instances: Vec<Typing>,

@@ -1061,10 +1061,9 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
 
                         // choose the function from function database
-                        let inferred = self.root.ctxt.infer.get_inference(
+                        let inferred = self.root.ctxt.fn_db.get_inference(
                             unifier,
                             &name,
-                            None,
                             ty_args_opt.as_deref(),
                             parsed_args,
                             &self.exp_ty,
@@ -1098,15 +1097,14 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 let quant = PathUtil::expect_ident_reserved(path)?;
                 let (vars, body) = self.parse_dsl_quantifier(unifier, tokens)?;
 
+                // unity the return type
+                ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
+
                 // pack into expression
-                let op = match quant {
+                match quant {
                     SysMacroName::Exists => Op::Exists { vars, body },
                     SysMacroName::Forall => Op::Forall { vars, body },
                 };
-                Inst {
-                    op: op.into(),
-                    ty: TypeRef::Boolean,
-                }
             }
             _ => bail_on!(target, "invalid expression"),
         };

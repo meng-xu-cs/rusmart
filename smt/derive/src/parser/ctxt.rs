@@ -6,15 +6,14 @@ use log::trace;
 use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result, Stmt};
 use walkdir::WalkDir;
 
+use crate::parser::apply::ApplyDatabase;
 use crate::parser::err::{bail_on, bail_on_with_note};
 use crate::parser::expr::{ExprParserRoot, Kind};
 use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::generics::Generics;
-use crate::parser::infer::InferDatabase;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
 
-use crate::parser::apply::ApplyDatabase;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -355,20 +354,12 @@ impl ContextWithType {
         }
         trace!("function database constructed");
 
-        let mut infer = InferDatabase::with_intrinsics();
-        for (name, (sig, _)) in unpacked_impls.iter() {
-            infer.register_user_func(name, sig);
-        }
-
-        trace!("function database populated with {} entries", infer.size());
-
         // done
         let ctxt = ContextWithSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
             fn_db,
-            infer,
         };
         Ok(ctxt)
     }
@@ -381,8 +372,6 @@ pub struct ContextWithSig {
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     /// a database for functions
     pub fn_db: ApplyDatabase,
-    /// a database for inference
-    pub infer: InferDatabase,
 }
 
 impl ContextWithSig {
@@ -433,7 +422,6 @@ impl ContextWithSig {
             impls,
             specs,
             fn_db: _,
-            infer: _,
         } = self;
 
         let unpacked_impls = impls
