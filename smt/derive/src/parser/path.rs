@@ -20,12 +20,12 @@ pub struct GenericsInstantiated {
 impl GenericsInstantiated {
     /// Create an instantiation with generics and type argument (optionally parsed)
     pub fn new(generics: &Generics, ty_args_opt: Option<&[TypeTag]>) -> Option<Self> {
-        let ty_params = generics.vec();
+        let ty_params = generics.params();
         let ty_args = match ty_args_opt {
             None => ty_params
                 .into_iter()
                 .enumerate()
-                .map(|(i, n)| (n, (i, None)))
+                .map(|(i, n)| (n.clone(), (i, None)))
                 .collect(),
             Some(tags) => {
                 if tags.len() != ty_params.len() {
@@ -35,7 +35,7 @@ impl GenericsInstantiated {
                     .into_iter()
                     .zip(tags)
                     .enumerate()
-                    .map(|(i, (n, t))| (n, (i, Some(t.clone()))))
+                    .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
                     .collect()
             }
         };
@@ -48,12 +48,12 @@ impl GenericsInstantiated {
         generics: &Generics,
         arguments: &PathArguments,
     ) -> Result<Self> {
-        let ty_params = generics.vec();
+        let ty_params = generics.params();
         let ty_args = match arguments {
             PathArguments::None => ty_params
                 .into_iter()
                 .enumerate()
-                .map(|(i, n)| (n, (i, None)))
+                .map(|(i, n)| (n.clone(), (i, None)))
                 .collect(),
             PathArguments::AngleBracketed(pack) => {
                 let ty_args = TypeTag::from_args(ctxt, pack)?;
@@ -64,7 +64,7 @@ impl GenericsInstantiated {
                     .into_iter()
                     .zip(ty_args)
                     .enumerate()
-                    .map(|(i, (n, t))| (n, (i, Some(t))))
+                    .map(|(i, (n, t))| (n.clone(), (i, Some(t))))
                     .collect()
             }
             PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),

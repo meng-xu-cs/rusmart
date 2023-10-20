@@ -25,9 +25,9 @@ pub trait CtxtForType {
         let tag = TypeTag::User(
             name.clone(),
             generics
-                .vec()
-                .into_iter()
-                .map(|p| TypeTag::Parameter(p))
+                .params()
+                .iter()
+                .map(|p| TypeTag::Parameter(p.clone()))
                 .collect(),
         );
         Some(tag)
@@ -152,7 +152,7 @@ impl TypeName {
             None => {
                 // type parameters take priority over user-defined type names
                 let param_name = ident.try_into()?;
-                if generics.get(&param_name).is_some() {
+                if generics.params().contains(&param_name) {
                     Self::Param(param_name)
                 } else {
                     Self::Usr(ident.try_into()?)
@@ -293,7 +293,7 @@ impl TypeTag {
             },
             TypeName::Usr(name) => match ctxt.get_type_generics(&name) {
                 None => bail_on!(ident, "no such type"),
-                Some(generics) => match generics.len() {
+                Some(generics) => match generics.params().len() {
                     0 => {
                         if !matches!(arguments, PathArguments::None) {
                             bail_on!(arguments, "unexpected");

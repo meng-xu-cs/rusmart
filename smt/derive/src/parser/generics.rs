@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use quote::quote_spanned;
 use syn::{
     GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, Result, TraitBound,
@@ -81,19 +79,18 @@ impl SysTrait {
 /// Declaration of generics
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Generics {
-    params: BTreeMap<TypeParamName, usize>,
+    params: Vec<TypeParamName>,
 }
 
 impl Generics {
     /// Create a new generics for intrinsics
     pub fn intrinsic(params: Vec<TypeParamName>) -> Self {
-        Self {
-            params: params
-                .into_iter()
-                .enumerate()
-                .map(|(n, i)| (i, n))
-                .collect(),
+        for name in &params {
+            if params.iter().filter(|n| *n == name).count() != 1 {
+                panic!("duplicated type parameter name");
+            }
         }
+        Self { params }
     }
 
     /// Convert from generics
@@ -110,22 +107,22 @@ impl Generics {
                 bail_if_exists!(gt_token);
                 bail_if_exists!(where_clause);
                 bail_if_non_empty!(params);
-                BTreeMap::new()
+                vec![]
             }
             Some(_) => {
                 bail_if_missing!(gt_token, generics, ">");
                 bail_if_exists!(where_clause);
                 bail_if_empty!(params, "type parameter");
 
-                let mut declared = BTreeMap::new();
-                for (i, item) in params.iter().enumerate() {
+                let mut declared = vec![];
+                for item in params {
                     match item {
                         GenericParam::Type(ty_param) => {
                             let name = SysTrait::validate_type_param_decl(ty_param)?;
-                            match declared.insert(name, i) {
-                                None => (),
-                                Some(_) => bail_on!(ty_param, "name conflict"),
+                            if declared.contains(&name) {
+                                bail_on!(ty_param, "name conflict");
                             }
+                            declared.push(name);
                         }
                         _ => bail_on!(item, "type parameters only"),
                     }
@@ -162,20 +159,9 @@ impl Generics {
         Self::from_generics(generics)
     }
 
-    /// Get the length of the arena
-    pub fn len(&self) -> usize {
-        self.params.len()
-    }
-
-    /// Retrieve a parameter
-    pub fn get(&self, name: &TypeParamName) -> Option<usize> {
-        self.params.get(name).copied()
-    }
-
-    /// Shape the parameters in its declaration order
-    pub fn vec(&self) -> Vec<TypeParamName> {
-        let rev: BTreeMap<_, _> = self.params.iter().map(|(k, v)| (*v, k.clone())).collect();
-        rev.into_values().collect()
+    /// Getter to the parameter list
+    pub fn params(&self) -> &[TypeParamName] {
+        &self.params
     }
 }
 
