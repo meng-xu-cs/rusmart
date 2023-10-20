@@ -153,7 +153,7 @@ impl ExprPathAsCallee {
                     Err(mut e1) => {
                         // try to see whether this is a function call
                         match QualifiedPath::from_path(ctxt, path) {
-                            Ok(qualified) => Self::FuncWithType(qualified.clone()),
+                            Ok(qualified) => Self::FuncWithType(qualified),
                             Err(e2) => {
                                 e1.combine(e2);
                                 return Err(e1);

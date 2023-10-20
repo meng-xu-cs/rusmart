@@ -33,7 +33,7 @@ macro_rules! ti_unify {
             Ok(None) => {
                 $crate::parser::err::bail_on!($spanned, "no viable type");
             }
-            Ok(Some(())) => (),
+            Ok(Some(__v)) => __v,
         }
     };
 }
@@ -420,53 +420,27 @@ impl Typing {
 /// Context manager for type unification
 #[derive(Clone)]
 pub struct TypeUnifier {
-    /// instances surviving so far
-    instances: Vec<Typing>,
+    /// the actual typing worker
+    typing: Typing,
 }
 
 impl TypeUnifier {
     /// Create a unifier with one instance only
     pub fn new() -> Self {
         Self {
-            instances: vec![Typing::new()],
+            typing: Typing::new(),
         }
     }
 
     /// Make a new type variable
     pub fn mk_var(&mut self) -> TypeVar {
-        let mut iter = self.instances.iter_mut();
-        let ref_var = iter.next().expect("at least one instance").mk_var();
-        for item in iter.by_ref() {
-            let v = item.mk_var();
-            if ref_var != v {
-                panic!("variable out of sync");
-            }
-        }
-        ref_var
+        self.typing.mk_var()
     }
 
     /// Unify two types
-    pub fn unify(&mut self, lhs: &TypeRef, rhs: &TypeRef) -> TIResult<Option<()>> {
-        let instances = std::mem::take(&mut self.instances);
-        for mut typing in instances {
-            let mut involved = BTreeSet::new();
-            match typing.unify(lhs, rhs, &mut involved)? {
-                None => {
-                    // type unification failed, drop this instance
-                }
-                Some(_) => {
-                    self.instances.push(typing);
-                }
-            }
-        }
-
-        // check if we have any surviving instances
-        let survival = if self.instances.is_empty() {
-            None
-        } else {
-            Some(())
-        };
-        Ok(survival)
+    pub fn unify(&mut self, lhs: &TypeRef, rhs: &TypeRef) -> TIResult<Option<TypeRef>> {
+        let mut involved = BTreeSet::new();
+        self.typing.unify(lhs, rhs, &mut involved)
     }
 
     /// Instantiate a function type
@@ -496,15 +470,7 @@ impl TypeUnifier {
 
     /// Retrieve either an assigned type or the variable itself (if multiple options available)
     fn retrieve_type(&self, var: &TypeVar) -> TypeRef {
-        let mut unified = BTreeSet::new();
-        for typing in &self.instances {
-            unified.insert(typing.retrieve_type(var));
-        }
-        match unified.len() {
-            0 => panic!("type unification failure not captured"),
-            1 => unified.into_iter().next().unwrap(),
-            _ => TypeRef::Var(var.clone()),
-        }
+        self.typing.retrieve_type(var)
     }
 
     /// Try to instantiate a type when needed

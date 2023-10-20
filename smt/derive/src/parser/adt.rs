@@ -5,7 +5,7 @@ use syn::{ExprMatch, ExprPath, FieldPat, Member, Pat, PatOr, PatStruct, PatTuple
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::{CtxtForExpr, Expr, MatchCombo, MatchVariant, Unpack};
-use crate::parser::infer::{TypeRef, TypeUnifier};
+use crate::parser::infer::{bail_on_ts_err, ti_unify, TypeRef, TypeUnifier};
 use crate::parser::name::{UsrTypeName, VarName};
 use crate::parser::path::ADTPath;
 use crate::parser::ty::EnumVariant;
@@ -115,14 +115,10 @@ impl MatchAnalyzer {
                             match Self::analyze_pat_match_binding(elem)? {
                                 None => (),
                                 Some(var) => {
-                                    let ty_substitute = match TypeRef::substitute_params(
-                                        unifier,
-                                        slot,
-                                        adt.ty_args(),
-                                    ) {
-                                        Ok(t) => t,
-                                        Err(e) => bail_on!(elem, "{}", e),
-                                    };
+                                    let ty_substitute = bail_on_ts_err!(
+                                        TypeRef::substitute_params(unifier, slot, adt.ty_args(),),
+                                        elem
+                                    );
                                     match bindings.insert(var.clone(), ty_substitute) {
                                         None => (),
                                         Some(_) => {
@@ -179,14 +175,10 @@ impl MatchAnalyzer {
                                 None => bail_on!(member, "no such field"),
                                 Some(t) => t,
                             };
-                            let ty_substitute = match TypeRef::substitute_params(
-                                unifier,
-                                field_type,
-                                adt.ty_args(),
-                            ) {
-                                Ok(t) => t,
-                                Err(e) => bail_on!(member, "{}", e),
-                            };
+                            let ty_substitute = bail_on_ts_err!(
+                                TypeRef::substitute_params(unifier, field_type, adt.ty_args(),),
+                                member
+                            );
 
                             match Self::analyze_pat_match_binding(pat)? {
                                 None => (),
@@ -238,10 +230,7 @@ impl MatchAnalyzer {
                     Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
                 // unify the type
                 let ty_ref = adt.as_ty_ref(unifier);
-                match unifier.unify(ety, &ty_ref) {
-                    Ok(_) => (),
-                    Err(e) => bail_on!(pat_case, "{}", e),
-                };
+                ti_unify!(unifier, ety, &ty_ref, pat_case);
                 // save it
                 if variants.insert(adt.branch(), unpack).is_some() {
                     bail_on!(cases, "duplicated adt variant");
@@ -253,10 +242,7 @@ impl MatchAnalyzer {
                         Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
                     // unify the type
                     let ty_ref = adt.as_ty_ref(unifier);
-                    match unifier.unify(ety, &ty_ref) {
-                        Ok(_) => (),
-                        Err(e) => bail_on!(pat_case, "{}", e),
-                    };
+                    ti_unify!(unifier, ety, &ty_ref, pat_case);
                     // check binding consistency
                     if ref_bindings != new_bindings {
                         bail_on!(pat_case, "case patterns do not bind the same variable set");
@@ -275,10 +261,7 @@ impl MatchAnalyzer {
                 let (adt, unpack, bindings) = Self::analyze_pat_match_case(ctxt, unifier, pat)?;
                 // unify the type
                 let ty_ref = adt.as_ty_ref(unifier);
-                match unifier.unify(ety, &ty_ref) {
-                    Ok(_) => (),
-                    Err(e) => bail_on!(pat, "{}", e),
-                };
+                ti_unify!(unifier, ety, &ty_ref, pat);
                 // done
                 let variants = std::iter::once((adt.branch(), unpack)).collect();
                 (MatchAtom::Binding(variants), bindings)

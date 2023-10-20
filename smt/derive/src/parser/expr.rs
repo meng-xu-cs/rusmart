@@ -382,6 +382,7 @@ impl<'ctx> ExprParserRoot<'ctx> {
                 if !refreshed.validate() {
                     anyhow::bail!("incomplete type");
                 }
+                expr.set_ty(refreshed);
                 Ok(())
             },
             |_| Ok(()),
@@ -1020,7 +1021,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                         bail_on!(turbofish, "type argument number mismatch");
                                     }
                                     for (t1, t2) in usr_args.iter().zip(ty_args.iter()) {
-                                        ti_unify!(unifier, t1, &t2.into(), turbofish)
+                                        ti_unify!(unifier, t1, &t2.into(), turbofish);
                                     }
                                 }
                             },
@@ -1069,10 +1070,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             &self.exp_ty,
                         );
                         match inferred {
-                            Ok((op, unified_ret)) => Inst {
-                                op: op.into(),
-                                ty: unified_ret,
-                            },
+                            Ok(op) => op,
                             Err(e) => bail_on!(expr_method, "{}", e),
                         }
                     }
@@ -1100,11 +1098,11 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 // unity the return type
                 ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
 
-                // pack into expression
+                // pack into opcode
                 match quant {
                     SysMacroName::Exists => Op::Exists { vars, body },
                     SysMacroName::Forall => Op::Forall { vars, body },
-                };
+                }
             }
             _ => bail_on!(target, "invalid expression"),
         };

@@ -2,13 +2,14 @@ use std::collections::BTreeMap;
 
 use anyhow::{bail, Result};
 
-use crate::parser::expr::Expr;
+use crate::parser::expr::{Expr, Op};
 use crate::parser::func::FuncSig;
 use crate::parser::generics::Generics;
 use crate::parser::infer::{TIError, TSError, TypeRef, TypeUnifier};
+use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
 use crate::parser::path::GenericsInstantiated;
-use crate::parser::ty::{SysTypeName, TypeTag};
+use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
 
 /// A function type, with inference allowed
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -292,21 +293,25 @@ impl ApplyDatabase {
         inst: Option<&[TypeTag]>,
         args: Vec<Expr>,
         rval: &TypeRef,
-    ) -> Result<()> {
+    ) -> Result<Op> {
         // collect candidates
         let mut candidates = vec![];
         match self.on_sys_type.get(name) {
             None => (),
-            Some(options) => candidates.extend(options.values()),
+            Some(options) => {
+                candidates.extend(options.iter().map(|(n, t)| (TypeName::Sys(n.clone()), t)))
+            }
         }
         match self.on_usr_type.get(name) {
             None => (),
-            Some(options) => candidates.extend(options.values()),
+            Some(options) => {
+                candidates.extend(options.iter().map(|(n, t)| (TypeName::Usr(n.clone()), t)))
+            }
         }
 
         // probe candidates
-        let mut suitable = vec![];
-        for fty in candidates {
+        let mut suitable = None;
+        for (ty_name, fty) in candidates {
             // early filtering
             if fty.params.len() != args.len() {
                 continue;
@@ -356,10 +361,34 @@ impl ApplyDatabase {
                 Err(TIError::CyclicUnification) => bail!("cyclic type unification"),
             }
 
-            // mark this as a viable candidate
-            suitable.push(fty);
+            // if all types unifies, mark this candidate as viable
+            if suitable.is_some() {
+                bail!("more than one candidate match the method call");
+            }
+            suitable = Some((ty_name, probing));
         }
 
-        todo!()
+        // check matching exists
+        let (ty_name, probing) = match suitable {
+            None => bail!("no candidates matches the method call"),
+            Some(matched) => matched,
+        };
+
+        // override the unifier
+        *unifier = probing;
+
+        // construct the operator and return it
+        let op = match ty_name {
+            TypeName::Sys(sys_name) => {
+                let intrinsic = Intrinsic::new(&sys_name, name, args)?;
+                Op::Intrinsic(intrinsic)
+            }
+            TypeName::Usr(_) => Op::Procedure {
+                name: name.clone(),
+                args,
+            },
+            TypeName::Param(_) => panic!("unexpected"),
+        };
+        Ok(op)
     }
 }
