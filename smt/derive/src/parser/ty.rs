@@ -18,20 +18,6 @@ pub trait CtxtForType {
 
     /// Retrieve the generics declared (if any) for a user-defined type
     fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics>;
-
-    /// Derive a type tag for a user-defined type
-    fn derive_type_tag(&self, name: &UsrTypeName) -> Option<TypeTag> {
-        let generics = self.get_type_generics(name)?;
-        let tag = TypeTag::User(
-            name.clone(),
-            generics
-                .params()
-                .iter()
-                .map(|p| TypeTag::Parameter(p.clone()))
-                .collect(),
-        );
-        Some(tag)
-    }
 }
 
 /// A context provider for type parsing

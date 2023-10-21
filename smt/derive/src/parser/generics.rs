@@ -163,6 +163,11 @@ impl Generics {
     pub fn params(&self) -> &[TypeParamName] {
         &self.params
     }
+
+    /// Convert into a parameter list
+    pub fn into_params(self) -> Vec<TypeParamName> {
+        self.params
+    }
 }
 
 #[cfg(test)]

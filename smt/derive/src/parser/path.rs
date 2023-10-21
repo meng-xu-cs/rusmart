@@ -23,7 +23,7 @@ impl GenericsInstantiated {
         let ty_params = generics.params();
         let ty_args = match ty_args_opt {
             None => ty_params
-                .into_iter()
+                .iter()
                 .enumerate()
                 .map(|(i, n)| (n.clone(), (i, None)))
                 .collect(),
@@ -32,7 +32,7 @@ impl GenericsInstantiated {
                     return None;
                 }
                 ty_params
-                    .into_iter()
+                    .iter()
                     .zip(tags)
                     .enumerate()
                     .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
@@ -261,7 +261,7 @@ pub enum QualifiedPath {
     /// `Text::from(<literal>)`
     CastFromStr,
     /// `<type>::<sys-func>::<type-args?>(<args>)`
-    SysFunc(TypeName, SysFuncName, GenericsInstantiated),
+    SysFunc(TypeTag, SysFuncName, GenericsInstantiated),
     /// `<sys-type>::<usr-func>::<type-args?>(<args>)`
     Intrinsic(SysTypeName, UsrFuncName, GenericsInstantiated),
     /// `<usr-type>::<usr-func>::<type-args?>(<args>)`
@@ -312,7 +312,20 @@ impl QualifiedPath {
             },
             FuncName::Sys(name) => {
                 let ty_args = GenericsInstantiated::from_args(ctxt, &ty_generics, arguments)?;
-                Self::SysFunc(ty_name, name.clone(), ty_args)
+                let ty_tag = match ty_name {
+                    TypeName::Sys(sys_name) => sys_name.as_type_tag(),
+                    TypeName::Usr(usr_name) => TypeTag::User(
+                        usr_name,
+                        ty_generics
+                            .into_params()
+                            .into_iter()
+                            .map(TypeTag::Parameter)
+                            .collect(),
+                    ),
+                    TypeName::Param(param) => TypeTag::Parameter(param),
+                };
+
+                Self::SysFunc(ty_tag, *name, ty_args)
             }
             FuncName::Usr(name) => match ty_name {
                 TypeName::Param(_) => {

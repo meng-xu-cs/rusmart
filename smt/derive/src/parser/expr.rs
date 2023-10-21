@@ -18,9 +18,7 @@ use crate::parser::infer::{bail_on_ts_err, ti_unify, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::path::{ADTPath, QualifiedPath};
-use crate::parser::ty::{
-    CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeName, TypeTag,
-};
+use crate::parser::ty::{CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeTag};
 use crate::parser::util::{ExprPathAsCallee, ExprPathAsTarget, PatUtil, PathUtil};
 
 /// A context suitable for expr analysis
@@ -814,27 +812,17 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Op::Intrinsic(intrinsic)
                         }
                         // system function
-                        QualifiedPath::SysFunc(ty_name, fn_name, ty_args) => {
+                        QualifiedPath::SysFunc(ty_tag, fn_name, ty_args) => {
                             // derive the operand type
-                            let operand_ty = match ty_name {
-                                TypeName::Sys(sys_name) => {
-                                    let sys_tag = sys_name.as_type_tag();
-                                    bail_on_ts_err!(
-                                        TypeRef::substitute_params(unifier, &sys_tag, &ty_args),
-                                        func
-                                    )
+                            let operand_ty = match ty_tag {
+                                TypeTag::Parameter(param) => {
+                                    // type parameter does not need further substitution
+                                    TypeRef::Parameter(param)
                                 }
-                                TypeName::Usr(usr_name) => {
-                                    let usr_tag = match self.root.derive_type_tag(&usr_name) {
-                                        None => bail_on!(func, "[invariant] no such type"),
-                                        Some(t) => t,
-                                    };
-                                    bail_on_ts_err!(
-                                        TypeRef::substitute_params(unifier, &usr_tag, &ty_args),
-                                        func
-                                    )
-                                }
-                                TypeName::Param(param) => TypeRef::Parameter(param),
+                                _ => bail_on_ts_err!(
+                                    TypeRef::substitute_params(unifier, &ty_tag, &ty_args),
+                                    func
+                                ),
                             };
 
                             // collect arguments
