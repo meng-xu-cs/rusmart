@@ -32,19 +32,21 @@ impl Annotation {
 }
 
 /// A mark for an annotated impl function
+#[non_exhaustive]
 pub struct ImplMark {
     /// whether to derive a receiver-style method for this function
-    method: Option<UsrFuncName>,
+    pub method: Option<UsrFuncName>,
     /// which spec functions this impl should conform to
-    specs: BTreeSet<UsrFuncName>,
+    pub specs: BTreeSet<UsrFuncName>,
 }
 
 /// A mark for an annotated spec function
+#[non_exhaustive]
 pub struct SpecMark {
     /// whether to derive a receiver-style method for this function
-    method: Option<UsrFuncName>,
+    pub method: Option<UsrFuncName>,
     /// which impl functions this spec should target at
-    impls: BTreeSet<UsrFuncName>,
+    pub impls: BTreeSet<UsrFuncName>,
 }
 
 /// SMT-related marking

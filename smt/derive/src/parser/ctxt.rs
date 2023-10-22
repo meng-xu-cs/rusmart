@@ -96,6 +96,9 @@ impl Context {
             }
         }
 
+        // post-collection checking
+        ctxt.sanity_check()?;
+
         // return a collection of items as derivation context
         Ok(ctxt)
     }
@@ -177,6 +180,27 @@ impl Context {
         Ok(())
     }
 
+    /// Check whether the marks declared are correct or not
+    fn sanity_check(&self) -> Result<()> {
+        for marked in self.impls.values() {
+            let MarkedImpl { item, mark } = marked;
+            for target in &mark.specs {
+                if !self.specs.contains_key(target) {
+                    bail_on!(item, "invalid spec target: {}", target);
+                }
+            }
+        }
+        for marked in self.specs.values() {
+            let MarkedSpec { item, mark } = marked;
+            for target in &mark.impls {
+                if !self.impls.contains_key(target) {
+                    bail_on!(item, "invalid impl target: {}", target);
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Parse the generics declarations
     pub fn parse_generics(self) -> Result<ContextWithGenerics> {
         let mut types = BTreeMap::new();
@@ -194,16 +218,15 @@ impl Context {
 
     #[cfg(test)]
     pub fn new_from_stream(stream: TokenStream) -> Result<Self> {
-        // init
         let mut ctxt = Self {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
             specs: BTreeMap::new(),
         };
 
-        // parse
         let file: File = syn::parse2(stream)?;
         ctxt.process_file(file)?;
+        ctxt.sanity_check()?;
         Ok(ctxt)
     }
 }
