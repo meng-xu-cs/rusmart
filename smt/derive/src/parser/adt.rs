@@ -105,7 +105,7 @@ impl MatchAnalyzer {
                 };
                 match variant {
                     EnumVariant::Tuple(def_tuple) => {
-                        let slots = def_tuple.slots();
+                        let slots = &def_tuple.slots;
                         if elems.len() != slots.len() {
                             bail_on!(elems, "number of slots mismatch");
                         }
@@ -153,7 +153,7 @@ impl MatchAnalyzer {
                 };
                 match variant {
                     EnumVariant::Record(def_record) => {
-                        let records = def_record.fields();
+                        let records = &def_record.fields;
                         if fields.len() != records.len() {
                             bail_on!(fields, "number of fields mismatch");
                         }

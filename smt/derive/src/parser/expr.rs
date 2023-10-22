@@ -26,20 +26,11 @@ pub trait CtxtForExpr: CtxtForType {
     /// Retrieve the definition of a user-defined type
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
 
-    /// Retrieve all variants of an enum
-    fn get_adt_variants(&self, name: &UsrTypeName) -> Option<&BTreeMap<String, EnumVariant>> {
-        let def = self.get_type_def(name)?;
-        match def.body() {
-            TypeBody::Enum(adt) => Some(adt.variants()),
-            _ => None,
-        }
-    }
-
     /// Retrieve the definition of an enum variant
     fn get_adt_variant_details(&self, path: &ADTPath) -> Option<&EnumVariant> {
         let def = self.get_type_def(path.branch().ty_name())?;
-        let variant = match def.body() {
-            TypeBody::Enum(adt) => adt.variants().get(path.branch().variant())?,
+        let variant = match &def.body {
+            TypeBody::Enum(adt) => adt.variants.get(path.branch().variant())?,
             _ => return None,
         };
         Some(variant)
@@ -730,10 +721,17 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     // retrieve all variants of the ADT
                     let (adt_name, adt_variants): (_, BTreeSet<_>) =
                         match unifier.refresh_type(converted.ty()) {
-                            TypeRef::User(name, _) => match self.root.get_adt_variants(&name) {
-                                None => bail_on!(original, "no such enum type"),
-                                Some(variants) => (name, variants.keys().cloned().collect()),
-                            },
+                            TypeRef::User(name, _) => {
+                                let adt = match self.root.get_type_def(&name) {
+                                    None => bail_on!(original, "no such type"),
+                                    Some(def) => match &def.body {
+                                        TypeBody::Enum(adt) => adt,
+                                        _ => bail_on!(original, "not an enum type"),
+                                    },
+                                };
+                                let variants = adt.variants.keys().cloned().collect();
+                                (name, variants)
+                            }
                             _ => bail_on!(original, "not a user-defined type"),
                         };
                     heads_exprs.push(converted);

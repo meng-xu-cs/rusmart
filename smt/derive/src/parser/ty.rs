@@ -347,7 +347,7 @@ impl TypeTag {
 
 /// Represents a tuple definition
 pub struct TypeTuple {
-    slots: Vec<TypeTag>,
+    pub slots: Vec<TypeTag>,
 }
 
 impl TypeTuple {
@@ -377,16 +377,11 @@ impl TypeTuple {
 
         Ok(Self { slots })
     }
-
-    /// Get slots
-    pub fn slots(&self) -> &[TypeTag] {
-        &self.slots
-    }
 }
 
 /// Represents a record definition
 pub struct TypeRecord {
-    fields: BTreeMap<String, TypeTag>,
+    pub fields: BTreeMap<String, TypeTag>,
 }
 
 impl TypeRecord {
@@ -419,11 +414,6 @@ impl TypeRecord {
 
         Ok(Self { fields })
     }
-
-    /// Get fields
-    pub fn fields(&self) -> &BTreeMap<String, TypeTag> {
-        &self.fields
-    }
 }
 
 /// A helper enum to represent a variant definition in an ADT type
@@ -453,7 +443,7 @@ impl EnumVariant {
 
 /// Represents an ADT definition
 pub struct TypeEnum {
-    variants: BTreeMap<String, EnumVariant>,
+    pub variants: BTreeMap<String, EnumVariant>,
 }
 
 impl TypeEnum {
@@ -481,11 +471,6 @@ impl TypeEnum {
         }
 
         Ok(Self { variants })
-    }
-
-    /// Get variants as map
-    pub fn variants(&self) -> &BTreeMap<String, EnumVariant> {
-        &self.variants
     }
 }
 
@@ -560,27 +545,8 @@ impl TypeBody {
 
 /// A complete definition of a type (generics + body)
 pub struct TypeDef {
-    head: Generics,
-    body: TypeBody,
-}
-
-impl TypeDef {
-    /// Pack a new type definition
-    pub fn new(head: Generics, body: TypeBody) -> Self {
-        Self { head, body }
-    }
-}
-
-impl TypeDef {
-    /// Retrieve the generics
-    pub fn head(&self) -> &Generics {
-        &self.head
-    }
-
-    /// Retrieve the body of the definition
-    pub fn body(&self) -> &TypeBody {
-        &self.body
-    }
+    pub head: Generics,
+    pub body: TypeBody,
 }
 
 #[cfg(test)]

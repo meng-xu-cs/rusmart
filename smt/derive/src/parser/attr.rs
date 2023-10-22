@@ -32,7 +32,6 @@ impl Annotation {
 }
 
 /// A mark for an annotated impl function
-#[non_exhaustive]
 pub struct ImplMark {
     /// whether to derive a receiver-style method for this function
     pub method: Option<UsrFuncName>,
@@ -41,7 +40,6 @@ pub struct ImplMark {
 }
 
 /// A mark for an annotated spec function
-#[non_exhaustive]
 pub struct SpecMark {
     /// whether to derive a receiver-style method for this function
     pub method: Option<UsrFuncName>,

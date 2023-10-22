@@ -266,7 +266,11 @@ impl ContextWithGenerics {
             .into_iter()
             .map(|(name, (generics, _))| {
                 let body = parsed_types.remove(&name).unwrap();
-                (name, TypeDef::new(generics, body))
+                let def = TypeDef {
+                    head: generics,
+                    body,
+                };
+                (name, def)
             })
             .collect();
 
@@ -288,7 +292,7 @@ pub struct ContextWithType {
 impl ContextWithType {
     /// Get the generics declaration for a type
     pub fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
-        self.types.get(name).map(|def| def.head())
+        self.types.get(name).map(|def| &def.head)
     }
 
     /// Parse function signatures
@@ -382,7 +386,7 @@ pub struct ContextWithSig {
 impl ContextWithSig {
     /// Get the generics declaration for a type
     pub fn get_type_generics(&self, name: &UsrTypeName) -> Option<&Generics> {
-        self.types.get(name).map(|def| def.head())
+        self.types.get(name).map(|def| &def.head)
     }
 
     /// Get type definition

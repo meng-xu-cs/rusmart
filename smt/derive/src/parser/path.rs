@@ -116,10 +116,10 @@ impl TuplePath {
         let generics = match ctxt.get_type_def(&ty_name) {
             None => bail_on!(ident, "no such type"),
             Some(def) => {
-                if !matches!(def.body(), TypeBody::Tuple(_)) {
+                if !matches!(def.body, TypeBody::Tuple(_)) {
                     bail_on!(ident, "not a tuple type");
                 }
-                def.head()
+                &def.head
             }
         };
         let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
@@ -167,8 +167,8 @@ impl ADTPath {
         let ty_name = ident.try_into()?;
         let (generics, variants) = match ctxt.get_type_def(&ty_name) {
             None => bail_on!(ident, "no such type"),
-            Some(def) => match def.body() {
-                TypeBody::Enum(details) => (def.head(), details.variants()),
+            Some(def) => match &def.body {
+                TypeBody::Enum(details) => (&def.head, &details.variants),
                 _ => bail_on!(ident, "not an enum type"),
             },
         };
@@ -285,7 +285,7 @@ impl QualifiedPath {
             TypeName::Sys(name) => name.generics(),
             TypeName::Usr(name) => match ctxt.get_type_def(name) {
                 None => bail_on!(ident, "no such type"),
-                Some(def) => def.head().clone(),
+                Some(def) => def.head.clone(),
             },
             TypeName::Param(_) => Generics::intrinsic(vec![]),
         };
