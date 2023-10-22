@@ -3,10 +3,11 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use syn::{Attribute, File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Meta, Result, Stmt};
+use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Result, Stmt};
 use walkdir::WalkDir;
 
 use crate::parser::apply::ApplyDatabase;
+use crate::parser::attr::{ImplMark, Mark, SpecMark};
 use crate::parser::err::{bail_on, bail_on_with_note};
 use crate::parser::expr::{ExprParserRoot, Kind};
 use crate::parser::func::{FuncDef, FuncSig};
@@ -24,15 +25,8 @@ pub enum MarkedType {
 }
 
 impl MarkedType {
-    /// Test whether the SMT mark exists in the attributes
-    fn has_mark(attrs: &[Attribute]) -> bool {
-        attrs
-            .iter()
-            .any(|a| matches!(&a.meta, Meta::Path(name) if name.is_ident("smt_type")))
-    }
-
     /// Retrieve the name of this item
-    fn name(&self) -> &Ident {
+    pub fn name(&self) -> &Ident {
         match self {
             Self::Enum(item) => &item.ident,
             Self::Struct(item) => &item.ident,
@@ -41,36 +35,28 @@ impl MarkedType {
 }
 
 /// SMT-marked function as impl
-pub struct MarkedImpl(ItemFn);
+pub struct MarkedImpl {
+    item: ItemFn,
+    mark: ImplMark,
+}
 
 impl MarkedImpl {
-    /// Test whether the SMT mark exists in the attributes
-    fn has_mark(attrs: &[Attribute]) -> bool {
-        attrs
-            .iter()
-            .any(|a| matches!(&a.meta, Meta::Path(name) if name.is_ident("smt_impl")))
-    }
-
     /// Retrieve the name of this item
-    fn name(&self) -> &Ident {
-        &self.0.sig.ident
+    pub fn name(&self) -> &Ident {
+        &self.item.sig.ident
     }
 }
 
 /// SMT-marked function as spec
-pub struct MarkedSpec(ItemFn);
+pub struct MarkedSpec {
+    item: ItemFn,
+    mark: SpecMark,
+}
 
 impl MarkedSpec {
-    /// Test whether the SMT mark exists in the attributes
-    fn has_mark(attrs: &[Attribute]) -> bool {
-        attrs
-            .iter()
-            .any(|a| matches!(&a.meta, Meta::List(targets) if targets.path.is_ident("smt_spec")))
-    }
-
     /// Retrieve the name of this item
-    fn name(&self) -> &Ident {
-        &self.0.sig.ident
+    pub fn name(&self) -> &Ident {
+        &self.item.sig.ident
     }
 }
 
@@ -119,26 +105,22 @@ impl Context {
         // identify items marked with smt-related attributes
         for item in file.items {
             match item {
-                Item::Enum(syntax) => {
-                    if MarkedType::has_mark(&syntax.attrs) {
-                        self.add_type(MarkedType::Enum(syntax))?;
-                    }
-                }
-                Item::Struct(syntax) => {
-                    if MarkedType::has_mark(&syntax.attrs) {
-                        self.add_type(MarkedType::Struct(syntax))?;
-                    }
-                }
-                Item::Fn(syntax) => {
-                    if MarkedImpl::has_mark(&syntax.attrs) {
-                        if MarkedSpec::has_mark(&syntax.attrs) {
-                            bail_on!(&syntax, "function cannot be both spec and impl");
-                        }
-                        self.add_impl(MarkedImpl(syntax))?;
-                    } else if MarkedSpec::has_mark(&syntax.attrs) {
-                        self.add_spec(MarkedSpec(syntax))?;
-                    }
-                }
+                Item::Enum(syntax) => match Mark::parse_attrs(&syntax.attrs)? {
+                    None => continue,
+                    Some(Mark::Type) => self.add_type(MarkedType::Enum(syntax))?,
+                    _ => bail_on!(syntax, "invalid annotation"),
+                },
+                Item::Struct(syntax) => match Mark::parse_attrs(&syntax.attrs)? {
+                    None => continue,
+                    Some(Mark::Type) => self.add_type(MarkedType::Struct(syntax))?,
+                    _ => bail_on!(syntax, "invalid annotation"),
+                },
+                Item::Fn(syntax) => match Mark::parse_attrs(&syntax.attrs)? {
+                    None => continue,
+                    Some(Mark::Impl(mark)) => self.add_impl(MarkedImpl { item: syntax, mark })?,
+                    Some(Mark::Spec(mark)) => self.add_spec(MarkedSpec { item: syntax, mark })?,
+                    Some(Mark::Type) => bail_on!(syntax, "invalid annotation"),
+                },
                 _ => (),
             }
         }
@@ -296,7 +278,7 @@ impl ContextWithType {
                 vis: _,
                 sig,
                 block: _, // handled later
-            } = &marked.0;
+            } = &marked.item;
 
             trace!("handling impl sig: {}", name);
             let sig = FuncSig::from_sig(&self, sig)?;
@@ -312,7 +294,7 @@ impl ContextWithType {
                 vis: _,
                 sig,
                 block: _, // handled later
-            } = &marked.0;
+            } = &marked.item;
 
             trace!("handling spec sig: {}", name);
             let sig = FuncSig::from_sig(&self, sig)?;
@@ -331,7 +313,7 @@ impl ContextWithType {
             .into_iter()
             .map(|(name, marked)| {
                 let sig = sig_impls.remove(&name).unwrap();
-                let stmts = marked.0.block.stmts;
+                let stmts = marked.item.block.stmts;
                 (name, (sig, stmts))
             })
             .collect();
@@ -339,7 +321,7 @@ impl ContextWithType {
             .into_iter()
             .map(|(name, marked)| {
                 let sig = sig_specs.remove(&name).unwrap();
-                let stmts = marked.0.block.stmts;
+                let stmts = marked.item.block.stmts;
                 (name, (sig, stmts))
             })
             .collect();

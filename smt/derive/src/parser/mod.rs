@@ -2,6 +2,7 @@ pub mod ctxt;
 mod err;
 mod test;
 
+mod attr;
 mod name;
 mod util;
 
