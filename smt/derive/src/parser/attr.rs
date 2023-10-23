@@ -26,7 +26,7 @@ impl Annotation {
             "smt_type" => Some(Self::Type),
             "smt_impl" => Some(Self::Impl),
             "smt_spec" => Some(Self::Spec),
-            _ => return None,
+            _ => None,
         }
     }
 }
@@ -165,8 +165,8 @@ impl Mark {
                     if !matches!(delimiter, MacroDelimiter::Paren(_)) {
                         bail_on!(attr, "not a parenthesis-enclosed list");
                     }
-                    let mut store = Self::parse_dict(tokens)?;
 
+                    let mut store = Self::parse_dict(tokens)?;
                     let method = match store.remove("method") {
                         None => None,
                         Some(MetaValue::One(ref item)) => Some(item.try_into()?),
@@ -195,8 +195,8 @@ impl Mark {
                     if !matches!(delimiter, MacroDelimiter::Paren(_)) {
                         bail_on!(attr, "not a parenthesis-enclosed list");
                     }
-                    let mut store = Self::parse_dict(tokens)?;
 
+                    let mut store = Self::parse_dict(tokens)?;
                     let method = match store.remove("method") {
                         None => None,
                         Some(MetaValue::One(ref item)) => Some(item.try_into()?),

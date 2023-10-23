@@ -169,6 +169,23 @@ impl FuncSig {
             .map(|(name, ty)| (name.clone(), ty.clone()))
             .collect()
     }
+
+    /// Test whether two signatures are type-compatible
+    pub fn is_compatible(&self, sig: &FuncSig) -> bool {
+        // for simplicity, require generics to use the same type parameter names
+        // TODO: relax this requirement
+        if self.generics.params != sig.generics.params {
+            return false;
+        }
+
+        let lhs_params: Vec<_> = self.params.iter().map(|(_, t)| t).collect();
+        let rhs_params: Vec<_> = sig.params.iter().map(|(_, t)| t).collect();
+        if lhs_params != rhs_params {
+            return false;
+        }
+
+        self.ret_ty == sig.ret_ty
+    }
 }
 
 /// Function definition

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -58,6 +58,13 @@ impl MarkedSpec {
     pub fn name(&self) -> &Ident {
         &self.item.sig.ident
     }
+}
+
+/// A refinement relation
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+pub struct Refinement {
+    pub fn_impl: UsrFuncName,
+    pub fn_spec: UsrFuncName,
 }
 
 /// Context manager for holding marked items
@@ -308,9 +315,9 @@ impl ContextWithType {
             } = &marked.item;
 
             trace!("handling impl sig: {}", name);
-            let sig = FuncSig::from_sig(&self, sig)?;
+            let parsed = FuncSig::from_sig(&self, sig)?;
             trace!("impl sig analyzed: {}", name);
-            sig_impls.insert(name.clone(), sig);
+            sig_impls.insert(name.clone(), (parsed, sig.clone()));
         }
 
         // spec
@@ -324,10 +331,58 @@ impl ContextWithType {
             } = &marked.item;
 
             trace!("handling spec sig: {}", name);
-            let sig = FuncSig::from_sig(&self, sig)?;
+            let parsed = FuncSig::from_sig(&self, sig)?;
             trace!("spec sig analyzed: {}", name);
-            sig_specs.insert(name.clone(), sig);
+            sig_specs.insert(name.clone(), (parsed, sig.clone()));
         }
+
+        // populate the databases
+        let mut vc_db = BTreeSet::new();
+        let mut fn_db = ApplyDatabase::with_intrinsics();
+
+        for (name, (sig, raw)) in sig_impls.iter() {
+            let mark = &self.impls.get(name).expect("impl").mark;
+            // check signature
+            for spec_name in &mark.specs {
+                let (spec_sig, _) = sig_specs.get(spec_name).expect("spec");
+                if !spec_sig.is_compatible(sig) {
+                    bail_on!(raw, "signature mismatch");
+                }
+                vc_db.insert(Refinement {
+                    fn_impl: name.clone(),
+                    fn_spec: spec_name.clone(),
+                });
+            }
+
+            // register to type db
+            match fn_db.register_user_func(name, mark.method.as_ref(), sig) {
+                Ok(()) => (),
+                Err(e) => bail_on!(raw, "{}", e),
+            }
+        }
+
+        for (name, (sig, raw)) in sig_specs.iter() {
+            let mark = &self.specs.get(name).expect("spec").mark;
+            // check signature
+            for impl_name in &mark.impls {
+                let (impl_sig, _) = sig_impls.get(impl_name).expect("impl");
+                if !impl_sig.is_compatible(sig) {
+                    bail_on!(raw, "signature mismatch");
+                }
+                vc_db.insert(Refinement {
+                    fn_impl: impl_name.clone(),
+                    fn_spec: name.clone(),
+                });
+            }
+
+            // register to type db
+            match fn_db.register_user_func(name, mark.method.as_ref(), sig) {
+                Ok(()) => (),
+                Err(e) => bail_on!(raw, "{}", e),
+            }
+        }
+
+        trace!("databases constructed");
 
         // re-packing
         let Self {
@@ -339,7 +394,7 @@ impl ContextWithType {
         let unpacked_impls: BTreeMap<_, _> = impls
             .into_iter()
             .map(|(name, marked)| {
-                let sig = sig_impls.remove(&name).unwrap();
+                let (sig, _) = sig_impls.remove(&name).unwrap();
                 let stmts = marked.item.block.stmts;
                 (name, (sig, stmts))
             })
@@ -347,27 +402,18 @@ impl ContextWithType {
         let unpacked_specs: BTreeMap<_, _> = specs
             .into_iter()
             .map(|(name, marked)| {
-                let sig = sig_specs.remove(&name).unwrap();
+                let (sig, _) = sig_specs.remove(&name).unwrap();
                 let stmts = marked.item.block.stmts;
                 (name, (sig, stmts))
             })
             .collect();
-
-        // populate the database
-        let mut fn_db = ApplyDatabase::with_intrinsics();
-        for (name, (sig, _)) in unpacked_impls.iter() {
-            fn_db.register_user_func(name, sig);
-        }
-        for (name, (sig, _)) in unpacked_specs.iter() {
-            fn_db.register_user_func(name, sig);
-        }
-        trace!("function database constructed");
 
         // done
         let ctxt = ContextWithSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
+            vc_db,
             fn_db,
         };
         Ok(ctxt)
@@ -379,6 +425,8 @@ pub struct ContextWithSig {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
+    /// a database for verification conditions (i.e., impl and spec mapping)
+    pub vc_db: BTreeSet<Refinement>,
     /// a database for functions
     pub fn_db: ApplyDatabase,
 }
@@ -431,6 +479,7 @@ impl ContextWithSig {
             impls,
             specs,
             fn_db: _,
+            vc_db: _,
         } = self;
 
         let unpacked_impls = impls

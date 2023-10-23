@@ -225,46 +225,58 @@ impl ApplyDatabase {
     }
 
     /// Register a user-defined function (spec or impl)
-    pub fn register_user_func(&mut self, name: &UsrFuncName, sig: &FuncSig) {
+    pub fn register_user_func(
+        &mut self,
+        name: &UsrFuncName,
+        method: Option<&UsrFuncName>,
+        sig: &FuncSig,
+    ) -> Result<()> {
         let func = TypeFn::from(sig);
 
-        // if the first param is a user-defined type with correct generics, mark it as a qualifier
-        let qualifier = match func.params.first() {
-            Some(TypeTag::User(tn, ty_args)) => {
-                let ty_params = &sig.generics.params;
-                if ty_args.len() != ty_params.len() {
-                    None
-                } else if ty_params.iter().zip(ty_args).all(
-                    |(param_name, tag)| matches!(tag, TypeTag::Parameter(n) if n == param_name),
-                ) {
-                    Some(tn.clone())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
-
-        // register this function
+        // register this function as unqualified
         match self.unqualified.insert(name.clone(), func.clone()) {
             None => (),
             Some(_) => panic!("duplicated registration of user-defined function: {}", name),
         }
 
-        if let Some(ty_name) = qualifier {
+        // try to register a method
+        if let Some(method_name) = method {
+            let (ty_name, ty_args) = match func.params.first() {
+                None => bail!("no receiver argument"),
+                Some(TypeTag::User(ty_name, ty_args)) => (ty_name, ty_args),
+                Some(_) => bail!("the receiver argument is not a user-defined type"),
+            };
+
+            // for simplicity, require type generics be the first set of type parameters
+            // TODO: relax this requirement
+            let ty_params = &sig.generics.params;
+            if ty_args.len() > ty_params.len() {
+                bail!("the receiver argument take too many type arguments");
+            }
+            for (ty_arg, param_name) in ty_args.iter().zip(ty_params) {
+                if !matches!(ty_arg, TypeTag::Parameter(n) if n == param_name) {
+                    bail!("type parameter name mismatch");
+                }
+            }
+
+            // all checked up
             match self
                 .on_usr_type
-                .entry(name.clone())
+                .entry(method_name.clone())
                 .or_default()
                 .insert(ty_name.clone(), func.clone())
             {
                 None => (),
-                Some(_) => panic!(
+                Some(_) => bail!(
                     "duplicated registration of user-defined function: {}::{}",
-                    ty_name, name
+                    ty_name,
+                    method_name
                 ),
             }
         }
+
+        // done
+        Ok(())
     }
 
     /// Lookup an intrinsic function
