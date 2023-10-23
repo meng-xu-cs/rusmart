@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use quote::quote_spanned;
 use syn::{
     GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, Result, TraitBound,
@@ -157,6 +159,17 @@ impl Generics {
             }) => generics,
         };
         Self::from_generics(generics)
+    }
+
+    /// Filter another set of type parameters
+    pub fn filter(&self, names: &BTreeSet<TypeParamName>) -> Self {
+        let filtered = self
+            .params
+            .iter()
+            .filter(|n| !names.contains(*n))
+            .cloned()
+            .collect();
+        Self { params: filtered }
     }
 }
 

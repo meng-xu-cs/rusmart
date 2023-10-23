@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{bail, Result};
 
@@ -70,80 +70,43 @@ impl ApplyDatabase {
         use TypeTag::*;
 
         // utility
+        let empty = || Generics::intrinsic(vec![]);
+
         let fn0 = |rty: TypeTag| TypeFn {
-            generics: Generics::intrinsic(vec![]),
+            generics: empty(),
             params: vec![],
             ret_ty: rty,
         };
 
         let fn1 = |a0: TypeTag, rty: TypeTag| TypeFn {
-            generics: Generics::intrinsic(vec![]),
+            generics: empty(),
             params: vec![a0],
             ret_ty: rty,
         };
         let fn1_arith = |t: TypeTag| fn1(t.clone(), t);
 
         let fn2 = |a0: TypeTag, a1: TypeTag, rty: TypeTag| TypeFn {
-            generics: Generics::intrinsic(vec![]),
+            generics: empty(),
             params: vec![a0, a1],
             ret_ty: rty,
         };
         let fn2_arith = |t: TypeTag| fn2(t.clone(), t.clone(), t);
         let fn2_cmp = |t: TypeTag| fn2(t.clone(), t, Boolean);
 
+        let fn3 = |a0: TypeTag, a1: TypeTag, a2: TypeTag, rty: TypeTag| TypeFn {
+            generics: empty(),
+            params: vec![a0, a1, a2],
+            ret_ty: rty,
+        };
+
         let t = || Parameter(TypeParamName::intrinsic("T"));
         let box_t = || Cloak(t().into());
         let seq_t = || Seq(t().into());
         let set_t = || Set(t().into());
-        let generics_t = || Generics::intrinsic(vec![TypeParamName::intrinsic("T")]);
 
         let k = || Parameter(TypeParamName::intrinsic("K"));
         let v = || Parameter(TypeParamName::intrinsic("V"));
         let map_kv = || Map(k().into(), v().into());
-        let generics_kv = || {
-            Generics::intrinsic(vec![
-                TypeParamName::intrinsic("K"),
-                TypeParamName::intrinsic("V"),
-            ])
-        };
-
-        let fn0_t = |rty: TypeTag| TypeFn {
-            generics: generics_t(),
-            params: vec![],
-            ret_ty: rty,
-        };
-        let fn0_kv = |rty: TypeTag| TypeFn {
-            generics: generics_kv(),
-            params: vec![],
-            ret_ty: rty,
-        };
-
-        let fn1_t = |a0: TypeTag, rty: TypeTag| TypeFn {
-            generics: generics_t(),
-            params: vec![a0],
-            ret_ty: rty,
-        };
-        let fn1_kv = |a0: TypeTag, rty: TypeTag| TypeFn {
-            generics: generics_kv(),
-            params: vec![a0],
-            ret_ty: rty,
-        };
-
-        let fn2_t = |a0: TypeTag, a1: TypeTag, rty: TypeTag| TypeFn {
-            generics: generics_t(),
-            params: vec![a0, a1],
-            ret_ty: rty,
-        };
-        let fn2_kv = |a0: TypeTag, a1: TypeTag, rty: TypeTag| TypeFn {
-            generics: generics_kv(),
-            params: vec![a0, a1],
-            ret_ty: rty,
-        };
-        let fn3_kv = |a0: TypeTag, a1: TypeTag, a2: TypeTag, rty: TypeTag| TypeFn {
-            generics: generics_kv(),
-            params: vec![a0, a1, a2],
-            ret_ty: rty,
-        };
 
         // the population process
         let mut db = Self::new();
@@ -176,29 +139,25 @@ impl ApplyDatabase {
         db.builtin("lt", Q::Text, fn2_cmp(Text));
         db.builtin("le", Q::Text, fn2_cmp(Text));
         // cloak
-        db.builtin("shield", Q::Cloak, fn1_t(t(), box_t()));
-        db.builtin("reveal", Q::Cloak, fn1_t(box_t(), t()));
+        db.builtin("shield", Q::Cloak, fn1(t(), box_t()));
+        db.builtin("reveal", Q::Cloak, fn1(box_t(), t()));
         // seq
-        db.builtin("empty", Q::Seq, fn0_t(seq_t()));
-        db.builtin("length", Q::Seq, fn1_t(seq_t(), Integer));
-        db.builtin("append", Q::Seq, fn2_t(seq_t(), t(), seq_t()));
-        db.builtin("at_unchecked", Q::Seq, fn2_t(seq_t(), Integer, t()));
-        db.builtin("includes", Q::Seq, fn2_t(seq_t(), t(), Boolean));
+        db.builtin("empty", Q::Seq, fn0(seq_t()));
+        db.builtin("length", Q::Seq, fn1(seq_t(), Integer));
+        db.builtin("append", Q::Seq, fn2(seq_t(), t(), seq_t()));
+        db.builtin("at_unchecked", Q::Seq, fn2(seq_t(), Integer, t()));
+        db.builtin("includes", Q::Seq, fn2(seq_t(), t(), Boolean));
         // set
-        db.builtin("empty", Q::Set, fn0_t(set_t()));
-        db.builtin("length", Q::Set, fn1_t(set_t(), Integer));
-        db.builtin("insert", Q::Set, fn2_t(set_t(), t(), set_t()));
-        db.builtin("contains", Q::Set, fn2_t(set_t(), t(), Boolean));
+        db.builtin("empty", Q::Set, fn0(set_t()));
+        db.builtin("length", Q::Set, fn1(set_t(), Integer));
+        db.builtin("insert", Q::Set, fn2(set_t(), t(), set_t()));
+        db.builtin("contains", Q::Set, fn2(set_t(), t(), Boolean));
         // map
-        db.builtin("empty", Q::Map, fn0_kv(map_kv()));
-        db.builtin("length", Q::Map, fn1_kv(map_kv(), Integer));
-        db.builtin(
-            "put_unchecked",
-            Q::Map,
-            fn3_kv(map_kv(), k(), v(), map_kv()),
-        );
-        db.builtin("get_unchecked", Q::Map, fn2_kv(map_kv(), k(), v()));
-        db.builtin("contains_key", Q::Map, fn2_kv(map_kv(), k(), Boolean));
+        db.builtin("empty", Q::Map, fn0(map_kv()));
+        db.builtin("length", Q::Map, fn1(map_kv(), Integer));
+        db.builtin("put_unchecked", Q::Map, fn3(map_kv(), k(), v(), map_kv()));
+        db.builtin("get_unchecked", Q::Map, fn2(map_kv(), k(), v()));
+        db.builtin("contains_key", Q::Map, fn2(map_kv(), k(), Boolean));
         // error
         db.builtin("fresh", Q::Error, fn0(Error));
         db.builtin("merge", Q::Error, fn2_arith(Error));
@@ -216,12 +175,6 @@ impl ApplyDatabase {
     ) -> Result<()> {
         let func = TypeFn::from(sig);
 
-        // register this function as unqualified
-        match self.unqualified.insert(name.clone(), func.clone()) {
-            None => (),
-            Some(_) => panic!("duplicated registration of user-defined function: {}", name),
-        }
-
         // try to register a method
         if let Some(method_name) = method {
             let (ty_name, ty_args) = match func.params.first() {
@@ -236,18 +189,28 @@ impl ApplyDatabase {
             if ty_args.len() > ty_params.len() {
                 bail!("the receiver argument take too many type arguments");
             }
+
+            let mut ty_generics = BTreeSet::new();
             for (ty_arg, param_name) in ty_args.iter().zip(ty_params) {
                 if !matches!(ty_arg, TypeTag::Parameter(n) if n == param_name) {
                     bail!("type parameter name mismatch");
                 }
+                ty_generics.insert(param_name.clone());
             }
+
+            // reset the generics
+            let method = TypeFn {
+                generics: func.generics.filter(&ty_generics),
+                params: func.params.clone(),
+                ret_ty: func.ret_ty.clone(),
+            };
 
             // all checked up
             match self
                 .on_usr_type
                 .entry(method_name.clone())
                 .or_default()
-                .insert(ty_name.clone(), func.clone())
+                .insert(ty_name.clone(), method)
             {
                 None => (),
                 Some(_) => bail!(
@@ -256,6 +219,12 @@ impl ApplyDatabase {
                     method_name
                 ),
             }
+        }
+
+        // register this function as unqualified
+        match self.unqualified.insert(name.clone(), func) {
+            None => (),
+            Some(_) => panic!("duplicated registration of user-defined function: {}", name),
         }
 
         // done
