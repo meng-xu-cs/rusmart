@@ -162,13 +162,12 @@ impl TypeRef {
                     .map(|t| Self::substitute_params(unifier, t, substitute))
                     .collect::<TSResult<_>>()?,
             ),
-            TypeTag::Parameter(name) => match substitute
-                .get(name)
-                .ok_or_else(|| TSError::NoSuchParameter)?
-            {
-                None => TypeRef::Var(unifier.mk_var()),
-                Some(t) => t.into(),
-            },
+            TypeTag::Parameter(name) => {
+                match substitute.get(name).ok_or(TSError::NoSuchParameter)? {
+                    None => TypeRef::Var(unifier.mk_var()),
+                    Some(t) => t.into(),
+                }
+            }
         };
         Ok(updated)
     }
@@ -450,11 +449,11 @@ impl TypeUnifier {
         subst: &GenericsInstantiated,
     ) -> TSResult<(Vec<TypeRef>, TypeRef)> {
         let params: Vec<_> = fty
-            .params()
+            .params
             .iter()
             .map(|t| TypeRef::substitute_params(self, t, subst))
             .collect::<TSResult<_>>()?;
-        let ret_ty = TypeRef::substitute_params(self, fty.ret_ty(), subst)?;
+        let ret_ty = TypeRef::substitute_params(self, &fty.ret_ty, subst)?;
         Ok((params, ret_ty))
     }
 

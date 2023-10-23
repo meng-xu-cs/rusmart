@@ -51,7 +51,7 @@ impl GenericsInstantiated {
         let ty_params = &generics.params;
         let ty_args = match arguments {
             PathArguments::None => ty_params
-                .into_iter()
+                .iter()
                 .enumerate()
                 .map(|(i, n)| (n.clone(), (i, None)))
                 .collect(),
@@ -61,7 +61,7 @@ impl GenericsInstantiated {
                     bail_on!(pack, "type argument number mismatch");
                 }
                 ty_params
-                    .into_iter()
+                    .iter()
                     .zip(ty_args)
                     .enumerate()
                     .map(|(i, (n, t))| (n.clone(), (i, Some(t))))
@@ -335,7 +335,7 @@ impl QualifiedPath {
                     None => bail_on!(ident, "no such intrinsic function"),
                     Some(fty) => {
                         let ty_args =
-                            GenericsInstantiated::from_args(ctxt, fty.generics(), arguments)?;
+                            GenericsInstantiated::from_args(ctxt, &fty.generics, arguments)?;
                         Self::Intrinsic(ty_name, name.clone(), ty_args)
                     }
                 },

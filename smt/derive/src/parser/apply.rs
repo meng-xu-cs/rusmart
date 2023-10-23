@@ -14,26 +14,9 @@ use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
 /// A function type, with inference allowed
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct TypeFn {
-    generics: Generics,
-    params: Vec<TypeTag>,
-    ret_ty: TypeTag,
-}
-
-impl TypeFn {
-    /// Get the generics
-    pub fn generics(&self) -> &Generics {
-        &self.generics
-    }
-
-    /// Collect variables (in vec) declared in the parameter list
-    pub fn params(&self) -> &[TypeTag] {
-        &self.params
-    }
-
-    /// Get the return type
-    pub fn ret_ty(&self) -> &TypeTag {
-        &self.ret_ty
-    }
+    pub generics: Generics,
+    pub params: Vec<TypeTag>,
+    pub ret_ty: TypeTag,
 }
 
 impl From<&FuncSig> for TypeFn {
@@ -330,7 +313,7 @@ impl ApplyDatabase {
             }
 
             // instantiation
-            let inst_pack = match GenericsInstantiated::new(fty.generics(), inst) {
+            let inst_pack = match GenericsInstantiated::new(&fty.generics, inst) {
                 None => continue,
                 Some(pack) => pack,
             };
