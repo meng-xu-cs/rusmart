@@ -79,7 +79,7 @@ impl SysTrait {
 /// Declaration of generics
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Generics {
-    params: Vec<TypeParamName>,
+    pub params: Vec<TypeParamName>,
 }
 
 impl Generics {
@@ -157,16 +157,6 @@ impl Generics {
             }) => generics,
         };
         Self::from_generics(generics)
-    }
-
-    /// Getter to the parameter list
-    pub fn params(&self) -> &[TypeParamName] {
-        &self.params
-    }
-
-    /// Convert into a parameter list
-    pub fn into_params(self) -> Vec<TypeParamName> {
-        self.params
     }
 }
 

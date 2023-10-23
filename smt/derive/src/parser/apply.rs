@@ -231,7 +231,7 @@ impl ApplyDatabase {
         // if the first param is a user-defined type with correct generics, mark it as a qualifier
         let qualifier = match func.params.first() {
             Some(TypeTag::User(tn, ty_args)) => {
-                let ty_params = sig.generics().params();
+                let ty_params = &sig.generics().params;
                 if ty_args.len() != ty_params.len() {
                     None
                 } else if ty_params.iter().zip(ty_args).all(

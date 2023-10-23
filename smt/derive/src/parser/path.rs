@@ -20,7 +20,7 @@ pub struct GenericsInstantiated {
 impl GenericsInstantiated {
     /// Create an instantiation with generics and type argument (optionally parsed)
     pub fn new(generics: &Generics, ty_args_opt: Option<&[TypeTag]>) -> Option<Self> {
-        let ty_params = generics.params();
+        let ty_params = &generics.params;
         let ty_args = match ty_args_opt {
             None => ty_params
                 .iter()
@@ -48,7 +48,7 @@ impl GenericsInstantiated {
         generics: &Generics,
         arguments: &PathArguments,
     ) -> Result<Self> {
-        let ty_params = generics.params();
+        let ty_params = &generics.params;
         let ty_args = match arguments {
             PathArguments::None => ty_params
                 .into_iter()
@@ -317,7 +317,7 @@ impl QualifiedPath {
                     TypeName::Usr(usr_name) => TypeTag::User(
                         usr_name,
                         ty_generics
-                            .into_params()
+                            .params
                             .into_iter()
                             .map(TypeTag::Parameter)
                             .collect(),
