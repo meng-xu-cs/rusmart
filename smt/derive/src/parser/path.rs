@@ -230,7 +230,7 @@ impl FuncPath {
         let fn_name = ident.try_into()?;
         let generics = match ctxt.get_func_sig(&fn_name) {
             None => bail_on!(ident, "no such function"),
-            Some(sig) => sig.generics(),
+            Some(sig) => &sig.generics,
         };
         let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
 
@@ -343,7 +343,7 @@ impl QualifiedPath {
                     None => bail_on!(ident, "no such function"),
                     Some(sig) => {
                         let ty_args =
-                            GenericsInstantiated::from_args(ctxt, sig.generics(), arguments)?;
+                            GenericsInstantiated::from_args(ctxt, &sig.generics, arguments)?;
                         Self::UsrFunc(ty_name, name.clone(), ty_args)
                     }
                 },

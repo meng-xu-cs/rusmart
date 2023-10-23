@@ -87,9 +87,9 @@ impl CtxtForType for FuncSigParseCtxt<'_> {
 
 /// Function signature
 pub struct FuncSig {
-    generics: Generics,
-    params: Vec<(VarName, TypeTag)>,
-    ret_ty: TypeTag,
+    pub generics: Generics,
+    pub params: Vec<(VarName, TypeTag)>,
+    pub ret_ty: TypeTag,
 }
 
 impl FuncSig {
@@ -162,11 +162,6 @@ impl FuncSig {
         })
     }
 
-    /// Get the generics
-    pub fn generics(&self) -> &Generics {
-        &self.generics
-    }
-
     /// Collect variables (in map) declared in the parameter list
     pub fn param_map(&self) -> BTreeMap<VarName, TypeTag> {
         self.params
@@ -174,30 +169,14 @@ impl FuncSig {
             .map(|(name, ty)| (name.clone(), ty.clone()))
             .collect()
     }
-
-    /// Collect variables (in vec) declared in the parameter list
-    pub fn param_vec(&self) -> &[(VarName, TypeTag)] {
-        &self.params
-    }
-
-    /// Get the return type
-    pub fn ret_ty(&self) -> &TypeTag {
-        &self.ret_ty
-    }
 }
 
 /// Function definition
 pub struct FuncDef {
-    sig: FuncSig,
-    body: Expr,
+    pub head: FuncSig,
+    pub body: Expr,
 }
 
-impl FuncDef {
-    /// Create a new function definition
-    pub fn new(sig: FuncSig, body: Expr) -> Self {
-        Self { sig, body }
-    }
-}
 #[cfg(test)]
 mod tests {
     use crate::parser::test::unit_test;

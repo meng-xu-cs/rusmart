@@ -340,13 +340,13 @@ impl<'ctx> ExprParserRoot<'ctx> {
         Self {
             ctxt,
             kind,
-            generics: sig.generics().clone(),
+            generics: sig.generics.clone(),
             params: sig
                 .param_map()
                 .into_iter()
                 .map(|(k, v)| (k, (&v).into()))
                 .collect(),
-            ret_ty: sig.ret_ty().into(),
+            ret_ty: (&sig.ret_ty).into(),
         }
     }
 

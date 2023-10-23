@@ -39,9 +39,9 @@ impl TypeFn {
 impl From<&FuncSig> for TypeFn {
     fn from(sig: &FuncSig) -> Self {
         Self {
-            generics: sig.generics().clone(),
-            params: sig.param_vec().iter().map(|(_, ty)| ty.clone()).collect(),
-            ret_ty: sig.ret_ty().clone(),
+            generics: sig.generics.clone(),
+            params: sig.params.iter().map(|(_, ty)| ty.clone()).collect(),
+            ret_ty: sig.ret_ty.clone(),
         }
     }
 }
@@ -231,7 +231,7 @@ impl ApplyDatabase {
         // if the first param is a user-defined type with correct generics, mark it as a qualifier
         let qualifier = match func.params.first() {
             Some(TypeTag::User(tn, ty_args)) => {
-                let ty_params = &sig.generics().params;
+                let ty_params = &sig.generics.params;
                 if ty_args.len() != ty_params.len() {
                     None
                 } else if ty_params.iter().zip(ty_args).all(
