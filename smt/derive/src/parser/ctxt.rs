@@ -494,6 +494,7 @@ impl ContextWithSig {
 }
 
 /// Context manager after type, signature, and expression conversion is done
+#[allow(dead_code)]
 pub struct ContextWithFunc {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, FuncDef>,

@@ -88,8 +88,12 @@ pub struct PhiNode {
 pub enum Op {
     /// `<var>`
     Var(VarName),
+    /// `<tuple>(a1, a2, ...)`
+    Tuple { name: UsrTypeName, args: Vec<Expr> },
     /// `<adt>::<branch>`
     EnumUnit(ADTBranch),
+    /// `<adt>::<branch>(a1, a2, ...)`
+    EnumTuple { branch: ADTBranch, args: Vec<Expr> },
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
     Match {
         heads: Vec<Expr>,
@@ -172,7 +176,17 @@ impl Expr {
 
         match inst.op.as_mut() {
             Op::Var(_) => (),
-            Op::EnumUnit { .. } => (),
+            Op::Tuple { name: _, args } => {
+                for arg in args {
+                    arg.visit(pre, post)?;
+                }
+            }
+            Op::EnumUnit(_) => (),
+            Op::EnumTuple { branch: _, args } => {
+                for arg in args {
+                    arg.visit(pre, post)?;
+                }
+            }
             Op::Match { heads, combo } => {
                 for head in heads {
                     head.visit(pre, post)?;
@@ -528,7 +542,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     }
                     ExprPathAsTarget::EnumUnit(adt) => {
                         let variant = match self.root.get_adt_variant_details(&adt) {
-                            None => bail_on!(expr_path, "unknown type"),
+                            None => bail_on!(expr_path, "[invariant] no such type or variant"),
                             Some(details) => details,
                         };
                         if !matches!(variant, EnumVariant::Unit) {
@@ -890,11 +904,50 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             }
                         }
                     },
-                    ExprPathAsCallee::CtorTuple(_) => {
-                        todo!()
+                    ExprPathAsCallee::CtorTuple(tuple) => {
+                        let params: Vec<_> = match self.root.get_type_def(&tuple.ty_name) {
+                            None => bail_on!(expr_call, "[invariant] no such type"),
+                            Some(def) => match &def.body {
+                                TypeBody::Tuple(tuple_def) => {
+                                    tuple_def.slots.iter().map(|t| t.into()).collect()
+                                }
+                                _ => bail_on!(expr_call, "[invariant] not a tuple type"),
+                            },
+                        };
+                        let ret_ty = tuple.as_ty_ref(unifier);
+
+                        // parse the arguments
+                        let parsed_args =
+                            self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
+
+                        // build the opcode
+                        Op::Tuple {
+                            name: tuple.ty_name,
+                            args: parsed_args,
+                        }
                     }
-                    ExprPathAsCallee::CtorEnum(_) => {
-                        todo!()
+                    ExprPathAsCallee::CtorEnum(adt) => {
+                        let variant = match self.root.get_adt_variant_details(&adt) {
+                            None => bail_on!(expr_call, "[invariant] no such type or variant"),
+                            Some(details) => details,
+                        };
+                        let params: Vec<_> = match variant {
+                            EnumVariant::Tuple(tuple_def) => {
+                                tuple_def.slots.iter().map(|t| t.into()).collect()
+                            }
+                            _ => bail_on!(expr_call, "not a tuple variant"),
+                        };
+                        let ret_ty = adt.as_ty_ref(unifier);
+
+                        // parse the arguments
+                        let parsed_args =
+                            self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
+
+                        // build the opcode
+                        Op::EnumTuple {
+                            branch: adt.into_branch(),
+                            args: parsed_args,
+                        }
                     }
                 }
             }
