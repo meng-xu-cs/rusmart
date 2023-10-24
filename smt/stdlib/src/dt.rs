@@ -219,27 +219,34 @@ impl<T: SMT> Seq<T> {
     }
 
     /// operation: `v.length()`
-    pub fn length(v: Self) -> Integer {
-        v.inner.len().into()
+    pub fn length(self) -> Integer {
+        self.inner.len().into()
     }
 
     /// operation: `v.append(e)`
-    pub fn append(v: Self, e: T) -> Self {
+    pub fn append(self, e: T) -> Self {
         Self {
-            inner: Intern::new(v.inner.iter().copied().chain(std::iter::once(e)).collect()),
+            inner: Intern::new(
+                self.inner
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(e))
+                    .collect(),
+            ),
         }
     }
 
     /// operation: `v[i]` with partial semantics (valid only when `i` is in bound)
-    pub fn at_unchecked(v: Self, i: Integer) -> T {
-        *v.inner
+    pub fn at_unchecked(self, i: Integer) -> T {
+        *self
+            .inner
             .get(i.inner.to_usize().expect("index out of usize range"))
             .expect("index out of bound")
     }
 
     /// operation: `v.includes(e)`
-    pub fn includes(v: Self, e: T) -> Boolean {
-        v.inner.contains(&e).into()
+    pub fn includes(self, e: T) -> Boolean {
+        self.inner.contains(&e).into()
     }
 }
 
@@ -260,20 +267,26 @@ impl<T: SMT> Set<T> {
     }
 
     /// operation: `s.length()`
-    pub fn length(s: Self) -> Integer {
-        s.inner.len().into()
+    pub fn length(self) -> Integer {
+        self.inner.len().into()
     }
 
     /// operation: `s.insert(e)`
-    pub fn insert(s: Self, e: T) -> Self {
+    pub fn insert(self, e: T) -> Self {
         Self {
-            inner: Intern::new(s.inner.iter().copied().chain(std::iter::once(e)).collect()),
+            inner: Intern::new(
+                self.inner
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(e))
+                    .collect(),
+            ),
         }
     }
 
     /// operation: `v.contains(e)`
-    pub fn contains(s: Self, e: T) -> Boolean {
-        s.inner.contains(&e).into()
+    pub fn contains(self, e: T) -> Boolean {
+        self.inner.contains(&e).into()
     }
 }
 
@@ -294,8 +307,8 @@ impl<K: SMT, V: SMT> Map<K, V> {
     }
 
     /// operation: `m.length()`
-    pub fn length(m: Self) -> Integer {
-        m.inner.len().into()
+    pub fn length(self) -> Integer {
+        self.inner.len().into()
     }
 
     /// operation: `m.put(k, v)`, will override `v` if `k` already exists
@@ -312,13 +325,13 @@ impl<K: SMT, V: SMT> Map<K, V> {
     }
 
     /// operation: `m.get(k)` with partial semantics (valid only when `k` exists)
-    pub fn get_unchecked(m: Self, k: K) -> V {
-        *m.inner.get(&k).expect("key does not exist")
+    pub fn get_unchecked(self, k: K) -> V {
+        *self.inner.get(&k).expect("key does not exist")
     }
 
     /// operation: `v.contains_key(e)`
-    pub fn contains_key(m: Self, k: K) -> Boolean {
-        m.inner.contains_key(&k).into()
+    pub fn contains_key(self, k: K) -> Boolean {
+        self.inner.contains_key(&k).into()
     }
 }
 
@@ -339,9 +352,9 @@ impl Error {
     }
 
     /// Merge two errors
-    pub fn merge(l: Self, r: Self) -> Self {
+    pub fn merge(self, r: Self) -> Self {
         Self {
-            inner: Intern::new(l.inner.iter().chain(r.inner.iter()).copied().collect()),
+            inner: Intern::new(self.inner.iter().chain(r.inner.iter()).copied().collect()),
         }
     }
 }

@@ -33,14 +33,16 @@ impl SMT for State {}
 #[smt_impl]
 pub fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
     #[allow(clippy::if_same_then_else)]
-    if *Integer::eq(Seq::length(r), i) {
+    if *l.length().eq(i) {
         Boolean::from(false)
-    } else if *Integer::eq(Seq::length(r), i) {
+    } else if *r.length().eq(i) {
         Boolean::from(true)
-    } else if *lt(Seq::at_unchecked(l, i), Seq::at_unchecked(r, i)) {
+    } else if *l.at_unchecked(i).lt(r.at_unchecked(i)) {
         Boolean::from(true)
+    } else if *r.at_unchecked(i).lt(l.at_unchecked(i)) {
+        Boolean::from(false)
     } else {
-        seq_lt_recursive(l, r, Integer::add(i, 1.into()))
+        seq_lt_recursive(l, r, i.add(1.into()))
     }
 }
 
