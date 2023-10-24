@@ -11,17 +11,28 @@ use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
 use crate::parser::path::GenericsInstantiated;
 use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
 
+/// Marks whether this function is for impl or spec
+#[derive(Copy, Clone)]
+pub enum Kind {
+    /// actual implementation
+    Impl,
+    /// formal specification
+    Spec,
+}
+
 /// A function type, with inference allowed
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct TypeFn {
+    pub kind: Kind,
     pub generics: Generics,
     pub params: Vec<TypeTag>,
     pub ret_ty: TypeTag,
 }
 
-impl From<&FuncSig> for TypeFn {
-    fn from(sig: &FuncSig) -> Self {
+impl TypeFn {
+    /// Create a new function type from its signature
+    pub fn new_from_sig(sig: &FuncSig, kind: Kind) -> Self {
         Self {
+            kind,
             generics: sig.generics.clone(),
             params: sig.params.iter().map(|(_, ty)| ty.clone()).collect(),
             ret_ty: sig.ret_ty.clone(),
@@ -73,12 +84,14 @@ impl ApplyDatabase {
         let empty = || Generics::intrinsic(vec![]);
 
         let fn0 = |rty: TypeTag| TypeFn {
+            kind: Kind::Impl,
             generics: empty(),
             params: vec![],
             ret_ty: rty,
         };
 
         let fn1 = |a0: TypeTag, rty: TypeTag| TypeFn {
+            kind: Kind::Impl,
             generics: empty(),
             params: vec![a0],
             ret_ty: rty,
@@ -86,6 +99,7 @@ impl ApplyDatabase {
         let fn1_arith = |t: TypeTag| fn1(t.clone(), t);
 
         let fn2 = |a0: TypeTag, a1: TypeTag, rty: TypeTag| TypeFn {
+            kind: Kind::Impl,
             generics: empty(),
             params: vec![a0, a1],
             ret_ty: rty,
@@ -94,6 +108,7 @@ impl ApplyDatabase {
         let fn2_cmp = |t: TypeTag| fn2(t.clone(), t, Boolean);
 
         let fn3 = |a0: TypeTag, a1: TypeTag, a2: TypeTag, rty: TypeTag| TypeFn {
+            kind: Kind::Impl,
             generics: empty(),
             params: vec![a0, a1, a2],
             ret_ty: rty,
@@ -172,8 +187,9 @@ impl ApplyDatabase {
         name: &UsrFuncName,
         method: Option<&UsrFuncName>,
         sig: &FuncSig,
+        kind: Kind,
     ) -> Result<()> {
-        let func = TypeFn::from(sig);
+        let func = TypeFn::new_from_sig(sig, kind);
 
         // try to register a method
         if let Some(method_name) = method {
@@ -200,6 +216,7 @@ impl ApplyDatabase {
 
             // reset the generics
             let method = TypeFn {
+                kind: func.kind,
                 generics: func.generics.filter(&ty_generics),
                 params: func.params.clone(),
                 ret_ty: func.ret_ty.clone(),
@@ -231,9 +248,20 @@ impl ApplyDatabase {
         Ok(())
     }
 
+    /// Filter the return function type through kind
+    fn filter_by_kind(ty: &TypeFn, kind: Kind) -> Option<&TypeFn> {
+        match (kind, ty.kind) {
+            (Kind::Impl, Kind::Impl) => Some(ty),
+            (Kind::Impl, Kind::Spec) => None,
+            (Kind::Spec, Kind::Impl | Kind::Spec) => Some(ty),
+        }
+    }
+
     /// Look-up a user function unqualified
-    pub fn lookup_unqualified(&self, fn_name: &UsrFuncName) -> Option<&TypeFn> {
-        self.unqualified.get(fn_name)
+    pub fn lookup_unqualified(&self, fn_name: &UsrFuncName, kind: Kind) -> Option<&TypeFn> {
+        self.unqualified
+            .get(fn_name)
+            .and_then(|ty| Self::filter_by_kind(ty, kind))
     }
 
     /// Look-up a user function on a system type (a.k.a., an intrinsic function)
@@ -241,8 +269,12 @@ impl ApplyDatabase {
         &self,
         ty_name: &SysTypeName,
         fn_name: &UsrFuncName,
+        kind: Kind,
     ) -> Option<&TypeFn> {
-        self.on_sys_type.get(fn_name).and_then(|s| s.get(ty_name))
+        self.on_sys_type
+            .get(fn_name)
+            .and_then(|s| s.get(ty_name))
+            .and_then(|ty| Self::filter_by_kind(ty, kind))
     }
 
     /// Lookup a user-defined function with a user-defined type as potentially receiver
@@ -250,8 +282,12 @@ impl ApplyDatabase {
         &self,
         ty_name: &UsrTypeName,
         fn_name: &UsrFuncName,
+        kind: Kind,
     ) -> Option<&TypeFn> {
-        self.on_usr_type.get(fn_name).and_then(|s| s.get(ty_name))
+        self.on_usr_type
+            .get(fn_name)
+            .and_then(|s| s.get(ty_name))
+            .and_then(|ty| Self::filter_by_kind(ty, kind))
     }
 
     /// Get candidates given a function name

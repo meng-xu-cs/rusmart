@@ -6,10 +6,10 @@ use log::trace;
 use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Result, Stmt};
 use walkdir::WalkDir;
 
-use crate::parser::apply::ApplyDatabase;
+use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
 use crate::parser::err::{bail_on, bail_on_with_note};
-use crate::parser::expr::{ExprParserRoot, Kind};
+use crate::parser::expr::ExprParserRoot;
 use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
@@ -355,7 +355,7 @@ impl ContextWithType {
             }
 
             // register to type db
-            match fn_db.register_user_func(name, mark.method.as_ref(), sig) {
+            match fn_db.register_user_func(name, mark.method.as_ref(), sig, Kind::Impl) {
                 Ok(()) => (),
                 Err(e) => bail_on!(raw, "{}", e),
             }
@@ -376,7 +376,7 @@ impl ContextWithType {
             }
 
             // register to type db
-            match fn_db.register_user_func(name, mark.method.as_ref(), sig) {
+            match fn_db.register_user_func(name, mark.method.as_ref(), sig, Kind::Spec) {
                 Ok(()) => (),
                 Err(e) => bail_on!(raw, "{}", e),
             }

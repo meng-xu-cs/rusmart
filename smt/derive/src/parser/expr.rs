@@ -8,7 +8,7 @@ use syn::{
 };
 
 use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
-use crate::parser::apply::TypeFn;
+use crate::parser::apply::{Kind, TypeFn};
 use crate::parser::ctxt::ContextWithSig;
 use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
@@ -307,15 +307,6 @@ impl Expr {
     }
 }
 
-/// Marks whether this expression is for impl or spec
-#[derive(Copy, Clone)]
-pub enum Kind {
-    /// actual implementation
-    Impl,
-    /// formal specification
-    Spec,
-}
-
 /// Root expression parser for function body
 pub struct ExprParserRoot<'ctx> {
     /// context provider
@@ -410,7 +401,7 @@ impl CtxtForExpr for ExprParserRoot<'_> {
     }
 
     fn lookup_unqualified(&self, name: &UsrFuncName) -> Option<&TypeFn> {
-        self.ctxt.fn_db.lookup_unqualified(name)
+        self.ctxt.fn_db.lookup_unqualified(name, self.kind)
     }
 
     fn lookup_usr_func_on_sys_type(
@@ -420,7 +411,7 @@ impl CtxtForExpr for ExprParserRoot<'_> {
     ) -> Option<&TypeFn> {
         self.ctxt
             .fn_db
-            .lookup_usr_func_on_sys_type(ty_name, fn_name)
+            .lookup_usr_func_on_sys_type(ty_name, fn_name, self.kind)
     }
 
     fn lookup_usr_func_on_usr_type(
@@ -430,7 +421,7 @@ impl CtxtForExpr for ExprParserRoot<'_> {
     ) -> Option<&TypeFn> {
         self.ctxt
             .fn_db
-            .lookup_usr_func_on_usr_type(ty_name, fn_name)
+            .lookup_usr_func_on_usr_type(ty_name, fn_name, self.kind)
     }
 }
 
