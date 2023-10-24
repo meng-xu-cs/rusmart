@@ -786,18 +786,9 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         let (params, ret_ty) =
                             bail_on_ts_err!(unifier.instantiate_func_ty(fty, &path.ty_args), func);
 
-                        // parse the arguments
-                        if params.len() != args.len() {
-                            bail_on!(args, "argument number mismatch");
-                        }
-                        let mut parsed_args = vec![];
-                        for (param, arg) in params.into_iter().zip(args) {
-                            let parsed = self.fork(param).convert_expr(unifier, arg)?;
-                            parsed_args.push(parsed);
-                        }
-
-                        // unity the return type
-                        ti_unify!(unifier, &ret_ty, &self.exp_ty, target);
+                        // parse arguments
+                        let parsed_args =
+                            self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
 
                         // build the opcode
                         Op::Procedure {
@@ -839,37 +830,45 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 func
                             );
 
-                            // collect arguments
-                            let mut iter = args.iter();
-                            let lhs = bail_if_missing!(iter.next(), args, "expect 2 arguments");
-                            let rhs = bail_if_missing!(iter.next(), args, "expect 2 arguments");
-                            bail_if_exists!(iter.next());
+                            // parse arguments
+                            self.parse_sys_func_args(unifier, &fn_name, &operand_ty, expr_call)?
+                        }
+                        QualifiedPath::SysFuncOnUsrType(ty_name, ty_inst, fn_name) => {
+                            // derive the operand type
+                            let operand_tag = match self.root.get_type_generics(&ty_name) {
+                                None => bail_on!(func, "[invariant] no such type"),
+                                Some(ty_generics) => TypeTag::User(
+                                    ty_name,
+                                    ty_generics
+                                        .params
+                                        .iter()
+                                        .map(|n| TypeTag::Parameter(n.clone()))
+                                        .collect(),
+                                ),
+                            };
+                            let operand_ty = bail_on_ts_err!(
+                                TypeRef::substitute_params(unifier, &operand_tag, &ty_inst),
+                                func
+                            );
 
-                            let parsed_lhs =
-                                self.fork(operand_ty.clone()).convert_expr(unifier, lhs)?;
-                            let parsed_rhs =
-                                self.fork(operand_ty.clone()).convert_expr(unifier, rhs)?;
+                            // parse arguments
+                            self.parse_sys_func_args(unifier, &fn_name, &operand_ty, expr_call)?
+                        }
+                        QualifiedPath::SysFuncOnParamType(ty_name, fn_name) => {
+                            // derive the operand type
+                            let operand_ty = TypeRef::Parameter(ty_name);
 
-                            // unity the return type
-                            ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
-
-                            // build the opcode
-                            match fn_name {
-                                SysFuncName::Eq => {
-                                    Op::Intrinsic(Intrinsic::SmtEq(parsed_lhs, parsed_rhs))
-                                }
-                                SysFuncName::Ne => {
-                                    Op::Intrinsic(Intrinsic::SmtNe(parsed_lhs, parsed_rhs))
-                                }
-                            }
+                            // parse arguments
+                            self.parse_sys_func_args(unifier, &fn_name, &operand_ty, expr_call)?
                         }
                         // user-defined function on a system type (i.e., intrinsic function)
-                        QualifiedPath::Intrinsic(ty_name, fn_name, ty_args) => {
+                        QualifiedPath::UsrFuncOnSysType(ty_name, ty_inst, fn_name, fn_inst) => {
                             // substitute types in function parameters
-                            let fty = match self.root.lookup_intrinsic(&ty_name, &fn_name) {
-                                None => bail_on!(func, "[invariant] no such function"),
-                                Some(fty) => fty,
-                            };
+                            let fty =
+                                match self.root.lookup_usr_func_on_sys_type(&ty_name, &fn_name) {
+                                    None => bail_on!(func, "[invariant] no such function"),
+                                    Some(fty) => fty,
+                                };
                             let (params, ret_ty) =
                                 bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_args), func);
 
@@ -894,12 +893,13 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Op::Intrinsic(intrinsic)
                         }
                         // user-defined function on a user-defined type
-                        QualifiedPath::UsrFunc(ty_name, fn_name, ty_args) => {
+                        QualifiedPath::UsrFuncOnUsrType(ty_name, ty_inst, fn_name, fn_inst) => {
                             // substitute types in function parameters
-                            let fty = match self.root.lookup_with_usr_ty(&ty_name, &fn_name) {
-                                None => bail_on!(func, "[invariant] no such function"),
-                                Some(fty) => fty,
-                            };
+                            let fty =
+                                match self.root.lookup_usr_func_on_usr_type(&ty_name, &fn_name) {
+                                    None => bail_on!(func, "[invariant] no such function"),
+                                    Some(fty) => fty,
+                                };
                             let (params, ret_ty) =
                                 bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_args), func);
 
@@ -1125,6 +1125,62 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
             }
         };
         Ok(converted)
+    }
+
+    /// Parse arguments of a function call
+    fn parse_call_arguments(
+        &self,
+        unifier: &mut TypeUnifier,
+        params: &[TypeRef],
+        ret_ty: &TypeRef,
+        expr_call: &ExprCall,
+    ) -> Result<Vec<Expr>> {
+        let args = &expr_call.args;
+
+        // parse the arguments
+        if params.len() != args.len() {
+            bail_on!(args, "argument number mismatch");
+        }
+        let mut parsed_args = vec![];
+        for (param, arg) in params.into_iter().zip(args) {
+            let parsed = self.fork(param.clone()).convert_expr(unifier, arg)?;
+            parsed_args.push(parsed);
+        }
+
+        // unity the return type
+        ti_unify!(unifier, &ret_ty, &self.exp_ty, expr_call);
+
+        // done
+        Ok(parsed_args)
+    }
+
+    /// Parse arguments of a function call
+    fn parse_sys_func_args(
+        &self,
+        unifier: &mut TypeUnifier,
+        fn_name: &SysFuncName,
+        operand: &TypeRef,
+        expr_call: &ExprCall,
+    ) -> Result<Op> {
+        // parse arguments
+        let mut parsed_args = self
+            .parse_call_arguments(
+                unifier,
+                &[operand.clone(), operand.clone()],
+                &TypeRef::Boolean,
+                expr_call,
+            )?
+            .into_iter();
+
+        let parsed_lhs = parsed_args.next().unwrap();
+        let parsed_rhs = parsed_args.next().unwrap();
+
+        // build the opcode
+        let op = match fn_name {
+            SysFuncName::Eq => Op::Intrinsic(Intrinsic::SmtEq(parsed_lhs, parsed_rhs)),
+            SysFuncName::Ne => Op::Intrinsic(Intrinsic::SmtNe(parsed_lhs, parsed_rhs)),
+        };
+        Ok(op)
     }
 
     /// Convert a DSL macro to a quantifier body
