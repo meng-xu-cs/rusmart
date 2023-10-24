@@ -258,7 +258,7 @@ impl ApplyDatabase {
     }
 
     /// Look-up a user function unqualified
-    pub fn lookup_unqualified(&self, fn_name: &UsrFuncName, kind: Kind) -> Option<&TypeFn> {
+    pub fn lookup_unqualified(&self, kind: Kind, fn_name: &UsrFuncName) -> Option<&TypeFn> {
         self.unqualified
             .get(fn_name)
             .and_then(|ty| Self::filter_by_kind(ty, kind))
@@ -267,9 +267,9 @@ impl ApplyDatabase {
     /// Look-up a user function on a system type (a.k.a., an intrinsic function)
     pub fn lookup_usr_func_on_sys_type(
         &self,
+        kind: Kind,
         ty_name: &SysTypeName,
         fn_name: &UsrFuncName,
-        kind: Kind,
     ) -> Option<&TypeFn> {
         self.on_sys_type
             .get(fn_name)
@@ -280,9 +280,9 @@ impl ApplyDatabase {
     /// Lookup a user-defined function with a user-defined type as potentially receiver
     pub fn lookup_usr_func_on_usr_type(
         &self,
+        kind: Kind,
         ty_name: &UsrTypeName,
         fn_name: &UsrFuncName,
-        kind: Kind,
     ) -> Option<&TypeFn> {
         self.on_usr_type
             .get(fn_name)
@@ -291,9 +291,10 @@ impl ApplyDatabase {
     }
 
     /// Get candidates given a function name
-    pub fn get_inference(
+    pub fn query_with_inference(
         &self,
         unifier: &mut TypeUnifier,
+        kind: Kind,
         name: &UsrFuncName,
         inst: Option<&[TypeTag]>,
         args: Vec<Expr>,
@@ -303,13 +304,15 @@ impl ApplyDatabase {
         let mut candidates = vec![];
         match self.on_sys_type.get(name) {
             None => (),
-            Some(options) => candidates.extend(options.iter().map(|(n, t)| (TypeName::Sys(*n), t))),
+            Some(options) => candidates.extend(options.iter().filter_map(|(n, t)| {
+                Self::filter_by_kind(t, kind).map(|t| (TypeName::Sys(*n), t))
+            })),
         }
         match self.on_usr_type.get(name) {
             None => (),
-            Some(options) => {
-                candidates.extend(options.iter().map(|(n, t)| (TypeName::Usr(n.clone()), t)))
-            }
+            Some(options) => candidates.extend(options.iter().filter_map(|(n, t)| {
+                Self::filter_by_kind(t, kind).map(|t| (TypeName::Usr(n.clone()), t))
+            })),
         }
 
         // probe candidates

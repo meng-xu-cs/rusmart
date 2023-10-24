@@ -401,7 +401,7 @@ impl CtxtForExpr for ExprParserRoot<'_> {
     }
 
     fn lookup_unqualified(&self, name: &UsrFuncName) -> Option<&TypeFn> {
-        self.ctxt.fn_db.lookup_unqualified(name, self.kind)
+        self.ctxt.fn_db.lookup_unqualified(self.kind, name)
     }
 
     fn lookup_usr_func_on_sys_type(
@@ -411,7 +411,7 @@ impl CtxtForExpr for ExprParserRoot<'_> {
     ) -> Option<&TypeFn> {
         self.ctxt
             .fn_db
-            .lookup_usr_func_on_sys_type(ty_name, fn_name, self.kind)
+            .lookup_usr_func_on_sys_type(self.kind, ty_name, fn_name)
     }
 
     fn lookup_usr_func_on_usr_type(
@@ -421,7 +421,7 @@ impl CtxtForExpr for ExprParserRoot<'_> {
     ) -> Option<&TypeFn> {
         self.ctxt
             .fn_db
-            .lookup_usr_func_on_usr_type(ty_name, fn_name, self.kind)
+            .lookup_usr_func_on_usr_type(self.kind, ty_name, fn_name)
     }
 }
 
@@ -978,11 +978,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
                     }
                     FuncName::Sys(name) => {
-                        // collect type arguments, if any
-                        let ty_args_opt = match turbofish {
-                            None => None,
-                            Some(ty_args) => Some(TypeTag::from_generics(self.root, ty_args)?),
-                        };
+                        // none of the system functions take path arguments
+                        bail_if_exists!(turbofish);
 
                         // parse the arguments by tentatively marking their types as variables
                         let operand_ty = TypeRef::Var(unifier.mk_var());
@@ -995,59 +992,6 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         bail_if_exists!(iter.next());
                         let parsed_rhs =
                             self.fork(operand_ty.clone()).convert_expr(unifier, rhs)?;
-
-                        // check consistency of type arguments
-                        let refreshed = unifier.refresh_type(&operand_ty);
-                        match ty_args_opt {
-                            None => (),
-                            Some(ty_args) => match refreshed {
-                                TypeRef::Boolean
-                                | TypeRef::Integer
-                                | TypeRef::Rational
-                                | TypeRef::Text
-                                | TypeRef::Error
-                                | TypeRef::Parameter(_)
-                                | TypeRef::Var(_) => {
-                                    bail_on!(turbofish, "unexpected");
-                                }
-                                TypeRef::Cloak(sub) | TypeRef::Seq(sub) | TypeRef::Set(sub) => {
-                                    if ty_args.len() != 1 {
-                                        bail_on!(turbofish, "type argument number mismatch");
-                                    }
-                                    ti_unify!(
-                                        unifier,
-                                        sub.as_ref(),
-                                        &ty_args.first().unwrap().into(),
-                                        turbofish
-                                    );
-                                }
-                                TypeRef::Map(key, val) => {
-                                    if ty_args.len() != 2 {
-                                        bail_on!(turbofish, "type argument number mismatch");
-                                    }
-                                    ti_unify!(
-                                        unifier,
-                                        key.as_ref(),
-                                        &ty_args.first().unwrap().into(),
-                                        turbofish
-                                    );
-                                    ti_unify!(
-                                        unifier,
-                                        val.as_ref(),
-                                        &ty_args.last().unwrap().into(),
-                                        turbofish
-                                    );
-                                }
-                                TypeRef::User(_, usr_args) => {
-                                    if usr_args.len() != ty_args.len() {
-                                        bail_on!(turbofish, "type argument number mismatch");
-                                    }
-                                    for (t1, t2) in usr_args.iter().zip(ty_args.iter()) {
-                                        ti_unify!(unifier, t1, &t2.into(), turbofish);
-                                    }
-                                }
-                            },
-                        }
 
                         // unity the return type
                         ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
@@ -1084,8 +1028,9 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
 
                         // choose the function from function database
-                        let inferred = self.root.ctxt.fn_db.get_inference(
+                        let inferred = self.root.ctxt.fn_db.query_with_inference(
                             unifier,
+                            self.root.kind,
                             &name,
                             ty_args_opt.as_deref(),
                             parsed_args,
