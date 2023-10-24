@@ -303,9 +303,7 @@ impl ApplyDatabase {
         let mut candidates = vec![];
         match self.on_sys_type.get(name) {
             None => (),
-            Some(options) => {
-                candidates.extend(options.iter().map(|(n, t)| (TypeName::Sys(n.clone()), t)))
-            }
+            Some(options) => candidates.extend(options.iter().map(|(n, t)| (TypeName::Sys(*n), t))),
         }
         match self.on_usr_type.get(name) {
             None => (),

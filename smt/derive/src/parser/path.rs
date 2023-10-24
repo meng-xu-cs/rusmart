@@ -196,9 +196,12 @@ impl ADTPath {
         })
     }
 
-    /// Getter to the branch
-    pub fn branch(&self) -> ADTBranch {
-        ADTBranch::new(self.ty_name.clone(), self.variant.clone())
+    /// Turn the path into a branch
+    pub fn into_branch(self) -> ADTBranch {
+        ADTBranch {
+            ty_name: self.ty_name,
+            variant: self.variant,
+        }
     }
 
     /// Build a type reference out of this path

@@ -28,9 +28,9 @@ pub trait CtxtForExpr: CtxtForType {
 
     /// Retrieve the definition of an enum variant
     fn get_adt_variant_details(&self, path: &ADTPath) -> Option<&EnumVariant> {
-        let def = self.get_type_def(path.branch().ty_name())?;
+        let def = self.get_type_def(&path.ty_name)?;
         let variant = match &def.body {
-            TypeBody::Enum(adt) => adt.variants.get(path.branch().variant())?,
+            TypeBody::Enum(adt) => adt.variants.get(&path.variant)?,
             _ => return None,
         };
         Some(variant)
@@ -65,36 +65,22 @@ pub enum Unpack {
 /// Marks how a variable of an ADT type is matched
 #[derive(Clone)]
 pub struct MatchVariant {
-    branch: ADTBranch,
-    unpack: Unpack,
-}
-
-impl MatchVariant {
-    /// Create a new variant
-    pub fn new(branch: ADTBranch, unpack: Unpack) -> Self {
-        Self { branch, unpack }
-    }
+    pub branch: ADTBranch,
+    pub unpack: Unpack,
 }
 
 /// Marks how all variables in the match head are matched
 #[derive(Clone)]
 pub struct MatchCombo {
-    variants: Vec<MatchVariant>,
-    body: Expr,
-}
-
-impl MatchCombo {
-    /// Create a new variant
-    pub fn new(variants: Vec<MatchVariant>, body: Expr) -> Self {
-        Self { variants, body }
-    }
+    pub variants: Vec<MatchVariant>,
+    pub body: Expr,
 }
 
 /// Phi node, guarded by condition
 #[derive(Clone)]
 pub struct PhiNode {
-    cond: Expr,
-    body: Expr,
+    pub cond: Expr,
+    pub body: Expr,
 }
 
 /// Operations
@@ -130,8 +116,8 @@ pub enum Op {
 /// Instructions (operations with type)
 #[derive(Clone)]
 pub struct Inst {
-    op: Box<Op>,
-    ty: TypeRef,
+    pub op: Box<Op>,
+    pub ty: TypeRef,
 }
 
 /// Expressions
@@ -552,7 +538,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // unify the type and then build the instruction
                         let ty_ref = adt.as_ty_ref(unifier);
                         ti_unify!(unifier, &ty_ref, &self.exp_ty, target);
-                        Op::EnumUnit(adt.branch().clone())
+                        Op::EnumUnit(adt.into_branch())
                     }
                 }
             }
@@ -1123,13 +1109,13 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
             bail_on!(args, "argument number mismatch");
         }
         let mut parsed_args = vec![];
-        for (param, arg) in params.into_iter().zip(args) {
+        for (param, arg) in params.iter().zip(args) {
             let parsed = self.fork(param.clone()).convert_expr(unifier, arg)?;
             parsed_args.push(parsed);
         }
 
         // unity the return type
-        ti_unify!(unifier, &ret_ty, &self.exp_ty, expr_call);
+        ti_unify!(unifier, ret_ty, &self.exp_ty, expr_call);
 
         // done
         Ok(parsed_args)

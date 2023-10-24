@@ -14,25 +14,8 @@ use crate::parser::util::PatUtil;
 /// An identifier for a ADT variant
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct ADTBranch {
-    ty_name: UsrTypeName,
-    variant: String,
-}
-
-impl ADTBranch {
-    /// Manually construct a new ADT branch
-    pub fn new(ty_name: UsrTypeName, variant: String) -> Self {
-        Self { ty_name, variant }
-    }
-
-    /// Getter to the type name
-    pub fn ty_name(&self) -> &UsrTypeName {
-        &self.ty_name
-    }
-
-    /// Getter to the variant
-    pub fn variant(&self) -> &String {
-        &self.variant
-    }
+    pub ty_name: UsrTypeName,
+    pub variant: String,
 }
 
 /// An atom for a specific variable in the match head
@@ -232,7 +215,7 @@ impl MatchAnalyzer {
                 let ty_ref = adt.as_ty_ref(unifier);
                 ti_unify!(unifier, ety, &ty_ref, pat_case);
                 // save it
-                if variants.insert(adt.branch(), unpack).is_some() {
+                if variants.insert(adt.into_branch(), unpack).is_some() {
                     bail_on!(cases, "duplicated adt variant");
                 }
 
@@ -248,7 +231,7 @@ impl MatchAnalyzer {
                         bail_on!(pat_case, "case patterns do not bind the same variable set");
                     }
                     // save it
-                    if variants.insert(adt.branch(), unpack).is_some() {
+                    if variants.insert(adt.into_branch(), unpack).is_some() {
                         bail_on!(cases, "duplicated adt variant");
                     }
                 }
@@ -263,7 +246,7 @@ impl MatchAnalyzer {
                 let ty_ref = adt.as_ty_ref(unifier);
                 ti_unify!(unifier, ety, &ty_ref, pat);
                 // done
-                let variants = std::iter::once((adt.branch(), unpack)).collect();
+                let variants = std::iter::once((adt.into_branch(), unpack)).collect();
                 (MatchAtom::Binding(variants), bindings)
             }
         };
@@ -314,10 +297,10 @@ impl MatchOrganizer {
                     MatchAtom::Default => (),
                     MatchAtom::Binding(binding) => {
                         for branch in binding.keys() {
-                            if adt_name != branch.ty_name() {
+                            if adt_name != &branch.ty_name {
                                 bail_on!(expr, "atoms and heads ADT name mismatch");
                             }
-                            if !adt_variants.contains(branch.variant()) {
+                            if !adt_variants.contains(&branch.variant) {
                                 bail_on!(expr, "atoms and heads ADT variant mismatch");
                             }
                         }
@@ -340,8 +323,9 @@ impl MatchOrganizer {
             let combo_as_branch: Vec<_> = combo
                 .into_iter()
                 .zip(heads.iter())
-                .map(|(variant_name, (type_name, _))| {
-                    ADTBranch::new(type_name.clone(), variant_name.clone())
+                .map(|(variant_name, (type_name, _))| ADTBranch {
+                    ty_name: type_name.clone(),
+                    variant: variant_name.clone(),
                 })
                 .collect();
 
@@ -362,8 +346,10 @@ impl MatchOrganizer {
                                 break;
                             }
                             Some(unpack) => {
-                                let variant =
-                                    MatchVariant::new(combo_branch.clone(), unpack.clone());
+                                let variant = MatchVariant {
+                                    branch: combo_branch.clone(),
+                                    unpack: unpack.clone(),
+                                };
                                 variants.push(variant);
                             }
                         },
@@ -376,7 +362,10 @@ impl MatchOrganizer {
                 }
 
                 // assign the combo
-                let combo = MatchCombo::new(variants, arm.body.clone());
+                let combo = MatchCombo {
+                    variants,
+                    body: arm.body.clone(),
+                };
                 if is_abstract {
                     match found {
                         MatchComboStatus::None => {
