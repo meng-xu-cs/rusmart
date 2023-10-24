@@ -231,8 +231,13 @@ impl ApplyDatabase {
         Ok(())
     }
 
-    /// Lookup an intrinsic function
-    pub fn lookup_intrinsic(
+    /// Look-up a user function unqualified
+    pub fn lookup_unqualified(&self, fn_name: &UsrFuncName) -> Option<&TypeFn> {
+        self.unqualified.get(fn_name)
+    }
+
+    /// Look-up a user function on a system type (a.k.a., an intrinsic function)
+    pub fn lookup_usr_func_on_sys_type(
         &self,
         ty_name: &SysTypeName,
         fn_name: &UsrFuncName,
@@ -241,7 +246,7 @@ impl ApplyDatabase {
     }
 
     /// Lookup a user-defined function with a user-defined type as potentially receiver
-    pub fn lookup_with_usr_ty(
+    pub fn lookup_usr_func_on_usr_type(
         &self,
         ty_name: &UsrTypeName,
         fn_name: &UsrFuncName,

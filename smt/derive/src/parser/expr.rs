@@ -37,13 +37,21 @@ pub trait CtxtForExpr: CtxtForType {
     }
 
     /// Retrieve the signature of a user-defined function
-    fn get_func_sig(&self, name: &UsrFuncName) -> Option<&FuncSig>;
+    fn lookup_unqualified(&self, name: &UsrFuncName) -> Option<&TypeFn>;
 
-    /// Retrieve the function type for an intrinsic function
-    fn lookup_intrinsic(&self, ty_name: &SysTypeName, fn_name: &UsrFuncName) -> Option<&TypeFn>;
+    /// Retrieve the function type for a user function on a system type (a.k.a., an intrinsic)
+    fn lookup_usr_func_on_sys_type(
+        &self,
+        ty_name: &SysTypeName,
+        fn_name: &UsrFuncName,
+    ) -> Option<&TypeFn>;
 
-    /// Retrieve the function type for a user-defined function with a user-type as receiver
-    fn lookup_with_usr_ty(&self, ty_name: &UsrTypeName, fn_name: &UsrFuncName) -> Option<&TypeFn>;
+    /// Retrieve the function type for a user function on a user type (entirely user-defined)
+    fn lookup_usr_func_on_usr_type(
+        &self,
+        ty_name: &UsrTypeName,
+        fn_name: &UsrFuncName,
+    ) -> Option<&TypeFn>;
 }
 
 /// Bindings through unpacking during match
@@ -401,16 +409,28 @@ impl CtxtForExpr for ExprParserRoot<'_> {
         self.ctxt.get_type_def(name)
     }
 
-    fn get_func_sig(&self, name: &UsrFuncName) -> Option<&FuncSig> {
-        self.ctxt.get_func_sig(name, self.kind)
+    fn lookup_unqualified(&self, name: &UsrFuncName) -> Option<&TypeFn> {
+        self.ctxt.fn_db.lookup_unqualified(name)
     }
 
-    fn lookup_intrinsic(&self, ty_name: &SysTypeName, fn_name: &UsrFuncName) -> Option<&TypeFn> {
-        self.ctxt.fn_db.lookup_intrinsic(ty_name, fn_name)
+    fn lookup_usr_func_on_sys_type(
+        &self,
+        ty_name: &SysTypeName,
+        fn_name: &UsrFuncName,
+    ) -> Option<&TypeFn> {
+        self.ctxt
+            .fn_db
+            .lookup_usr_func_on_sys_type(ty_name, fn_name)
     }
 
-    fn lookup_with_usr_ty(&self, ty_name: &UsrTypeName, fn_name: &UsrFuncName) -> Option<&TypeFn> {
-        self.ctxt.fn_db.lookup_with_usr_ty(ty_name, fn_name)
+    fn lookup_usr_func_on_usr_type(
+        &self,
+        ty_name: &UsrTypeName,
+        fn_name: &UsrFuncName,
+    ) -> Option<&TypeFn> {
+        self.ctxt
+            .fn_db
+            .lookup_usr_func_on_usr_type(ty_name, fn_name)
     }
 }
 
@@ -759,14 +779,12 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 match ExprPathAsCallee::parse(self.root, func)? {
                     ExprPathAsCallee::FuncNoPrefix(path) => {
                         // substitute types in function parameters
-                        let sig = match self.root.get_func_sig(path.fn_name()) {
+                        let fty = match self.root.lookup_unqualified(&path.fn_name) {
                             None => bail_on!(func, "[invariant] no such function"),
-                            Some(sig) => sig,
+                            Some(fty) => fty,
                         };
-                        let (params, ret_ty) = bail_on_ts_err!(
-                            unifier.instantiate_func_sig(sig, path.ty_args()),
-                            func
-                        );
+                        let (params, ret_ty) =
+                            bail_on_ts_err!(unifier.instantiate_func_ty(fty, &path.ty_args), func);
 
                         // parse the arguments
                         if params.len() != args.len() {
@@ -783,7 +801,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                         // build the opcode
                         Op::Procedure {
-                            name: path.fn_name().clone(),
+                            name: path.fn_name.clone(),
                             args: parsed_args,
                         }
                     }
@@ -810,18 +828,16 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Op::Intrinsic(intrinsic)
                         }
                         // system function
-                        QualifiedPath::SysFunc(ty_tag, fn_name, ty_args) => {
+                        QualifiedPath::SysFuncOnSysType(ty_name, ty_inst, fn_name) => {
                             // derive the operand type
-                            let operand_ty = match ty_tag {
-                                TypeTag::Parameter(param) => {
-                                    // type parameter does not need further substitution
-                                    TypeRef::Parameter(param)
-                                }
-                                _ => bail_on_ts_err!(
-                                    TypeRef::substitute_params(unifier, &ty_tag, &ty_args),
-                                    func
+                            let operand_ty = bail_on_ts_err!(
+                                TypeRef::substitute_params(
+                                    unifier,
+                                    &ty_name.as_type_tag(),
+                                    &ty_inst
                                 ),
-                            };
+                                func
+                            );
 
                             // collect arguments
                             let mut iter = args.iter();

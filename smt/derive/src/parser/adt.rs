@@ -116,7 +116,7 @@ impl MatchAnalyzer {
                                 None => (),
                                 Some(var) => {
                                     let ty_substitute = bail_on_ts_err!(
-                                        TypeRef::substitute_params(unifier, slot, adt.ty_args(),),
+                                        TypeRef::substitute_params(unifier, slot, &adt.ty_args),
                                         elem
                                     );
                                     match bindings.insert(var.clone(), ty_substitute) {
@@ -176,7 +176,7 @@ impl MatchAnalyzer {
                                 Some(t) => t,
                             };
                             let ty_substitute = bail_on_ts_err!(
-                                TypeRef::substitute_params(unifier, field_type, adt.ty_args(),),
+                                TypeRef::substitute_params(unifier, field_type, &adt.ty_args),
                                 member
                             );
 

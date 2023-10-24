@@ -457,16 +457,6 @@ impl TypeUnifier {
         Ok((params, ret_ty))
     }
 
-    /// Instantiate a function signature
-    pub fn instantiate_func_sig(
-        &mut self,
-        sig: &FuncSig,
-        subst: &GenericsInstantiated,
-    ) -> TSResult<(Vec<TypeRef>, TypeRef)> {
-        let fty = TypeFn::from(sig);
-        self.instantiate_func_ty(&fty, subst)
-    }
-
     /// Retrieve either an assigned type or the variable itself (if multiple options available)
     fn retrieve_type(&self, var: &TypeVar) -> TypeRef {
         self.typing.retrieve_type(var)

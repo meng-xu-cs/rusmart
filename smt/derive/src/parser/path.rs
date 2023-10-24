@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use syn::{Path, PathArguments, PathSegment, Result};
 
 use crate::parser::adt::ADTBranch;
-use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::CtxtForExpr;
 use crate::parser::func::{CastFuncName, FuncName, SysFuncName};
 use crate::parser::generics::Generics;
@@ -96,8 +96,8 @@ impl GenericsInstantiated {
 
 /// An identifier to a tuple with optional type arguments
 pub struct TuplePath {
-    ty_name: UsrTypeName,
-    ty_args: GenericsInstantiated,
+    pub ty_name: UsrTypeName,
+    pub ty_args: GenericsInstantiated,
 }
 
 impl TuplePath {
@@ -129,16 +129,6 @@ impl TuplePath {
         Ok(Self { ty_name, ty_args })
     }
 
-    /// Getter to the branch
-    pub fn ty_name(&self) -> &UsrTypeName {
-        &self.ty_name
-    }
-
-    /// Getter to the type arguments
-    pub fn ty_args(&self) -> &GenericsInstantiated {
-        &self.ty_args
-    }
-
     /// Build a type reference out of this path
     pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
         TypeRef::User(self.ty_name.clone(), self.ty_args.vec(unifier))
@@ -147,9 +137,9 @@ impl TuplePath {
 
 /// An identifier to an ADT variant with optional type arguments
 pub struct ADTPath {
-    ty_name: UsrTypeName,
-    ty_args: GenericsInstantiated,
-    variant: String,
+    pub ty_name: UsrTypeName,
+    pub ty_args: GenericsInstantiated,
+    pub variant: String,
 }
 
 impl ADTPath {
@@ -198,21 +188,16 @@ impl ADTPath {
         ADTBranch::new(self.ty_name.clone(), self.variant.clone())
     }
 
-    /// Getter to the type arguments
-    pub fn ty_args(&self) -> &GenericsInstantiated {
-        &self.ty_args
-    }
-
     /// Build a type reference out of this path
     pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
         TypeRef::User(self.ty_name.clone(), self.ty_args.vec(unifier))
     }
 }
 
-/// An identifier to a function with optional type arguments
+/// An identifier to a function without a qualified type
 pub struct FuncPath {
-    fn_name: UsrFuncName,
-    ty_args: GenericsInstantiated,
+    pub fn_name: UsrFuncName,
+    pub ty_args: GenericsInstantiated,
 }
 
 impl FuncPath {
@@ -238,16 +223,6 @@ impl FuncPath {
         bail_if_exists!(iter.next());
         Ok(Self { fn_name, ty_args })
     }
-
-    /// Getter to the function name
-    pub fn fn_name(&self) -> &UsrFuncName {
-        &self.fn_name
-    }
-
-    /// Getter to the type arguments
-    pub fn ty_args(&self) -> &GenericsInstantiated {
-        &self.ty_args
-    }
 }
 
 /// An identifier for a function with type variables
@@ -260,12 +235,26 @@ pub enum QualifiedPath {
     CastFromFloat,
     /// `Text::from(<literal>)`
     CastFromStr,
-    /// `<type>::<sys-func>::<type-args?>(<args>)`
-    SysFunc(TypeTag, SysFuncName, GenericsInstantiated),
-    /// `<sys-type>::<usr-func>::<type-args?>(<args>)`
-    Intrinsic(SysTypeName, UsrFuncName, GenericsInstantiated),
-    /// `<usr-type>::<usr-func>::<type-args?>(<args>)`
-    UsrFunc(UsrTypeName, UsrFuncName, GenericsInstantiated),
+    /// `<sys-type>::[type-inst]::<sys-func>(<args>)`
+    SysFuncOnSysType(SysTypeName, GenericsInstantiated, SysFuncName),
+    /// `<usr-type>::[type-inst]::<sys-func>(<args>)`
+    SysFuncOnUsrType(UsrTypeName, GenericsInstantiated, SysFuncName),
+    /// `<type-param>::<sys-func>(<args>)`
+    SysFuncOnParamType(TypeParamName, SysFuncName),
+    /// `<sys-type>::[type-inst]::<usr-func>::[type-inst](<args>)`
+    UsrFuncOnSysType(
+        SysTypeName,
+        GenericsInstantiated,
+        UsrFuncName,
+        GenericsInstantiated,
+    ),
+    /// `<usr-type>::[type-inst]::<usr-func>::[type-inst](<args>)`
+    UsrFuncOnUsrType(
+        UsrTypeName,
+        GenericsInstantiated,
+        UsrFuncName,
+        GenericsInstantiated,
+    ),
 }
 
 impl QualifiedPath {
@@ -289,9 +278,7 @@ impl QualifiedPath {
             },
             TypeName::Param(_) => Generics::intrinsic(vec![]),
         };
-        if !matches!(arguments, PathArguments::None) {
-            bail_on!(arguments, "unexpected type arguments");
-        }
+        let inst_for_ty = GenericsInstantiated::from_args(ctxt, &ty_generics, arguments)?;
 
         // func
         let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
@@ -300,7 +287,9 @@ impl QualifiedPath {
             FuncName::Cast(name) => match name {
                 CastFuncName::Into => bail_on!(ident, "not allowed"),
                 CastFuncName::From => {
-                    bail_if_non_empty!(arguments);
+                    if !matches!(arguments, PathArguments::None) {
+                        bail_on!(arguments, "unexpected");
+                    }
                     match ty_name {
                         TypeName::Sys(SysTypeName::Boolean) => Self::CastFromBool,
                         TypeName::Sys(SysTypeName::Integer) => Self::CastFromInt,
@@ -311,40 +300,34 @@ impl QualifiedPath {
                 }
             },
             FuncName::Sys(name) => {
-                let ty_args = GenericsInstantiated::from_args(ctxt, &ty_generics, arguments)?;
-                let ty_tag = match ty_name {
-                    TypeName::Sys(sys_name) => sys_name.as_type_tag(),
-                    TypeName::Usr(usr_name) => TypeTag::User(
-                        usr_name,
-                        ty_generics
-                            .params
-                            .into_iter()
-                            .map(TypeTag::Parameter)
-                            .collect(),
-                    ),
-                    TypeName::Param(param) => TypeTag::Parameter(param),
-                };
-
-                Self::SysFunc(ty_tag, *name, ty_args)
+                // none of the smt-native functions take type arguments
+                if !matches!(arguments, PathArguments::None) {
+                    bail_on!(arguments, "unexpected");
+                }
+                match ty_name {
+                    TypeName::Sys(sys_name) => Self::SysFuncOnSysType(sys_name, inst_for_ty, *name),
+                    TypeName::Usr(usr_name) => Self::SysFuncOnUsrType(usr_name, inst_for_ty, *name),
+                    TypeName::Param(param) => Self::SysFuncOnParamType(param, *name),
+                }
             }
             FuncName::Usr(name) => match ty_name {
                 TypeName::Param(_) => {
                     bail_on!(ident, "user-defined function on type parameter")
                 }
-                TypeName::Sys(ty_name) => match ctxt.lookup_intrinsic(&ty_name, name) {
+                TypeName::Sys(ty_name) => match ctxt.lookup_usr_func_on_sys_type(&ty_name, name) {
                     None => bail_on!(ident, "no such intrinsic function"),
                     Some(fty) => {
-                        let ty_args =
+                        let inst_for_fn =
                             GenericsInstantiated::from_args(ctxt, &fty.generics, arguments)?;
-                        Self::Intrinsic(ty_name, name.clone(), ty_args)
+                        Self::UsrFuncOnSysType(ty_name, inst_for_ty, name.clone(), inst_for_fn)
                     }
                 },
-                TypeName::Usr(ty_name) => match ctxt.get_func_sig(name) {
+                TypeName::Usr(ty_name) => match ctxt.lookup_usr_func_on_usr_type(&ty_name, name) {
                     None => bail_on!(ident, "no such function"),
-                    Some(sig) => {
-                        let ty_args =
-                            GenericsInstantiated::from_args(ctxt, &sig.generics, arguments)?;
-                        Self::UsrFunc(ty_name, name.clone(), ty_args)
+                    Some(fty) => {
+                        let inst_for_fn =
+                            GenericsInstantiated::from_args(ctxt, &fty.generics, arguments)?;
+                        Self::UsrFuncOnUsrType(ty_name, inst_for_ty, name.clone(), inst_for_fn)
                     }
                 },
             },

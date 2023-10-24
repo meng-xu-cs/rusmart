@@ -102,13 +102,13 @@ impl ExprPathAsTarget {
 
 /// Marks what a path serving as a callee expr can be
 pub enum ExprPathAsCallee {
-    /// `<type-name>::<func-name>::<ty-args?>(...)`
+    /// `<type-name>::[ty-args]::<func-name>::[ty-args](...)`
     FuncWithType(QualifiedPath),
-    /// `<usr-func-name>::<ty-args?>(...)`
+    /// `<usr-func-name>::[ty-args](...)`
     FuncNoPrefix(FuncPath),
-    /// `<adt>::<ty-args?>::<variant>(...)`
+    /// `<adt>::[ty-args]::<variant>(...)`
     CtorEnum(ADTPath),
-    /// `<tuple>::<ty-args?>(...)`
+    /// `<tuple>::[ty-args](...)`
     CtorTuple(TuplePath),
 }
 
