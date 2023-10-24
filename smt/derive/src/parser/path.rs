@@ -148,6 +148,47 @@ impl TuplePath {
     }
 }
 
+/// An identifier to a record with optional type arguments
+pub struct RecordPath {
+    pub ty_name: UsrTypeName,
+    pub ty_args: GenericsInstantiated,
+}
+
+impl RecordPath {
+    /// Extract a reference to a record from a path
+    pub fn from_path<T: CtxtForExpr>(ctxt: &T, path: &Path) -> Result<Self> {
+        let Path {
+            leading_colon,
+            segments,
+        } = path;
+        bail_if_exists!(leading_colon);
+        let mut iter = segments.iter().rev();
+
+        // type
+        let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
+        let ty_name = ident.try_into()?;
+        let generics = match ctxt.get_type_def(&ty_name) {
+            None => bail_on!(ident, "no such type"),
+            Some(def) => {
+                if !matches!(def.body, TypeBody::Record(_)) {
+                    bail_on!(ident, "not a record type");
+                }
+                &def.head
+            }
+        };
+        let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
+
+        // ensure that there are no more tokens
+        bail_if_exists!(iter.next());
+        Ok(Self { ty_name, ty_args })
+    }
+
+    /// Build a type reference out of this path
+    pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
+        TypeRef::User(self.ty_name.clone(), self.ty_args.vec(unifier))
+    }
+}
+
 /// An identifier to an ADT variant with optional type arguments
 pub struct ADTPath {
     pub ty_name: UsrTypeName,

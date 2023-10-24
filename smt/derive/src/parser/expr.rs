@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use proc_macro2::TokenStream;
 use syn::{
     parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprMacro,
-    ExprMatch, ExprMethodCall, ExprTuple, ExprUnary, Local, LocalInit, Macro, MacroDelimiter, Pat,
-    PatTuple, PatType, Result, ReturnType, Stmt, UnOp,
+    ExprMatch, ExprMethodCall, ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit,
+    Macro, MacroDelimiter, Member, Pat, PatTuple, PatType, Result, ReturnType, Stmt, UnOp,
 };
 
 use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
@@ -19,7 +19,9 @@ use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::path::{ADTPath, QualifiedPath};
 use crate::parser::ty::{CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeTag};
-use crate::parser::util::{ExprPathAsCallee, ExprPathAsTarget, PatUtil, PathUtil};
+use crate::parser::util::{
+    ExprPathAsCallee, ExprPathAsRecord, ExprPathAsTarget, PatUtil, PathUtil,
+};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -89,7 +91,12 @@ pub enum Op {
     /// `<var>`
     Var(VarName),
     /// `<tuple>(a1, a2, ...)`
-    Tuple { name: UsrTypeName, args: Vec<Expr> },
+    Tuple { name: UsrTypeName, slots: Vec<Expr> },
+    /// `<record>{ f1: a1, f2: a2, ... }`
+    Record {
+        name: UsrTypeName,
+        fields: BTreeMap<String, Expr>,
+    },
     /// `<adt>::<branch>`
     EnumUnit(ADTBranch),
     /// `<adt>::<branch>(a1, a2, ...)`
@@ -176,9 +183,14 @@ impl Expr {
 
         match inst.op.as_mut() {
             Op::Var(_) => (),
-            Op::Tuple { name: _, args } => {
-                for arg in args {
-                    arg.visit(pre, post)?;
+            Op::Tuple { name: _, slots } => {
+                for slot in slots {
+                    slot.visit(pre, post)?;
+                }
+            }
+            Op::Record { name: _, fields } => {
+                for field in fields.values_mut() {
+                    field.visit(pre, post)?;
                 }
             }
             Op::EnumUnit(_) => (),
@@ -556,6 +568,73 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     }
                 }
             }
+            Exp::Struct(expr_struct) => {
+                let ExprStruct {
+                    attrs: _,
+                    qself,
+                    path,
+                    brace_token: _,
+                    fields,
+                    dot2_token,
+                    rest,
+                } = expr_struct;
+                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+                bail_if_exists!(dot2_token);
+                bail_if_exists!(rest);
+
+                match ExprPathAsRecord::parse(self.root, path)? {
+                    ExprPathAsRecord::CtorRecord(record) => {
+                        let mut field_types: BTreeMap<_, TypeRef> =
+                            match self.root.get_type_def(&record.ty_name) {
+                                None => bail_on!(expr_struct, "[invariant] no such type"),
+                                Some(def) => match &def.body {
+                                    TypeBody::Record(record_def) => record_def
+                                        .fields
+                                        .iter()
+                                        .map(|(k, t)| (k.clone(), t.into()))
+                                        .collect(),
+                                    _ => bail_on!(expr_struct, "[invariant] not a record type"),
+                                },
+                            };
+                        let ret_ty = record.as_ty_ref(unifier);
+
+                        // parse the arguments
+                        if fields.len() != field_types.len() {
+                            bail_on!(fields, "record field number mismatch");
+                        }
+
+                        let mut field_vals = BTreeMap::new();
+                        for field in fields {
+                            let FieldValue {
+                                attrs: _,
+                                member,
+                                colon_token: _,
+                                expr: expr_field,
+                            } = field;
+                            let field_name = match member {
+                                Member::Named(ident) => ident.to_string(),
+                                Member::Unnamed(_) => bail_on!(member, "unnamed field member"),
+                            };
+
+                            let parsed_field = match field_types.remove(&field_name) {
+                                None => bail_on!(member, "no such field"),
+                                Some(t) => self.fork(t).convert_expr(unifier, expr_field)?,
+                            };
+                            field_vals.insert(field_name, parsed_field);
+                        }
+
+                        // unity the return type
+                        ti_unify!(unifier, &ret_ty, &self.exp_ty, expr_struct);
+
+                        // build the opcode
+                        Op::Record {
+                            name: record.ty_name,
+                            fields: field_vals,
+                        }
+                    }
+                    ExprPathAsRecord::CtorEnum(_) => todo!(),
+                }
+            }
             Exp::Block(expr_block) => {
                 let ExprBlock {
                     attrs: _,
@@ -917,13 +996,13 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         let ret_ty = tuple.as_ty_ref(unifier);
 
                         // parse the arguments
-                        let parsed_args =
+                        let parsed_slots =
                             self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
 
                         // build the opcode
                         Op::Tuple {
                             name: tuple.ty_name,
-                            args: parsed_args,
+                            slots: parsed_slots,
                         }
                     }
                     ExprPathAsCallee::CtorEnum(adt) => {

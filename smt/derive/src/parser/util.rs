@@ -5,7 +5,7 @@ use syn::{
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::CtxtForExpr;
 use crate::parser::name::{ReservedIdent, VarName};
-use crate::parser::path::{ADTPath, FuncPath, QualifiedPath, TuplePath};
+use crate::parser::path::{ADTPath, FuncPath, QualifiedPath, RecordPath, TuplePath};
 
 /// A convenience wrapper for parsing paths
 pub struct PathUtil;
@@ -94,7 +94,7 @@ impl ExprPathAsTarget {
         let parsed = match path.segments.len() {
             1 => Self::Var(PathUtil::expect_ident(path)?.try_into()?),
             2 => Self::EnumUnit(ADTPath::from_path(ctxt, path)?),
-            _ => bail_on!(expr_path, "unrecognized path"),
+            _ => bail_on!(path, "unrecognized path"),
         };
         Ok(parsed)
     }
@@ -162,7 +162,28 @@ impl ExprPathAsCallee {
                     }
                 }
             }
-            _ => bail_on!(expr, "unrecognized callee"),
+            _ => bail_on!(path, "unrecognized callee"),
+        };
+        Ok(parsed)
+    }
+}
+
+/// Marks what a path serving as a record expr can be
+pub enum ExprPathAsRecord {
+    /// `<adt>::[ty-args]::<variant> { ... }`
+    CtorEnum(ADTPath),
+    /// `<record>::[ty-args] { ... }`
+    CtorRecord(RecordPath),
+}
+
+impl ExprPathAsRecord {
+    /// Parse from an expression
+    pub fn parse<T: CtxtForExpr>(ctxt: &T, path: &Path) -> Result<Self> {
+        // case by number of path segments
+        let parsed = match path.segments.len() {
+            1 => Self::CtorRecord(RecordPath::from_path(ctxt, path)?),
+            2 => Self::CtorEnum(ADTPath::from_path(ctxt, path)?),
+            _ => bail_on!(path, "unrecognized record"),
         };
         Ok(parsed)
     }
