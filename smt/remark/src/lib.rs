@@ -170,19 +170,14 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
     let attr = TokenStream::from(attr);
     let dict = parse_dict(&attr)?;
 
-    // parse the input
-    let input = item.clone();
-
     // ensure that the underlying item is a function
-    let target = match syn::parse::<Item>(input)? {
-        Item::Fn(item) => item,
-        item => bail_on!(item, "expect function"),
-    };
+    let input = item.clone();
+    let target = syn::parse::<ItemFn>(input)?;
 
     // check whether we need to derive any method
     let method = match dict.get("method") {
         None => return Ok(item.clone()),
-        Some(MetaValue::One(ident)) => ident.to_string(),
+        Some(MetaValue::One(ident)) => ident,
         Some(MetaValue::Set(_)) => bail_on!(attr, "invalid method attribute"),
     };
 
@@ -282,7 +277,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
                                             "expect type parameter as type argument"
                                         )
                                     }
-                                    names.push(ident.to_string());
+                                    names.push(ident);
                                 }
                                 _ => bail_on!(arg, "expect type argument"),
                             }
@@ -293,7 +288,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
                 };
 
                 // done with the parsing
-                (ident.to_string(), ty_params)
+                (ident, ty_params)
             }
             _ => bail_on!(param0, "expect type path"),
         },
@@ -306,8 +301,14 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
         gt_token,
         where_clause,
     } = generics;
-    bail_if_missing!(lt_token, generics, "<");
-    bail_if_missing!(gt_token, generics, ">");
+
+    if params.is_empty() {
+        bail_if_exists!(lt_token);
+        bail_if_exists!(gt_token);
+    } else {
+        bail_if_missing!(lt_token, generics, "<");
+        bail_if_missing!(gt_token, generics, ">");
+    }
     bail_if_exists!(where_clause);
 
     let mut func_generics = vec![];
@@ -365,7 +366,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
                 bail_if_exists!(iter.next());
 
                 // save the type parameter name
-                func_generics.push(ident.to_string());
+                func_generics.push(ident);
             }
             _ => bail_on!(param, "expect type parameter"),
         }
@@ -384,56 +385,52 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
         .collect();
 
     // derive the generics tokens
-    let generics_to_decl = |params: &[String]| {
+    let generics_to_decl = |params: &[&Ident]| {
         if params.is_empty() {
-            "".to_string()
+            TokenStream::new()
         } else {
-            let content = params
-                .iter()
-                .map(|n| format!("{}: SMT", n))
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("<{}>", content)
+            let content = params.iter().map(|&n| quote!(#n: SMT));
+            quote!(<#(#content),*>)
         }
     };
-    let impl_generics = generics_to_decl(&self_ty_params);
-    let method_generics = generics_to_decl(&method_ty_params);
+    let tokenized_impl_generics = generics_to_decl(&self_ty_params);
+    let tokenized_method_generics = generics_to_decl(&method_ty_params);
 
-    let generics_to_args = |params: &[String]| {
+    let generics_to_args = |params: &[&Ident]| {
         if params.is_empty() {
-            "".to_string()
+            TokenStream::new()
         } else {
-            let content = params.to_vec().join(",");
-            format!("<{}>", content)
+            let content = params.iter().map(|&n| quote!(#n));
+            quote!(<#(#content),*>)
         }
     };
-    let self_ty_args = generics_to_args(&self_ty_params);
-    let func_ty_args = generics_to_args(&func_generics);
+    let tokenized_self_ty_args = generics_to_args(&self_ty_params);
+    let tokenized_func_ty_args = generics_to_args(&func_generics);
 
     // derive the parameter tokens
     let mut iter = inputs.iter();
     iter.next().unwrap();
 
-    let mut method_params = vec![quote!(self).to_string()];
-    let mut func_args = vec![quote!(self).to_string()];
+    let mut method_params = vec![quote!(self)];
+    let mut func_args = vec![quote!(self)];
     for arg in iter.by_ref() {
         match arg {
-            FnArg::Receiver(_) => bail_on!(arg, "unexpected receiver"),
+            FnArg::Receiver(_) => bail_on!(arg, "unexpect receiver"),
             FnArg::Typed(param) => {
                 let pat = param.pat.as_ref();
-                method_params.push(quote!(#param).to_string());
-                func_args.push(quote!(#pat).to_string());
+                method_params.push(quote!(#param));
+                func_args.push(quote!(#pat));
             }
         }
     }
-    let method_param_repr = method_params.join(",");
-    let func_arg_repr = func_args.join(",");
+    let tokenized_method_params = quote!(#(#method_params),*);
+    let tokenized_func_args = quote!(#(#func_args),*);
 
     // construct the expanded stream
     let extended = quote! {
-        impl #impl_generics #self_ty_name #self_ty_args {
-            #vis fn #method #method_generics (#method_param_repr) #output {
-                #func_name #func_ty_args(#func_arg_repr)
+        impl #tokenized_impl_generics #self_ty_name #tokenized_self_ty_args {
+            #vis fn #method #tokenized_method_generics (#tokenized_method_params) #output {
+                #func_name #tokenized_func_ty_args(#tokenized_func_args)
             }
         }
     };
