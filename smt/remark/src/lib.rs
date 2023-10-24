@@ -200,7 +200,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
         unsafety,
         abi,
         fn_token: _,
-        ident: fn_name,
+        ident: func_name,
         generics,
         paren_token: _,
         inputs,
@@ -310,7 +310,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
     bail_if_missing!(gt_token, generics, ">");
     bail_if_exists!(where_clause);
 
-    let mut fn_generics = vec![];
+    let mut func_generics = vec![];
     for param in params {
         match param {
             GenericParam::Type(TypeParam {
@@ -365,7 +365,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
                 bail_if_exists!(iter.next());
 
                 // save the type parameter name
-                fn_generics.push(ident.to_string());
+                func_generics.push(ident.to_string());
             }
             _ => bail_on!(param, "expect type parameter"),
         }
@@ -373,18 +373,18 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
 
     // cross-match the generics
     for name in self_ty_params.iter() {
-        if !fn_generics.contains(name) {
+        if !func_generics.contains(name) {
             bail_on!(generics, "incomplete generics");
         }
     }
-    let method_ty_params: Vec<_> = fn_generics
+    let method_ty_params: Vec<_> = func_generics
         .iter()
         .filter(|n| !self_ty_params.contains(*n))
         .cloned()
         .collect();
 
     // derive the generics tokens
-    let generics_to_string = |params: &[String]| {
+    let generics_to_decl = |params: &[String]| {
         if params.is_empty() {
             "".to_string()
         } else {
@@ -396,34 +396,44 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
             format!("<{}>", content)
         }
     };
+    let impl_generics = generics_to_decl(&self_ty_params);
+    let method_generics = generics_to_decl(&method_ty_params);
 
-    let impl_generics = generics_to_string(&self_ty_params);
-    let method_generics = generics_to_string(&method_ty_params);
+    let generics_to_args = |params: &[String]| {
+        if params.is_empty() {
+            "".to_string()
+        } else {
+            let content = params.to_vec().join(",");
+            format!("<{}>", content)
+        }
+    };
+    let self_ty_args = generics_to_args(&self_ty_params);
+    let func_ty_args = generics_to_args(&func_generics);
 
     // derive the parameter tokens
     let mut iter = inputs.iter();
     iter.next().unwrap();
 
     let mut method_params = vec![quote!(self).to_string()];
-    let mut method_args = vec![quote!(self).to_string()];
+    let mut func_args = vec![quote!(self).to_string()];
     for arg in iter.by_ref() {
         match arg {
             FnArg::Receiver(_) => bail_on!(arg, "unexpected receiver"),
             FnArg::Typed(param) => {
                 let pat = param.pat.as_ref();
                 method_params.push(quote!(#param).to_string());
-                method_args.push(quote!(#pat).to_string());
+                func_args.push(quote!(#pat).to_string());
             }
         }
     }
     let method_param_repr = method_params.join(",");
-    let fn_arg_repr = method_args.join(",");
+    let func_arg_repr = func_args.join(",");
 
     // construct the expanded stream
     let extended = quote! {
-        impl #impl_generics #self_ty_name {
+        impl #impl_generics #self_ty_name #self_ty_args {
             #vis fn #method #method_generics (#method_param_repr) #output {
-                #fn_name(#fn_arg_repr)
+                #func_name #func_ty_args(#func_arg_repr)
             }
         }
     };
