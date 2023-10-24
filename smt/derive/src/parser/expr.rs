@@ -862,28 +862,23 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             self.parse_sys_func_args(unifier, &fn_name, &operand_ty, expr_call)?
                         }
                         // user-defined function on a system type (i.e., intrinsic function)
-                        QualifiedPath::UsrFuncOnSysType(ty_name, ty_inst, fn_name, fn_inst) => {
+                        QualifiedPath::UsrFuncOnSysType(ty_name, mut ty_inst, fn_name, fn_inst) => {
                             // substitute types in function parameters
                             let fty =
                                 match self.root.lookup_usr_func_on_sys_type(&ty_name, &fn_name) {
                                     None => bail_on!(func, "[invariant] no such function"),
                                     Some(fty) => fty,
                                 };
+
+                            if !ty_inst.append(fn_inst) {
+                                bail_on!(func, "conflicting type parameter name");
+                            }
                             let (params, ret_ty) =
-                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_args), func);
+                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_inst), func);
 
                             // parse the arguments
-                            if params.len() != args.len() {
-                                bail_on!(args, "argument number mismatch");
-                            }
-                            let mut parsed_args = vec![];
-                            for (param, arg) in params.into_iter().zip(args) {
-                                let parsed = self.fork(param).convert_expr(unifier, arg)?;
-                                parsed_args.push(parsed);
-                            }
-
-                            // unity the return type
-                            ti_unify!(unifier, &ret_ty, &self.exp_ty, target);
+                            let parsed_args =
+                                self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
 
                             // build the opcode
                             let intrinsic = match Intrinsic::new(&ty_name, &fn_name, parsed_args) {
@@ -893,28 +888,23 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Op::Intrinsic(intrinsic)
                         }
                         // user-defined function on a user-defined type
-                        QualifiedPath::UsrFuncOnUsrType(ty_name, ty_inst, fn_name, fn_inst) => {
+                        QualifiedPath::UsrFuncOnUsrType(ty_name, mut ty_inst, fn_name, fn_inst) => {
                             // substitute types in function parameters
                             let fty =
                                 match self.root.lookup_usr_func_on_usr_type(&ty_name, &fn_name) {
                                     None => bail_on!(func, "[invariant] no such function"),
                                     Some(fty) => fty,
                                 };
+
+                            if !ty_inst.append(fn_inst) {
+                                bail_on!(func, "conflicting type parameter name");
+                            }
                             let (params, ret_ty) =
-                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_args), func);
+                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_inst), func);
 
                             // parse the arguments
-                            if params.len() != args.len() {
-                                bail_on!(args, "argument number mismatch");
-                            }
-                            let mut parsed_args = vec![];
-                            for (param, arg) in params.into_iter().zip(args) {
-                                let parsed = self.fork(param).convert_expr(unifier, arg)?;
-                                parsed_args.push(parsed);
-                            }
-
-                            // unity the return type
-                            ti_unify!(unifier, &ret_ty, &self.exp_ty, target);
+                            let parsed_args =
+                                self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
 
                             // build the opcode
                             Op::Procedure {

@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::parser::apply::TypeFn;
-use crate::parser::func::FuncSig;
 use crate::parser::name::{TypeParamName, UsrTypeName};
 use crate::parser::path::GenericsInstantiated;
 use crate::parser::ty::TypeTag;

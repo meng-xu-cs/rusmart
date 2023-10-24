@@ -92,6 +92,19 @@ impl GenericsInstantiated {
             .collect();
         rev.into_values().collect()
     }
+
+    /// Append the second generics into the first one
+    pub fn append(&mut self, other: Self) -> bool {
+        let len = self.args.len();
+        for (name, (index, tag)) in other.args {
+            // should not have conflicting type parameter names
+            match self.args.insert(name, (index + len, tag)) {
+                None => (),
+                Some(_) => return false,
+            }
+        }
+        true
+    }
 }
 
 /// An identifier to a tuple with optional type arguments
@@ -213,9 +226,9 @@ impl FuncPath {
         // func
         let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
         let fn_name = ident.try_into()?;
-        let generics = match ctxt.get_func_sig(&fn_name) {
+        let generics = match ctxt.lookup_unqualified(&fn_name) {
             None => bail_on!(ident, "no such function"),
-            Some(sig) => &sig.generics,
+            Some(fty) => &fty.generics,
         };
         let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
 
