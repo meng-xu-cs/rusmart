@@ -3,6 +3,7 @@ members = [
     # ordered and grouped loosely by dependency relation
     "utils",
     "smt/stdlib",
+    "smt/remark",
     "smt/derive",
 ]
 resolver = "2"

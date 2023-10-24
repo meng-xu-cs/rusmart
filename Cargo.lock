@@ -266,6 +266,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusmart-smt-remark"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "rusmart-smt-stdlib"
 version = "0.1.0"
 dependencies = [
