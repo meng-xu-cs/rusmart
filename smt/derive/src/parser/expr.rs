@@ -2,9 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::TokenStream;
 use syn::{
-    parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprIf, ExprMacro,
-    ExprMatch, ExprMethodCall, ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit,
-    Macro, MacroDelimiter, Member, Pat, PatTuple, PatType, Result, ReturnType, Stmt, UnOp,
+    parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprField, ExprIf,
+    ExprMacro, ExprMatch, ExprMethodCall, ExprStruct, ExprTuple, ExprUnary, FieldValue, Local,
+    LocalInit, Macro, MacroDelimiter, Member, Pat, PatTuple, PatType, Result, ReturnType, Stmt,
+    UnOp,
 };
 
 use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
@@ -106,6 +107,10 @@ pub enum Op {
         branch: ADTBranch,
         fields: BTreeMap<String, Expr>,
     },
+    /// `<base>.<index>`
+    AccessSlot { base: Expr, slot: usize },
+    /// `<base>.<field>`
+    AccessField { base: Expr, field: String },
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
     Match {
         heads: Vec<Expr>,
@@ -208,6 +213,9 @@ impl Expr {
                 for field in fields.values_mut() {
                     field.visit(pre, post)?;
                 }
+            }
+            Op::AccessSlot { base, slot: _ } | Op::AccessField { base, field: _ } => {
+                base.visit(pre, post)?;
             }
             Op::Match { heads, combo } => {
                 for head in heads {
@@ -643,6 +651,69 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
                     }
                 }
+            }
+            Exp::Field(expr_field) => {
+                let ExprField {
+                    attrs: _,
+                    base,
+                    dot_token: _,
+                    member,
+                } = expr_field;
+
+                // parse the receiver without assuming its type
+                let parsed_base = self
+                    .fork(TypeRef::Var(unifier.mk_var()))
+                    .convert_expr(unifier, base)?;
+                let base_ty = match unifier.refresh_type(parsed_base.ty()) {
+                    TypeRef::Var(_) => bail_on!(base, "type annotation needed"),
+                    TypeRef::User(ty_name, ty_args) => match self.root.get_type_def(&ty_name) {
+                        None => bail_on!(base, "no such type"),
+                        Some(def) => {
+                            if def.head.params.len() != ty_args.len() {
+                                bail_on!(base, "type parameter number mismatch");
+                            }
+                            &def.body
+                        }
+                    },
+                    _ => bail_on!(base, "invalid type"),
+                };
+
+                // derive the return type
+                let (op, tag) = match (base_ty, member) {
+                    (TypeBody::Tuple(def_tuple), Member::Unnamed(index)) => {
+                        let slot = index.index as usize;
+                        match def_tuple.slots.get(slot) {
+                            None => bail_on!(index, "no such slot"),
+                            Some(t) => (
+                                Op::AccessSlot {
+                                    base: parsed_base,
+                                    slot,
+                                },
+                                t,
+                            ),
+                        }
+                    }
+                    (TypeBody::Record(def_record), Member::Named(ident)) => {
+                        let field = ident.to_string();
+                        match def_record.fields.get(&field) {
+                            None => bail_on!(ident, "no such field"),
+                            Some(t) => (
+                                Op::AccessField {
+                                    base: parsed_base,
+                                    field,
+                                },
+                                t,
+                            ),
+                        }
+                    }
+                    _ => bail_on!(member, "slot/field mismatch"),
+                };
+
+                // unify the return type
+                ti_unify!(unifier, &tag.into(), &self.exp_ty, expr_field);
+
+                // return the constructed opcode
+                op
             }
             Exp::Block(expr_block) => {
                 let ExprBlock {
