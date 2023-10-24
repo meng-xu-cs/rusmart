@@ -100,7 +100,12 @@ pub enum Op {
     /// `<adt>::<branch>`
     EnumUnit(ADTBranch),
     /// `<adt>::<branch>(a1, a2, ...)`
-    EnumTuple { branch: ADTBranch, args: Vec<Expr> },
+    EnumTuple { branch: ADTBranch, slots: Vec<Expr> },
+    /// `<adt>::<branch>(a1, a2, ...)`
+    EnumRecord {
+        branch: ADTBranch,
+        fields: BTreeMap<String, Expr>,
+    },
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
     Match {
         heads: Vec<Expr>,
@@ -194,9 +199,14 @@ impl Expr {
                 }
             }
             Op::EnumUnit(_) => (),
-            Op::EnumTuple { branch: _, args } => {
-                for arg in args {
-                    arg.visit(pre, post)?;
+            Op::EnumTuple { branch: _, slots } => {
+                for slot in slots {
+                    slot.visit(pre, post)?;
+                }
+            }
+            Op::EnumRecord { branch: _, fields } => {
+                for field in fields.values_mut() {
+                    field.visit(pre, post)?;
                 }
             }
             Op::Match { heads, combo } => {
@@ -574,7 +584,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     qself,
                     path,
                     brace_token: _,
-                    fields,
+                    fields: _,
                     dot2_token,
                     rest,
                 } = expr_struct;
@@ -584,47 +594,22 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                 match ExprPathAsRecord::parse(self.root, path)? {
                     ExprPathAsRecord::CtorRecord(record) => {
-                        let mut field_types: BTreeMap<_, TypeRef> =
-                            match self.root.get_type_def(&record.ty_name) {
-                                None => bail_on!(expr_struct, "[invariant] no such type"),
-                                Some(def) => match &def.body {
-                                    TypeBody::Record(record_def) => record_def
-                                        .fields
-                                        .iter()
-                                        .map(|(k, t)| (k.clone(), t.into()))
-                                        .collect(),
-                                    _ => bail_on!(expr_struct, "[invariant] not a record type"),
-                                },
-                            };
+                        let fields = match self.root.get_type_def(&record.ty_name) {
+                            None => bail_on!(expr_struct, "[invariant] no such type"),
+                            Some(def) => match &def.body {
+                                TypeBody::Record(record_def) => record_def
+                                    .fields
+                                    .iter()
+                                    .map(|(k, t)| (k.clone(), t.into()))
+                                    .collect(),
+                                _ => bail_on!(expr_struct, "[invariant] not a record type"),
+                            },
+                        };
                         let ret_ty = record.as_ty_ref(unifier);
 
                         // parse the arguments
-                        if fields.len() != field_types.len() {
-                            bail_on!(fields, "record field number mismatch");
-                        }
-
-                        let mut field_vals = BTreeMap::new();
-                        for field in fields {
-                            let FieldValue {
-                                attrs: _,
-                                member,
-                                colon_token: _,
-                                expr: expr_field,
-                            } = field;
-                            let field_name = match member {
-                                Member::Named(ident) => ident.to_string(),
-                                Member::Unnamed(_) => bail_on!(member, "unnamed field member"),
-                            };
-
-                            let parsed_field = match field_types.remove(&field_name) {
-                                None => bail_on!(member, "no such field"),
-                                Some(t) => self.fork(t).convert_expr(unifier, expr_field)?,
-                            };
-                            field_vals.insert(field_name, parsed_field);
-                        }
-
-                        // unity the return type
-                        ti_unify!(unifier, &ret_ty, &self.exp_ty, expr_struct);
+                        let field_vals =
+                            self.parse_record_fields(unifier, &fields, &ret_ty, expr_struct)?;
 
                         // build the opcode
                         Op::Record {
@@ -632,7 +617,31 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             fields: field_vals,
                         }
                     }
-                    ExprPathAsRecord::CtorEnum(_) => todo!(),
+                    ExprPathAsRecord::CtorEnum(adt) => {
+                        let variant = match self.root.get_adt_variant_details(&adt) {
+                            None => bail_on!(expr_struct, "[invariant] no such type or variant"),
+                            Some(details) => details,
+                        };
+                        let fields = match variant {
+                            EnumVariant::Record(record_def) => record_def
+                                .fields
+                                .iter()
+                                .map(|(k, t)| (k.clone(), t.into()))
+                                .collect(),
+                            _ => bail_on!(expr_struct, "not a record variant"),
+                        };
+                        let ret_ty = adt.as_ty_ref(unifier);
+
+                        // parse the arguments
+                        let field_vals =
+                            self.parse_record_fields(unifier, &fields, &ret_ty, expr_struct)?;
+
+                        // build the opcode
+                        Op::EnumRecord {
+                            branch: adt.into_branch(),
+                            fields: field_vals,
+                        }
+                    }
                 }
             }
             Exp::Block(expr_block) => {
@@ -1025,7 +1034,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // build the opcode
                         Op::EnumTuple {
                             branch: adt.into_branch(),
-                            args: parsed_args,
+                            slots: parsed_args,
                         }
                     }
                 }
@@ -1193,6 +1202,51 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
         // unity the return type
         ti_unify!(unifier, ret_ty, &self.exp_ty, expr_call);
+
+        // done
+        Ok(parsed_args)
+    }
+
+    /// Parse fields of a record constructor
+    fn parse_record_fields(
+        &self,
+        unifier: &mut TypeUnifier,
+        fields: &BTreeMap<String, TypeRef>,
+        ret_ty: &TypeRef,
+        expr_struct: &ExprStruct,
+    ) -> Result<BTreeMap<String, Expr>> {
+        let args = &expr_struct.fields;
+
+        // parse the arguments
+        if fields.len() != args.len() {
+            bail_on!(args, "argument number mismatch");
+        }
+
+        let mut parsed_args = BTreeMap::new();
+        for arg in args {
+            let FieldValue {
+                attrs: _,
+                member,
+                colon_token: _,
+                expr: expr_field,
+            } = arg;
+            let field_name = match member {
+                Member::Named(ident) => ident.to_string(),
+                Member::Unnamed(_) => bail_on!(member, "unnamed field member"),
+            };
+
+            let parsed_field = match fields.get(&field_name) {
+                None => bail_on!(member, "no such field"),
+                Some(t) => self.fork(t.clone()).convert_expr(unifier, expr_field)?,
+            };
+            match parsed_args.insert(field_name, parsed_field) {
+                None => (),
+                Some(_) => bail_on!(member, "duplicated field"),
+            }
+        }
+
+        // unity the return type
+        ti_unify!(unifier, ret_ty, &self.exp_ty, expr_struct);
 
         // done
         Ok(parsed_args)
@@ -1369,7 +1423,7 @@ mod tests {
                 .xor(x.ne(ADT::Bool(false.into())))
                 .xor(x.ne(ADT::Items {
                     a: 0.into(),
-                    b: "abc",
+                    b: "abc".into(),
                 }))
         }
     });
