@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{bail, Result};
 
-use crate::parser::expr::{Expr, Op};
+use crate::parser::expr::{CtxtForExpr, Expr, Op};
 use crate::parser::func::FuncSig;
 use crate::parser::generics::Generics;
 use crate::parser::infer::{TIError, TSError, TypeRef, TypeUnifier};
@@ -291,16 +291,17 @@ impl ApplyDatabase {
     }
 
     /// Get candidates given a function name
-    pub fn query_with_inference(
+    pub fn query_with_inference<T: CtxtForExpr>(
         &self,
         unifier: &mut TypeUnifier,
-        kind: Kind,
+        ctxt: &T,
         name: &UsrFuncName,
         inst: Option<&[TypeTag]>,
         args: Vec<Expr>,
         rval: &TypeRef,
     ) -> Result<Op> {
         // collect candidates
+        let kind = ctxt.kind();
         let mut candidates = vec![];
         match self.on_sys_type.get(name) {
             None => (),
@@ -324,10 +325,26 @@ impl ApplyDatabase {
             }
 
             // instantiation
-            let inst_pack = match GenericsInstantiated::new(&fty.generics, inst) {
-                None => continue,
-                Some(pack) => pack,
+            let mut inst_pack = match &ty_name {
+                TypeName::Sys(sys_name) => {
+                    GenericsInstantiated::new_without_args(&sys_name.generics())
+                }
+                TypeName::Usr(usr_name) => GenericsInstantiated::new_without_args(
+                    ctxt.get_type_generics(usr_name).expect("user-defined type"),
+                ),
+                TypeName::Param(_) => panic!("unexpected"),
             };
+
+            let fn_inst = match inst {
+                None => GenericsInstantiated::new_without_args(&fty.generics),
+                Some(tags) => {
+                    if tags.len() != fty.generics.params.len() {
+                        continue;
+                    }
+                    GenericsInstantiated::new_with_args(&fty.generics, tags)
+                }
+            };
+            inst_pack.append(fn_inst);
 
             // use a probing unifier to check
             let mut probing = unifier.clone();

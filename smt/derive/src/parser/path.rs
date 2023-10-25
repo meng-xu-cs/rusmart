@@ -18,28 +18,28 @@ pub struct GenericsInstantiated {
 }
 
 impl GenericsInstantiated {
+    /// Create an instantiation by setting
+    pub fn new_without_args(generics: &Generics) -> Self {
+        let ty_args = generics
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.clone(), (i, None)))
+            .collect();
+        GenericsInstantiated { args: ty_args }
+    }
+
     /// Create an instantiation with generics and type argument (optionally parsed)
-    pub fn new(generics: &Generics, ty_args_opt: Option<&[TypeTag]>) -> Option<Self> {
-        let ty_params = &generics.params;
-        let ty_args = match ty_args_opt {
-            None => ty_params
-                .iter()
-                .enumerate()
-                .map(|(i, n)| (n.clone(), (i, None)))
-                .collect(),
-            Some(tags) => {
-                if tags.len() != ty_params.len() {
-                    return None;
-                }
-                ty_params
-                    .iter()
-                    .zip(tags)
-                    .enumerate()
-                    .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
-                    .collect()
-            }
-        };
-        Some(GenericsInstantiated { args: ty_args })
+    pub fn new_with_args(generics: &Generics, args: &[TypeTag]) -> Self {
+        assert_eq!(generics.params.len(), args.len());
+        let ty_args = generics
+            .params
+            .iter()
+            .zip(args)
+            .enumerate()
+            .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
+            .collect();
+        GenericsInstantiated { args: ty_args }
     }
 
     /// A utility function to parse type arguments

@@ -26,6 +26,9 @@ use crate::parser::util::{
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
+    /// Retrieve the kind of the current parsing context
+    fn kind(&self) -> Kind;
+
     /// Retrieve the definition of a user-defined type
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
 
@@ -426,6 +429,10 @@ impl CtxtForType for ExprParserRoot<'_> {
 }
 
 impl CtxtForExpr for ExprParserRoot<'_> {
+    fn kind(&self) -> Kind {
+        self.kind
+    }
+
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef> {
         self.ctxt.get_type_def(name)
     }
@@ -1189,7 +1196,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // choose the function from function database
                         let inferred = self.root.ctxt.fn_db.query_with_inference(
                             unifier,
-                            self.root.kind,
+                            self.root,
                             &name,
                             ty_args_opt.as_deref(),
                             parsed_args,
