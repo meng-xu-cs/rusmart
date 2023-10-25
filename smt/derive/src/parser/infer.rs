@@ -1,5 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
+
+use rusmart_utils::display::format_seq;
 
 use crate::parser::apply::TypeFn;
 use crate::parser::name::{TypeParamName, UsrTypeName};
@@ -61,6 +64,12 @@ pub(crate) use bail_on_ts_err;
 /// Represents a type variable participating in type unification
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct TypeVar(usize);
+
+impl Display for TypeVar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "?{}", self.0)
+    }
+}
 
 /// Like `TypeTag`, but allows type variable for type unification
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -169,6 +178,32 @@ impl TypeRef {
             }
         };
         Ok(updated)
+    }
+}
+
+impl Display for TypeRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var(var) => var.fmt(f),
+            Self::Boolean => write!(f, "Boolean"),
+            Self::Integer => write!(f, "Integer"),
+            Self::Rational => write!(f, "Rational"),
+            Self::Text => write!(f, "Text"),
+            Self::Cloak(sub) => write!(f, "Cloak<{}>", sub),
+            Self::Seq(sub) => write!(f, "Seq<{}>", sub),
+            Self::Set(sub) => write!(f, "Set<{}>", sub),
+            Self::Map(key, val) => write!(f, "Map<{},{}>", key, val),
+            Self::Error => write!(f, "Error"),
+            Self::User(name, args) => {
+                if args.is_empty() {
+                    name.fmt(f)
+                } else {
+                    let content = format_seq(",", "<", ">", args);
+                    write!(f, "{}{}", name, content)
+                }
+            }
+            Self::Parameter(name) => name.fmt(f),
+        }
     }
 }
 

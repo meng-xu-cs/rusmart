@@ -1,10 +1,13 @@
 use std::collections::BTreeSet;
+use std::fmt::{Display, Formatter};
 
 use quote::quote_spanned;
 use syn::{
     GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, Result, TraitBound,
     TraitBoundModifier, TypeParam, TypeParamBound,
 };
+
+use rusmart_utils::display::format_seq;
 
 use crate::parser::ctxt::MarkedType;
 use crate::parser::err::{
@@ -170,6 +173,16 @@ impl Generics {
             .cloned()
             .collect();
         Self { params: filtered }
+    }
+}
+
+impl Display for Generics {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.params.is_empty() {
+            f.write_str("")
+        } else {
+            format_seq(",", "<", ">", &self.params).fmt(f)
+        }
     }
 }
 

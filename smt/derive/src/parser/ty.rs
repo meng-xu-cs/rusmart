@@ -6,6 +6,8 @@ use syn::{
     Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
 };
 
+use rusmart_utils::display::{format_map, format_seq};
+
 use crate::parser::ctxt::{ContextWithGenerics, MarkedType};
 use crate::parser::err::{bail_if_empty, bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::generics::Generics;
@@ -355,6 +357,31 @@ impl TypeTag {
     }
 }
 
+impl Display for TypeTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Boolean => write!(f, "Boolean"),
+            Self::Integer => write!(f, "Integer"),
+            Self::Rational => write!(f, "Rational"),
+            Self::Text => write!(f, "Text"),
+            Self::Cloak(sub) => write!(f, "Cloak<{}>", sub),
+            Self::Seq(sub) => write!(f, "Seq<{}>", sub),
+            Self::Set(sub) => write!(f, "Set<{}>", sub),
+            Self::Map(key, val) => write!(f, "Map<{},{}>", key, val),
+            Self::Error => write!(f, "Error"),
+            Self::User(name, args) => {
+                if args.is_empty() {
+                    name.fmt(f)
+                } else {
+                    let content = format_seq(",", "<", ">", args);
+                    write!(f, "{}{}", name, content)
+                }
+            }
+            Self::Parameter(name) => name.fmt(f),
+        }
+    }
+}
+
 /// Represents a tuple definition
 pub struct TypeTuple {
     pub slots: Vec<TypeTag>,
@@ -386,6 +413,12 @@ impl TypeTuple {
         }
 
         Ok(Self { slots })
+    }
+}
+
+impl Display for TypeTuple {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        format_seq(",", "(", ")", &self.slots).fmt(f)
     }
 }
 
@@ -426,6 +459,12 @@ impl TypeRecord {
     }
 }
 
+impl Display for TypeRecord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        format_map(",", "{", "}", &self.fields, ":").fmt(f)
+    }
+}
+
 /// A helper enum to represent a variant definition in an ADT type
 pub enum EnumVariant {
     Unit,
@@ -448,6 +487,16 @@ impl EnumVariant {
             }) => Self::Tuple(TypeTuple::from_fields(ctxt, unnamed.iter())?),
         };
         Ok(variant)
+    }
+}
+
+impl Display for EnumVariant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unit => f.write_str(""),
+            Self::Tuple(details) => details.fmt(f),
+            Self::Record(details) => details.fmt(f),
+        }
     }
 }
 
@@ -481,6 +530,12 @@ impl TypeEnum {
         }
 
         Ok(Self { variants })
+    }
+}
+
+impl Display for TypeEnum {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        format_map("\n", "[", "]", &self.variants, "").fmt(f)
     }
 }
 
@@ -553,10 +608,26 @@ impl TypeBody {
     }
 }
 
+impl Display for TypeBody {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tuple(details) => details.fmt(f),
+            Self::Record(details) => details.fmt(f),
+            Self::Enum(details) => details.fmt(f),
+        }
+    }
+}
+
 /// A complete definition of a type (generics + body)
 pub struct TypeDef {
     pub head: Generics,
     pub body: TypeBody,
+}
+
+impl Display for TypeDef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.head, self.body)
+    }
 }
 
 #[cfg(test)]
