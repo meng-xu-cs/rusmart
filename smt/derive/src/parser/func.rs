@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
 
 use syn::{FnArg, Ident, PatType, Result, ReturnType, Signature};
 
@@ -28,6 +29,16 @@ impl ReservedIdent for CastFuncName {
     }
 }
 
+impl Display for CastFuncName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::From => "from",
+            Self::Into => "into",
+        };
+        f.write_str(name)
+    }
+}
+
 /// Reserved function name
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SysFuncName {
@@ -43,6 +54,16 @@ impl ReservedIdent for SysFuncName {
             _ => return None,
         };
         Some(matched)
+    }
+}
+
+impl Display for SysFuncName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Eq => "eq",
+            Self::Ne => "ne",
+        };
+        f.write_str(name)
     }
 }
 
@@ -66,6 +87,16 @@ impl FuncName {
             },
         };
         Ok(parsed)
+    }
+}
+
+impl Display for FuncName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cast(name) => name.fmt(f),
+            Self::Sys(name) => name.fmt(f),
+            Self::Usr(name) => name.fmt(f),
+        }
     }
 }
 

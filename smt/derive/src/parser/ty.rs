@@ -150,6 +150,16 @@ impl TypeName {
     }
 }
 
+impl Display for TypeName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Sys(name) => name.fmt(f),
+            Self::Usr(name) => name.fmt(f),
+            Self::Param(name) => name.fmt(f),
+        }
+    }
+}
+
 /// A unique and complete reference to an SMT-related type
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum TypeTag {
