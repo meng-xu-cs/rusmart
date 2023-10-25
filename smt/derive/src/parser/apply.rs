@@ -8,7 +8,7 @@ use crate::parser::generics::Generics;
 use crate::parser::infer::{TIError, TSError, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
-use crate::parser::path::GenericsInstantiated;
+use crate::parser::path::GenericsInstPartial;
 use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
 
 /// Marks whether this function is for impl or spec
@@ -327,30 +327,32 @@ impl ApplyDatabase {
             // instantiation
             let mut inst_pack = match &ty_name {
                 TypeName::Sys(sys_name) => {
-                    GenericsInstantiated::new_without_args(&sys_name.generics())
+                    GenericsInstPartial::new_without_args(&sys_name.generics())
                 }
-                TypeName::Usr(usr_name) => GenericsInstantiated::new_without_args(
+                TypeName::Usr(usr_name) => GenericsInstPartial::new_without_args(
                     ctxt.get_type_generics(usr_name).expect("user-defined type"),
                 ),
                 TypeName::Param(_) => panic!("unexpected"),
             };
-
             let fn_inst = match inst {
-                None => GenericsInstantiated::new_without_args(&fty.generics),
+                None => GenericsInstPartial::new_without_args(&fty.generics),
                 Some(tags) => {
                     if tags.len() != fty.generics.params.len() {
                         continue;
                     }
-                    GenericsInstantiated::new_with_args(&fty.generics, tags)
+                    GenericsInstPartial::new_with_args(&fty.generics, tags)
                 }
             };
-            inst_pack.append(fn_inst);
+            if !inst_pack.append(fn_inst) {
+                bail!("[invariant] conflicting type parameter name");
+            }
 
             // use a probing unifier to check
             let mut probing = unifier.clone();
 
             // try to match the function
-            let (params, ret_ty) = match probing.instantiate_func_ty(fty, &inst_pack) {
+            let inst_full = inst_pack.complete(&mut probing);
+            let (params, ret_ty) = match probing.instantiate_func_ty(fty, &inst_full) {
                 Ok(instantiated) => instantiated,
                 Err(TSError::NoSuchParameter) => bail!("no such type parameter"),
             };

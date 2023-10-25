@@ -95,19 +95,32 @@ pub enum Op {
     /// `<var>`
     Var(VarName),
     /// `<tuple>(a1, a2, ...)`
-    Tuple { name: UsrTypeName, slots: Vec<Expr> },
+    Tuple {
+        name: UsrTypeName,
+        inst: Vec<TypeRef>,
+        slots: Vec<Expr>,
+    },
     /// `<record>{ f1: a1, f2: a2, ... }`
     Record {
         name: UsrTypeName,
+        inst: Vec<TypeRef>,
         fields: BTreeMap<String, Expr>,
     },
     /// `<adt>::<branch>`
-    EnumUnit(ADTBranch),
+    EnumUnit {
+        branch: ADTBranch,
+        inst: Vec<TypeRef>,
+    },
     /// `<adt>::<branch>(a1, a2, ...)`
-    EnumTuple { branch: ADTBranch, slots: Vec<Expr> },
+    EnumTuple {
+        branch: ADTBranch,
+        inst: Vec<TypeRef>,
+        slots: Vec<Expr>,
+    },
     /// `<adt>::<branch>(a1, a2, ...)`
     EnumRecord {
         branch: ADTBranch,
+        inst: Vec<TypeRef>,
         fields: BTreeMap<String, Expr>,
     },
     /// `<base>.<index>`
@@ -134,7 +147,11 @@ pub enum Op {
     /// `<class>::<method>(<a1>, <a2>, ...)`
     Intrinsic(Intrinsic),
     /// `<function>(<a1>, <a2>, ...)`
-    Procedure { name: UsrFuncName, args: Vec<Expr> },
+    Procedure {
+        name: UsrFuncName,
+        inst: Vec<TypeRef>,
+        args: Vec<Expr>,
+    },
 }
 
 /// Instructions (operations with type)

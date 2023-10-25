@@ -15,97 +15,113 @@ pub enum Intrinsic {
     /// `Boolean::from`
     BoolVal(bool),
     /// `Boolean::not`
-    BoolNot(Expr),
+    BoolNot { val: Expr },
     /// `Boolean::and`
-    BoolAnd(Expr, Expr),
+    BoolAnd { lhs: Expr, rhs: Expr },
     /// `Boolean::or`
-    BoolOr(Expr, Expr),
+    BoolOr { lhs: Expr, rhs: Expr },
     /// `Boolean::xor`
-    BoolXor(Expr, Expr),
+    BoolXor { lhs: Expr, rhs: Expr },
     /// `Integer::from`
     IntVal(i128),
     /// `Integer::lt`
-    IntLt(Expr, Expr),
+    IntLt { lhs: Expr, rhs: Expr },
     /// `Integer::le`
-    IntLe(Expr, Expr),
+    IntLe { lhs: Expr, rhs: Expr },
     /// `Integer::ge`
-    IntGe(Expr, Expr),
+    IntGe { lhs: Expr, rhs: Expr },
     /// `Integer::gt`
-    IntGt(Expr, Expr),
+    IntGt { lhs: Expr, rhs: Expr },
     /// `Integer::add`
-    IntAdd(Expr, Expr),
+    IntAdd { lhs: Expr, rhs: Expr },
     /// `Integer::sub`
-    IntSub(Expr, Expr),
+    IntSub { lhs: Expr, rhs: Expr },
     /// `Integer::mul`
-    IntMul(Expr, Expr),
+    IntMul { lhs: Expr, rhs: Expr },
     /// `Integer::div`
-    IntDiv(Expr, Expr),
+    IntDiv { lhs: Expr, rhs: Expr },
     /// `Integer::rem`
-    IntRem(Expr, Expr),
+    IntRem { lhs: Expr, rhs: Expr },
     /// `Rational::from`
     NumVal(f64),
     /// `Rational::lt`
-    NumLt(Expr, Expr),
+    NumLt { lhs: Expr, rhs: Expr },
     /// `Rational::le`
-    NumLe(Expr, Expr),
+    NumLe { lhs: Expr, rhs: Expr },
     /// `Rational::ge`
-    NumGe(Expr, Expr),
+    NumGe { lhs: Expr, rhs: Expr },
     /// `Rational::gt`
-    NumGt(Expr, Expr),
+    NumGt { lhs: Expr, rhs: Expr },
     /// `Rational::add`
-    NumAdd(Expr, Expr),
+    NumAdd { lhs: Expr, rhs: Expr },
     /// `Rational::sub`
-    NumSub(Expr, Expr),
+    NumSub { lhs: Expr, rhs: Expr },
     /// `Rational::mul`
-    NumMul(Expr, Expr),
+    NumMul { lhs: Expr, rhs: Expr },
     /// `Rational::div`
-    NumDiv(Expr, Expr),
+    NumDiv { lhs: Expr, rhs: Expr },
     /// `Text::from`
     StrVal(String),
     /// `Text::lt`
-    StrLt(Expr, Expr),
+    StrLt { lhs: Expr, rhs: Expr },
     /// `Text::le`
-    StrLe(Expr, Expr),
+    StrLe { lhs: Expr, rhs: Expr },
     /// `Cloak::shield`
-    BoxShield(Expr),
+    BoxShield { t: TypeRef, val: Expr },
     /// `Cloak::reveal`
-    BoxReveal(Expr),
+    BoxReveal { t: TypeRef, val: Expr },
     /// `Seq::empty`
-    SeqEmpty,
+    SeqEmpty { t: TypeRef },
     /// `Seq::length`
-    SeqLength(Expr),
+    SeqLength { t: TypeRef, seq: Expr },
     /// `Seq::append`
-    SeqAppend(Expr, Expr),
+    SeqAppend { t: TypeRef, seq: Expr, item: Expr },
     /// `Seq::at_unchecked`
-    SeqAt(Expr, Expr),
+    SeqAt { t: TypeRef, seq: Expr, idx: Expr },
     /// `Seq::includes`
-    SeqIncludes(Expr, Expr),
+    SeqIncludes { t: TypeRef, seq: Expr, item: Expr },
     /// `Set::empty`
-    SetEmpty,
+    SetEmpty { t: TypeRef },
     /// `Set::length`
-    SetLength(Expr),
+    SetLength { t: TypeRef, set: Expr },
     /// `Set::insert`
-    SetInsert(Expr, Expr),
+    SetInsert { t: TypeRef, set: Expr, item: Expr },
     /// `Set::contains`
-    SetContains(Expr, Expr),
+    SetContains { t: TypeRef, set: Expr, item: Expr },
     /// `Map::empty`
-    MapEmpty,
+    MapEmpty { k: TypeRef, v: TypeRef },
     /// `Map::length`
-    MapLength(Expr),
+    MapLength { k: TypeRef, v: TypeRef, map: Expr },
     /// `Map::put_unchecked`
-    MapPut(Expr, Expr, Expr),
+    MapPut {
+        k: TypeRef,
+        v: TypeRef,
+        map: Expr,
+        key: Expr,
+        val: Expr,
+    },
     /// `Map::get_unchecked`
-    MapGet(Expr, Expr),
+    MapGet {
+        k: TypeRef,
+        v: TypeRef,
+        map: Expr,
+        key: Expr,
+    },
     /// `Map::contains_key`
-    MapContainsKey(Expr, Expr),
+    MapContainsKey {
+        k: TypeRef,
+        v: TypeRef,
+        map: Expr,
+        key: Expr,
+    },
     /// `Error::fresh`
     ErrFresh,
     /// `Error::merge`
-    ErrMerge(Expr, Expr),
+    ErrMerge { lhs: Expr, rhs: Expr },
     /// `<any-smt-type>::eq`
-    SmtEq(Expr, Expr),
+    SmtEq { t: TypeRef, lhs: Expr, rhs: Expr },
     /// `<any-smt-type>::ne`
-    SmtNe(Expr, Expr),
+    SmtNe { t: TypeRef, lhs: Expr, rhs: Expr },
 }
 
 macro_rules! mk0 {

@@ -11,13 +11,12 @@ use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{SysTypeName, TypeBody, TypeName, TypeTag};
 
-/// Instantiation of generics
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct GenericsInstantiated {
+/// Partial instantiation of generics
+pub struct GenericsInstPartial {
     args: BTreeMap<TypeParamName, (usize, Option<TypeTag>)>,
 }
 
-impl GenericsInstantiated {
+impl GenericsInstPartial {
     /// Create an instantiation by setting
     pub fn new_without_args(generics: &Generics) -> Self {
         let ty_args = generics
@@ -26,7 +25,7 @@ impl GenericsInstantiated {
             .enumerate()
             .map(|(i, n)| (n.clone(), (i, None)))
             .collect();
-        GenericsInstantiated { args: ty_args }
+        GenericsInstPartial { args: ty_args }
     }
 
     /// Create an instantiation with generics and type argument (optionally parsed)
@@ -39,7 +38,7 @@ impl GenericsInstantiated {
             .enumerate()
             .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
             .collect();
-        GenericsInstantiated { args: ty_args }
+        GenericsInstPartial { args: ty_args }
     }
 
     /// A utility function to parse type arguments
@@ -69,28 +68,7 @@ impl GenericsInstantiated {
             }
             PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
         };
-        Ok(GenericsInstantiated { args: ty_args })
-    }
-
-    /// Retrieve an argument
-    pub fn get(&self, name: &TypeParamName) -> Option<Option<&TypeTag>> {
-        self.args.get(name).map(|(_, t)| t.as_ref())
-    }
-
-    /// Shape the arguments in its declaration order, filling missed ones with fresh type variables
-    pub fn vec(&self, unifier: &mut TypeUnifier) -> Vec<TypeRef> {
-        let rev: BTreeMap<_, _> = self
-            .args
-            .iter()
-            .map(|(_, (i, t))| {
-                let ty_ref = match t.as_ref() {
-                    None => TypeRef::Var(unifier.mk_var()),
-                    Some(tag) => tag.into(),
-                };
-                (*i, ty_ref)
-            })
-            .collect();
-        rev.into_values().collect()
+        Ok(GenericsInstPartial { args: ty_args })
     }
 
     /// Append the second generics into the first one
@@ -105,12 +83,46 @@ impl GenericsInstantiated {
         }
         true
     }
+
+    /// Complete the instantiation with the help of a tupe unifier
+    pub fn complete(self, unifier: &mut TypeUnifier) -> GenericsInstFull {
+        let args = self
+            .args
+            .into_iter()
+            .map(|(k, (i, inst))| {
+                let completed = match inst {
+                    None => TypeRef::Var(unifier.mk_var()),
+                    Some(tag) => (&tag).into(),
+                };
+                (k, (i, completed))
+            })
+            .collect();
+        GenericsInstFull { args }
+    }
+}
+
+/// Complete instantiation of generics
+pub struct GenericsInstFull {
+    args: BTreeMap<TypeParamName, (usize, TypeRef)>,
+}
+
+impl GenericsInstFull {
+    /// Retrieve an argument
+    pub fn get(&self, name: &TypeParamName) -> Option<&TypeRef> {
+        self.args.get(name).map(|(_, t)| t)
+    }
+
+    /// Shape the arguments in its declaration order, filling missed ones with fresh type variables
+    pub fn into_vec(self) -> Vec<TypeRef> {
+        let rev: BTreeMap<_, _> = self.args.into_iter().map(|(_, (i, t))| (i, t)).collect();
+        rev.into_values().collect()
+    }
 }
 
 /// An identifier to a tuple with optional type arguments
 pub struct TuplePath {
     pub ty_name: UsrTypeName,
-    pub ty_args: GenericsInstantiated,
+    pub ty_args: GenericsInstPartial,
 }
 
 impl TuplePath {
@@ -135,7 +147,7 @@ impl TuplePath {
                 &def.head
             }
         };
-        let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
+        let ty_args = GenericsInstPartial::from_args(ctxt, generics, arguments)?;
 
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
@@ -144,14 +156,17 @@ impl TuplePath {
 
     /// Build a type reference out of this path
     pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
-        TypeRef::User(self.ty_name.clone(), self.ty_args.vec(unifier))
+        TypeRef::User(
+            self.ty_name.clone(),
+            self.ty_args.complete(unifier).into_vec(),
+        )
     }
 }
 
 /// An identifier to a record with optional type arguments
 pub struct RecordPath {
     pub ty_name: UsrTypeName,
-    pub ty_args: GenericsInstantiated,
+    pub ty_args: GenericsInstPartial,
 }
 
 impl RecordPath {
@@ -176,7 +191,7 @@ impl RecordPath {
                 &def.head
             }
         };
-        let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
+        let ty_args = GenericsInstPartial::from_args(ctxt, generics, arguments)?;
 
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
@@ -185,14 +200,17 @@ impl RecordPath {
 
     /// Build a type reference out of this path
     pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
-        TypeRef::User(self.ty_name.clone(), self.ty_args.vec(unifier))
+        TypeRef::User(
+            self.ty_name.clone(),
+            self.ty_args.complete(unifier).into_vec(),
+        )
     }
 }
 
 /// An identifier to an ADT variant with optional type arguments
 pub struct ADTPath {
     pub ty_name: UsrTypeName,
-    pub ty_args: GenericsInstantiated,
+    pub ty_args: GenericsInstPartial,
     pub variant: String,
 }
 
@@ -216,7 +234,7 @@ impl ADTPath {
                 _ => bail_on!(ident, "not an enum type"),
             },
         };
-        let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
+        let ty_args = GenericsInstPartial::from_args(ctxt, generics, arguments)?;
 
         // variant
         let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "branch");
@@ -247,14 +265,17 @@ impl ADTPath {
 
     /// Build a type reference out of this path
     pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
-        TypeRef::User(self.ty_name.clone(), self.ty_args.vec(unifier))
+        TypeRef::User(
+            self.ty_name.clone(),
+            self.ty_args.complete(unifier).into_vec(),
+        )
     }
 }
 
 /// An identifier to a function without a qualified type
 pub struct FuncPath {
     pub fn_name: UsrFuncName,
-    pub ty_args: GenericsInstantiated,
+    pub ty_args: GenericsInstPartial,
 }
 
 impl FuncPath {
@@ -274,7 +295,7 @@ impl FuncPath {
             None => bail_on!(ident, "no such function"),
             Some(fty) => &fty.generics,
         };
-        let ty_args = GenericsInstantiated::from_args(ctxt, generics, arguments)?;
+        let ty_args = GenericsInstPartial::from_args(ctxt, generics, arguments)?;
 
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
@@ -293,24 +314,24 @@ pub enum QualifiedPath {
     /// `Text::from(<literal>)`
     CastFromStr,
     /// `<sys-type>::[type-inst]::<sys-func>(<args>)`
-    SysFuncOnSysType(SysTypeName, GenericsInstantiated, SysFuncName),
+    SysFuncOnSysType(SysTypeName, GenericsInstPartial, SysFuncName),
     /// `<usr-type>::[type-inst]::<sys-func>(<args>)`
-    SysFuncOnUsrType(UsrTypeName, GenericsInstantiated, SysFuncName),
+    SysFuncOnUsrType(UsrTypeName, GenericsInstPartial, SysFuncName),
     /// `<type-param>::<sys-func>(<args>)`
     SysFuncOnParamType(TypeParamName, SysFuncName),
     /// `<sys-type>::[type-inst]::<usr-func>::[type-inst](<args>)`
     UsrFuncOnSysType(
         SysTypeName,
-        GenericsInstantiated,
+        GenericsInstPartial,
         UsrFuncName,
-        GenericsInstantiated,
+        GenericsInstPartial,
     ),
     /// `<usr-type>::[type-inst]::<usr-func>::[type-inst](<args>)`
     UsrFuncOnUsrType(
         UsrTypeName,
-        GenericsInstantiated,
+        GenericsInstPartial,
         UsrFuncName,
-        GenericsInstantiated,
+        GenericsInstPartial,
     ),
 }
 
@@ -335,7 +356,7 @@ impl QualifiedPath {
             },
             TypeName::Param(_) => Generics::intrinsic(vec![]),
         };
-        let inst_for_ty = GenericsInstantiated::from_args(ctxt, &ty_generics, arguments)?;
+        let inst_for_ty = GenericsInstPartial::from_args(ctxt, &ty_generics, arguments)?;
 
         // func
         let PathSegment { ident, arguments } = bail_if_missing!(iter.next(), path, "type name");
@@ -375,7 +396,7 @@ impl QualifiedPath {
                     None => bail_on!(ident, "no such intrinsic function"),
                     Some(fty) => {
                         let inst_for_fn =
-                            GenericsInstantiated::from_args(ctxt, &fty.generics, arguments)?;
+                            GenericsInstPartial::from_args(ctxt, &fty.generics, arguments)?;
                         Self::UsrFuncOnSysType(ty_name, inst_for_ty, name.clone(), inst_for_fn)
                     }
                 },
@@ -383,7 +404,7 @@ impl QualifiedPath {
                     None => bail_on!(ident, "no such function"),
                     Some(fty) => {
                         let inst_for_fn =
-                            GenericsInstantiated::from_args(ctxt, &fty.generics, arguments)?;
+                            GenericsInstPartial::from_args(ctxt, &fty.generics, arguments)?;
                         Self::UsrFuncOnUsrType(ty_name, inst_for_ty, name.clone(), inst_for_fn)
                     }
                 },

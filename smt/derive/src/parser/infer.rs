@@ -6,7 +6,7 @@ use rusmart_utils::display::format_seq;
 
 use crate::parser::apply::TypeFn;
 use crate::parser::name::{TypeParamName, UsrTypeName};
-use crate::parser::path::GenericsInstantiated;
+use crate::parser::path::GenericsInstFull;
 use crate::parser::ty::TypeTag;
 
 /// An error for type inference
@@ -137,47 +137,6 @@ impl TypeRef {
             Self::Map(key, val) => key.validate() && val.validate(),
             Self::User(_, args) => args.iter().all(|t| t.validate()),
         }
-    }
-
-    /// Apply type parameter substitution
-    pub fn substitute_params(
-        unifier: &mut TypeUnifier,
-        tag: &TypeTag,
-        substitute: &GenericsInstantiated,
-    ) -> TSResult<TypeRef> {
-        let updated = match tag {
-            TypeTag::Boolean => TypeRef::Boolean,
-            TypeTag::Integer => TypeRef::Integer,
-            TypeTag::Rational => TypeRef::Rational,
-            TypeTag::Text => TypeRef::Text,
-            TypeTag::Cloak(sub) => {
-                TypeRef::Cloak(Self::substitute_params(unifier, sub, substitute)?.into())
-            }
-            TypeTag::Seq(sub) => {
-                TypeRef::Seq(Self::substitute_params(unifier, sub, substitute)?.into())
-            }
-            TypeTag::Set(sub) => {
-                TypeRef::Set(Self::substitute_params(unifier, sub, substitute)?.into())
-            }
-            TypeTag::Map(key, val) => TypeRef::Map(
-                Self::substitute_params(unifier, key, substitute)?.into(),
-                Self::substitute_params(unifier, val, substitute)?.into(),
-            ),
-            TypeTag::Error => TypeRef::Error,
-            TypeTag::User(name, args) => TypeRef::User(
-                name.clone(),
-                args.iter()
-                    .map(|t| Self::substitute_params(unifier, t, substitute))
-                    .collect::<TSResult<_>>()?,
-            ),
-            TypeTag::Parameter(name) => {
-                match substitute.get(name).ok_or(TSError::NoSuchParameter)? {
-                    None => TypeRef::Var(unifier.mk_var()),
-                    Some(t) => t.into(),
-                }
-            }
-        };
-        Ok(updated)
     }
 }
 
@@ -476,18 +435,44 @@ impl TypeUnifier {
         self.typing.unify(lhs, rhs, &mut involved)
     }
 
+    /// Instantiate a type tag by applying type parameter subsitution
+    pub fn instantiate(&mut self, tag: &TypeTag, subst: &GenericsInstFull) -> TSResult<TypeRef> {
+        let updated = match tag {
+            TypeTag::Boolean => TypeRef::Boolean,
+            TypeTag::Integer => TypeRef::Integer,
+            TypeTag::Rational => TypeRef::Rational,
+            TypeTag::Text => TypeRef::Text,
+            TypeTag::Cloak(sub) => TypeRef::Cloak(self.instantiate(sub, subst)?.into()),
+            TypeTag::Seq(sub) => TypeRef::Seq(self.instantiate(sub, subst)?.into()),
+            TypeTag::Set(sub) => TypeRef::Set(self.instantiate(sub, subst)?.into()),
+            TypeTag::Map(key, val) => TypeRef::Map(
+                self.instantiate(key, subst)?.into(),
+                self.instantiate(val, subst)?.into(),
+            ),
+            TypeTag::Error => TypeRef::Error,
+            TypeTag::User(name, args) => TypeRef::User(
+                name.clone(),
+                args.iter()
+                    .map(|t| self.instantiate(t, subst))
+                    .collect::<TSResult<_>>()?,
+            ),
+            TypeTag::Parameter(name) => subst.get(name).ok_or(TSError::NoSuchParameter)?.clone(),
+        };
+        Ok(updated)
+    }
+
     /// Instantiate a function type
     pub fn instantiate_func_ty(
         &mut self,
         fty: &TypeFn,
-        subst: &GenericsInstantiated,
+        subst: &GenericsInstFull,
     ) -> TSResult<(Vec<TypeRef>, TypeRef)> {
         let params: Vec<_> = fty
             .params
             .iter()
-            .map(|t| TypeRef::substitute_params(self, t, subst))
+            .map(|t| self.instantiate(t, subst))
             .collect::<TSResult<_>>()?;
-        let ret_ty = TypeRef::substitute_params(self, &fty.ret_ty, subst)?;
+        let ret_ty = self.instantiate(&fty.ret_ty, subst)?;
         Ok((params, ret_ty))
     }
 
