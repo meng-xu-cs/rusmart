@@ -15,7 +15,7 @@ use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::func::{CastFuncName, FuncName, FuncSig, SysFuncName};
 use crate::parser::generics::Generics;
-use crate::parser::infer::{bail_on_ts_err, ti_unify, TypeRef, TypeUnifier};
+use crate::parser::infer::{ti_unify, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::path::QualifiedPath;
@@ -1043,9 +1043,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             None => bail_on!(func, "[invariant] no such function"),
                             Some(fty) => fty,
                         };
-
-                        let (params, ret_ty) =
-                            bail_on_ts_err!(unifier.instantiate_func_ty(fty, &inst), func);
+                        let (params, ret_ty) = match fty.instantiate(&inst) {
+                            None => bail_on!(func, "no such type parameter"),
+                            Some(instantiated) => instantiated,
+                        };
 
                         // parse arguments
                         let parsed_args =
@@ -1084,10 +1085,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         QualifiedPath::SysFuncOnSysType(ty_name, ty_inst, fn_name) => {
                             // derive the operand type
                             let ty_inst = ty_inst.complete(unifier);
-                            let operand_ty = bail_on_ts_err!(
-                                unifier.instantiate(&ty_name.as_type_tag(), &ty_inst),
-                                func
-                            );
+                            let operand_ty = match ty_inst.instantiate(&ty_name.as_type_tag()) {
+                                None => bail_on!(func, "no such type parameter"),
+                                Some(t) => t,
+                            };
 
                             // parse arguments
                             self.parse_sys_func_args(unifier, &fn_name, operand_ty, expr_call)?
@@ -1106,8 +1107,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 ),
                             };
                             let ty_inst = ty_inst.complete(unifier);
-                            let operand_ty =
-                                bail_on_ts_err!(unifier.instantiate(&operand_tag, &ty_inst), func);
+                            let operand_ty = match ty_inst.instantiate(&operand_tag) {
+                                None => bail_on!(func, "no such type parameter"),
+                                Some(t) => t,
+                            };
 
                             // parse arguments
                             self.parse_sys_func_args(unifier, &fn_name, operand_ty, expr_call)?
@@ -1136,8 +1139,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                     Some(inst) => inst,
                                 };
 
-                            let (params, ret_ty) =
-                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &inst), func);
+                            let (params, ret_ty) = match fty.instantiate(&inst) {
+                                None => bail_on!(func, "no such type parameter"),
+                                Some(instantiated) => instantiated,
+                            };
 
                             // parse the arguments
                             let parsed_args =
@@ -1168,8 +1173,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                     Some(inst) => inst,
                                 };
 
-                            let (params, ret_ty) =
-                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &inst), func);
+                            let (params, ret_ty) = match fty.instantiate(&inst) {
+                                None => bail_on!(func, "no such type parameter"),
+                                Some(instantiated) => instantiated,
+                            };
 
                             // parse the arguments
                             let parsed_args =

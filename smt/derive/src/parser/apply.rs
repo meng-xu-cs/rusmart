@@ -4,8 +4,8 @@ use anyhow::{bail, Result};
 
 use crate::parser::expr::{CtxtForExpr, Expr, Op};
 use crate::parser::func::FuncSig;
-use crate::parser::generics::{Generics, GenericsInstPartial};
-use crate::parser::infer::{TIError, TSError, TypeRef, TypeUnifier};
+use crate::parser::generics::{Generics, GenericsInstFull, GenericsInstPartial};
+use crate::parser::infer::{TIError, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
@@ -36,6 +36,17 @@ impl TypeFn {
             params: sig.params.iter().map(|(_, ty)| ty.clone()).collect(),
             ret_ty: sig.ret_ty.clone(),
         }
+    }
+
+    /// Instantiate a function type
+    pub fn instantiate(&self, subst: &GenericsInstFull) -> Option<(Vec<TypeRef>, TypeRef)> {
+        let params: Vec<_> = self
+            .params
+            .iter()
+            .map(|t| subst.instantiate(t))
+            .collect::<Option<_>>()?;
+        let ret_ty = subst.instantiate(&self.ret_ty)?;
+        Some((params, ret_ty))
     }
 }
 
@@ -355,9 +366,9 @@ impl ApplyDatabase {
             };
 
             // try to match the function
-            let (params, ret_ty) = match probing.instantiate_func_ty(fty, &inst_full) {
-                Ok(instantiated) => instantiated,
-                Err(TSError::NoSuchParameter) => bail!("no such type parameter"),
+            let (params, ret_ty) = match fty.instantiate(&inst_full) {
+                None => bail!("no such type parameter"),
+                Some(instantiated) => instantiated,
             };
 
             // unify parameter types

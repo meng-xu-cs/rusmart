@@ -274,11 +274,6 @@ pub struct GenericsInstFull {
 }
 
 impl GenericsInstFull {
-    /// Retrieve an argument
-    pub fn get(&self, name: &TypeParamName) -> Option<&TypeRef> {
-        self.args.get(name).map(|(_, t)| t)
-    }
-
     /// Shape the arguments in its declaration order, filling missed ones with fresh type variables
     pub fn vec(&self) -> Vec<TypeRef> {
         let rev: BTreeMap<_, _> = self
@@ -309,6 +304,31 @@ impl GenericsInstFull {
         } else {
             None
         }
+    }
+
+    /// Instantiate a type tag by applying type parameter substitution
+    pub fn instantiate(&self, tag: &TypeTag) -> Option<TypeRef> {
+        let updated = match tag {
+            TypeTag::Boolean => TypeRef::Boolean,
+            TypeTag::Integer => TypeRef::Integer,
+            TypeTag::Rational => TypeRef::Rational,
+            TypeTag::Text => TypeRef::Text,
+            TypeTag::Cloak(sub) => TypeRef::Cloak(self.instantiate(sub)?.into()),
+            TypeTag::Seq(sub) => TypeRef::Seq(self.instantiate(sub)?.into()),
+            TypeTag::Set(sub) => TypeRef::Set(self.instantiate(sub)?.into()),
+            TypeTag::Map(key, val) => {
+                TypeRef::Map(self.instantiate(key)?.into(), self.instantiate(val)?.into())
+            }
+            TypeTag::Error => TypeRef::Error,
+            TypeTag::User(name, args) => TypeRef::User(
+                name.clone(),
+                args.iter()
+                    .map(|t| self.instantiate(t))
+                    .collect::<Option<_>>()?,
+            ),
+            TypeTag::Parameter(name) => self.args.get(name).map(|(_, t)| t)?.clone(),
+        };
+        Some(updated)
     }
 }
 

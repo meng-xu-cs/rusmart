@@ -6,7 +6,7 @@ use syn::{ExprMatch, ExprPath, FieldPat, Member, Pat, PatOr, PatStruct, PatTuple
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::{CtxtForExpr, Expr, MatchCombo, MatchVariant, Unpack};
 use crate::parser::generics::GenericsInstFull;
-use crate::parser::infer::{bail_on_ts_err, ti_unify, TypeRef, TypeUnifier};
+use crate::parser::infer::{ti_unify, TypeRef, TypeUnifier};
 use crate::parser::name::{UsrTypeName, VarName};
 use crate::parser::path::ADTPath;
 use crate::parser::ty::EnumVariant;
@@ -108,8 +108,10 @@ impl MatchAnalyzer {
                             match Self::analyze_pat_match_binding(elem)? {
                                 None => (),
                                 Some(var) => {
-                                    let ty_substitute =
-                                        bail_on_ts_err!(unifier.instantiate(slot, &inst), elem);
+                                    let ty_substitute = match inst.instantiate(slot) {
+                                        None => bail_on!(elem, "no such type parameter"),
+                                        Some(instantiated) => instantiated,
+                                    };
                                     match bindings.insert(var.clone(), ty_substitute) {
                                         None => (),
                                         Some(_) => {
@@ -168,8 +170,10 @@ impl MatchAnalyzer {
                                 None => bail_on!(member, "no such field"),
                                 Some(t) => t,
                             };
-                            let ty_substitute =
-                                bail_on_ts_err!(unifier.instantiate(field_type, &inst), member);
+                            let ty_substitute = match inst.instantiate(field_type) {
+                                None => bail_on!(member, "no such type parameter"),
+                                Some(instantiated) => instantiated,
+                            };
 
                             match Self::analyze_pat_match_binding(pat)? {
                                 None => (),
