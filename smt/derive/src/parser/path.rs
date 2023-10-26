@@ -29,8 +29,10 @@ impl GenericsInstPartial {
     }
 
     /// Create an instantiation with generics and type argument (optionally parsed)
-    pub fn new_with_args(generics: &Generics, args: &[TypeTag]) -> Self {
-        assert_eq!(generics.params.len(), args.len());
+    pub fn try_with_args(generics: &Generics, args: &[TypeTag]) -> Option<Self> {
+        if generics.params.len() != args.len() {
+            return None;
+        }
         let ty_args = generics
             .params
             .iter()
@@ -38,7 +40,7 @@ impl GenericsInstPartial {
             .enumerate()
             .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
             .collect();
-        GenericsInstPartial { args: ty_args }
+        Some(GenericsInstPartial { args: ty_args })
     }
 
     /// A utility function to parse type arguments
@@ -71,19 +73,6 @@ impl GenericsInstPartial {
         Ok(GenericsInstPartial { args: ty_args })
     }
 
-    /// Append the second generics into the first one
-    pub fn append(&mut self, other: Self) -> bool {
-        let len = self.args.len();
-        for (name, (index, tag)) in other.args {
-            // should not have conflicting type parameter names
-            match self.args.insert(name, (index + len, tag)) {
-                None => (),
-                Some(_) => return false,
-            }
-        }
-        true
-    }
-
     /// Complete the instantiation with the help of a tupe unifier
     pub fn complete(self, unifier: &mut TypeUnifier) -> GenericsInstFull {
         let args = self
@@ -113,9 +102,35 @@ impl GenericsInstFull {
     }
 
     /// Shape the arguments in its declaration order, filling missed ones with fresh type variables
-    pub fn into_vec(self) -> Vec<TypeRef> {
-        let rev: BTreeMap<_, _> = self.args.into_iter().map(|(_, (i, t))| (i, t)).collect();
+    pub fn vec(&self) -> Vec<TypeRef> {
+        let rev: BTreeMap<_, _> = self
+            .args
+            .iter()
+            .map(|(_, (i, t))| (*i, t.clone()))
+            .collect();
         rev.into_values().collect()
+    }
+
+    /// Make a type ref combined with type name
+    pub fn make_ty(&self, name: UsrTypeName) -> TypeRef {
+        TypeRef::User(name, self.vec())
+    }
+
+    /// Merge two generics into one
+    pub fn merge(&self, other: &Self) -> Option<Self> {
+        let args: BTreeMap<_, _> = self
+            .args
+            .iter()
+            .chain(&other.args)
+            .map(|(name, (idx, ty))| (name.clone(), (*idx + self.args.len(), ty.clone())))
+            .collect();
+
+        // should not have conflicting type parameter names
+        if args.len() == self.args.len() + other.args.len() {
+            Some(Self { args })
+        } else {
+            None
+        }
     }
 }
 
@@ -153,14 +168,6 @@ impl TuplePath {
         bail_if_exists!(iter.next());
         Ok(Self { ty_name, ty_args })
     }
-
-    /// Build a type reference out of this path
-    pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
-        TypeRef::User(
-            self.ty_name.clone(),
-            self.ty_args.complete(unifier).into_vec(),
-        )
-    }
 }
 
 /// An identifier to a record with optional type arguments
@@ -197,21 +204,13 @@ impl RecordPath {
         bail_if_exists!(iter.next());
         Ok(Self { ty_name, ty_args })
     }
-
-    /// Build a type reference out of this path
-    pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
-        TypeRef::User(
-            self.ty_name.clone(),
-            self.ty_args.complete(unifier).into_vec(),
-        )
-    }
 }
 
 /// An identifier to an ADT variant with optional type arguments
 pub struct ADTPath {
-    pub ty_name: UsrTypeName,
-    pub ty_args: GenericsInstPartial,
-    pub variant: String,
+    ty_name: UsrTypeName,
+    ty_args: GenericsInstPartial,
+    variant: String,
 }
 
 impl ADTPath {
@@ -255,20 +254,14 @@ impl ADTPath {
         })
     }
 
-    /// Turn the path into a branch
-    pub fn into_branch(self) -> ADTBranch {
-        ADTBranch {
-            ty_name: self.ty_name,
-            variant: self.variant,
-        }
-    }
-
-    /// Build a type reference out of this path
-    pub fn as_ty_ref(&self, unifier: &mut TypeUnifier) -> TypeRef {
-        TypeRef::User(
-            self.ty_name.clone(),
-            self.ty_args.complete(unifier).into_vec(),
-        )
+    /// Turn the path into a branch and full instantiation
+    pub fn complete(self, unifier: &mut TypeUnifier) -> (ADTBranch, GenericsInstFull) {
+        let Self {
+            ty_name,
+            ty_args,
+            variant,
+        } = self;
+        (ADTBranch { ty_name, variant }, ty_args.complete(unifier))
     }
 }
 

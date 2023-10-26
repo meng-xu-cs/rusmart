@@ -18,7 +18,7 @@ use crate::parser::generics::Generics;
 use crate::parser::infer::{bail_on_ts_err, ti_unify, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
-use crate::parser::path::{ADTPath, QualifiedPath};
+use crate::parser::path::QualifiedPath;
 use crate::parser::ty::{CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeTag};
 use crate::parser::util::{
     ExprPathAsCallee, ExprPathAsRecord, ExprPathAsTarget, PatUtil, PathUtil,
@@ -33,10 +33,10 @@ pub trait CtxtForExpr: CtxtForType {
     fn get_type_def(&self, name: &UsrTypeName) -> Option<&TypeDef>;
 
     /// Retrieve the definition of an enum variant
-    fn get_adt_variant_details(&self, path: &ADTPath) -> Option<&EnumVariant> {
-        let def = self.get_type_def(&path.ty_name)?;
+    fn get_adt_variant_details(&self, branch: &ADTBranch) -> Option<&EnumVariant> {
+        let def = self.get_type_def(&branch.ty_name)?;
         let variant = match &def.body {
-            TypeBody::Enum(adt) => adt.variants.get(&path.variant)?,
+            TypeBody::Enum(adt) => adt.variants.get(&branch.variant)?,
             _ => return None,
         };
         Some(variant)
@@ -191,9 +191,15 @@ impl Expr {
         }
     }
 
-    /// Visitor with pre/post traversal function
-    pub fn visit<PRE, POST>(&mut self, mut pre: PRE, mut post: POST) -> anyhow::Result<()>
+    /// Visitor with ty/pre/post traversal function
+    pub fn visit<TY, PRE, POST>(
+        &mut self,
+        mut ty: TY,
+        mut pre: PRE,
+        mut post: POST,
+    ) -> anyhow::Result<()>
     where
+        TY: FnMut(&mut TypeRef) -> anyhow::Result<()> + Copy,
         PRE: FnMut(&mut Self) -> anyhow::Result<()> + Copy,
         POST: FnMut(&mut Self) -> anyhow::Result<()> + Copy,
     {
@@ -205,146 +211,220 @@ impl Expr {
             Expr::Unit(inst) => inst,
             Expr::Block { lets, body } => {
                 for (_, sub) in lets {
-                    sub.visit(pre, post)?;
+                    sub.visit(ty, pre, post)?;
                 }
                 body
             }
         };
 
+        // run on type
+        ty(&mut inst.ty)?;
+
+        // run on opcode
         match inst.op.as_mut() {
             Op::Var(_) => (),
-            Op::Tuple { name: _, slots } => {
+            Op::Tuple {
+                name: _,
+                inst,
+                slots,
+            } => {
+                for targ in inst {
+                    ty(targ)?;
+                }
                 for slot in slots {
-                    slot.visit(pre, post)?;
+                    slot.visit(ty, pre, post)?;
                 }
             }
-            Op::Record { name: _, fields } => {
+            Op::Record {
+                name: _,
+                inst,
+                fields,
+            } => {
+                for targ in inst {
+                    ty(targ)?;
+                }
                 for field in fields.values_mut() {
-                    field.visit(pre, post)?;
+                    field.visit(ty, pre, post)?;
                 }
             }
-            Op::EnumUnit(_) => (),
-            Op::EnumTuple { branch: _, slots } => {
+            Op::EnumUnit { branch: _, inst } => {
+                for targ in inst {
+                    ty(targ)?;
+                }
+            }
+            Op::EnumTuple {
+                branch: _,
+                inst,
+                slots,
+            } => {
+                for targ in inst {
+                    ty(targ)?;
+                }
                 for slot in slots {
-                    slot.visit(pre, post)?;
+                    slot.visit(ty, pre, post)?;
                 }
             }
-            Op::EnumRecord { branch: _, fields } => {
+            Op::EnumRecord {
+                branch: _,
+                inst,
+                fields,
+            } => {
+                for targ in inst {
+                    ty(targ)?;
+                }
                 for field in fields.values_mut() {
-                    field.visit(pre, post)?;
+                    field.visit(ty, pre, post)?;
                 }
             }
             Op::AccessSlot { base, slot: _ } | Op::AccessField { base, field: _ } => {
-                base.visit(pre, post)?;
+                base.visit(ty, pre, post)?;
             }
             Op::Match { heads, combo } => {
                 for head in heads {
-                    head.visit(pre, post)?;
+                    head.visit(ty, pre, post)?;
                 }
                 for item in combo {
-                    item.body.visit(pre, post)?;
+                    item.body.visit(ty, pre, post)?;
                 }
             }
             Op::Phi { nodes, default } => {
                 for node in nodes {
-                    node.cond.visit(pre, post)?;
-                    node.body.visit(pre, post)?;
+                    node.cond.visit(ty, pre, post)?;
+                    node.body.visit(ty, pre, post)?;
                 }
-                default.visit(pre, post)?;
+                default.visit(ty, pre, post)?;
             }
             Op::Forall { vars: _, body } | Op::Exists { vars: _, body } => {
-                body.visit(pre, post)?;
+                body.visit(ty, pre, post)?;
             }
             Op::Intrinsic(intrinsic) => match intrinsic {
                 // boolean
                 Intrinsic::BoolVal(_) => (),
-                Intrinsic::BoolNot(e1) => e1.visit(pre, post)?,
-                Intrinsic::BoolAnd(e1, e2)
-                | Intrinsic::BoolOr(e1, e2)
-                | Intrinsic::BoolXor(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::BoolNot { val } => val.visit(ty, pre, post)?,
+                Intrinsic::BoolAnd { lhs, rhs }
+                | Intrinsic::BoolOr { lhs, rhs }
+                | Intrinsic::BoolXor { lhs, rhs } => {
+                    lhs.visit(ty, pre, post)?;
+                    rhs.visit(ty, pre, post)?;
                 }
                 // integer
                 Intrinsic::IntVal(_) => (),
-                Intrinsic::IntLt(e1, e2)
-                | Intrinsic::IntLe(e1, e2)
-                | Intrinsic::IntGe(e1, e2)
-                | Intrinsic::IntGt(e1, e2)
-                | Intrinsic::IntAdd(e1, e2)
-                | Intrinsic::IntSub(e1, e2)
-                | Intrinsic::IntMul(e1, e2)
-                | Intrinsic::IntDiv(e1, e2)
-                | Intrinsic::IntRem(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::IntLt { lhs, rhs }
+                | Intrinsic::IntLe { lhs, rhs }
+                | Intrinsic::IntGe { lhs, rhs }
+                | Intrinsic::IntGt { lhs, rhs }
+                | Intrinsic::IntAdd { lhs, rhs }
+                | Intrinsic::IntSub { lhs, rhs }
+                | Intrinsic::IntMul { lhs, rhs }
+                | Intrinsic::IntDiv { lhs, rhs }
+                | Intrinsic::IntRem { lhs, rhs } => {
+                    lhs.visit(ty, pre, post)?;
+                    rhs.visit(ty, pre, post)?;
                 }
                 // rational
                 Intrinsic::NumVal(_) => (),
-                Intrinsic::NumLt(e1, e2)
-                | Intrinsic::NumLe(e1, e2)
-                | Intrinsic::NumGe(e1, e2)
-                | Intrinsic::NumGt(e1, e2)
-                | Intrinsic::NumAdd(e1, e2)
-                | Intrinsic::NumSub(e1, e2)
-                | Intrinsic::NumMul(e1, e2)
-                | Intrinsic::NumDiv(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::NumLt { lhs, rhs }
+                | Intrinsic::NumLe { lhs, rhs }
+                | Intrinsic::NumGe { lhs, rhs }
+                | Intrinsic::NumGt { lhs, rhs }
+                | Intrinsic::NumAdd { lhs, rhs }
+                | Intrinsic::NumSub { lhs, rhs }
+                | Intrinsic::NumMul { lhs, rhs }
+                | Intrinsic::NumDiv { lhs, rhs } => {
+                    lhs.visit(ty, pre, post)?;
+                    rhs.visit(ty, pre, post)?;
                 }
                 // string
                 Intrinsic::StrVal(_) => (),
-                Intrinsic::StrLt(e1, e2) | Intrinsic::StrLe(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::StrLt { lhs, rhs } | Intrinsic::StrLe { lhs, rhs } => {
+                    lhs.visit(ty, pre, post)?;
+                    rhs.visit(ty, pre, post)?;
                 }
                 // cloak
-                Intrinsic::BoxReveal(e) | Intrinsic::BoxShield(e) => {
-                    e.visit(pre, post)?;
+                Intrinsic::BoxReveal { t, val } | Intrinsic::BoxShield { t, val } => {
+                    ty(t)?;
+                    val.visit(ty, pre, post)?;
                 }
                 // seq
-                Intrinsic::SeqEmpty => (),
-                Intrinsic::SeqLength(e) => e.visit(pre, post)?,
-                Intrinsic::SeqAppend(e1, e2)
-                | Intrinsic::SeqAt(e1, e2)
-                | Intrinsic::SeqIncludes(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::SeqEmpty { t } => ty(t)?,
+                Intrinsic::SeqLength { t, seq } => {
+                    ty(t)?;
+                    seq.visit(ty, pre, post)?;
+                }
+                Intrinsic::SeqAppend { t, seq, item } | Intrinsic::SeqIncludes { t, seq, item } => {
+                    ty(t)?;
+                    seq.visit(ty, pre, post)?;
+                    item.visit(ty, pre, post)?;
+                }
+                Intrinsic::SeqAt { t, seq, idx } => {
+                    ty(t)?;
+                    seq.visit(ty, pre, post)?;
+                    idx.visit(ty, pre, post)?;
                 }
                 // set
-                Intrinsic::SetEmpty => (),
-                Intrinsic::SetLength(e) => e.visit(pre, post)?,
-                Intrinsic::SetInsert(e1, e2) | Intrinsic::SetContains(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::SetEmpty { t } => ty(t)?,
+                Intrinsic::SetLength { t, set } => {
+                    ty(t)?;
+                    set.visit(ty, pre, post)?;
+                }
+                Intrinsic::SetInsert { t, set, item } | Intrinsic::SetContains { t, set, item } => {
+                    ty(t)?;
+                    set.visit(ty, pre, post)?;
+                    item.visit(ty, pre, post)?;
                 }
                 // map
-                Intrinsic::MapEmpty => (),
-                Intrinsic::MapLength(e) => e.visit(pre, post)?,
-                Intrinsic::MapGet(e1, e2) | Intrinsic::MapContainsKey(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::MapEmpty { k, v } => {
+                    ty(k)?;
+                    ty(v)?;
                 }
-                Intrinsic::MapPut(e1, e2, e3) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
-                    e3.visit(pre, post)?;
+                Intrinsic::MapLength { k, v, map } => {
+                    ty(k)?;
+                    ty(v)?;
+                    map.visit(ty, pre, post)?
+                }
+                Intrinsic::MapGet { k, v, map, key }
+                | Intrinsic::MapContainsKey { k, v, map, key } => {
+                    ty(k)?;
+                    ty(v)?;
+                    map.visit(ty, pre, post)?;
+                    key.visit(ty, pre, post)?;
+                }
+                Intrinsic::MapPut {
+                    k,
+                    v,
+                    map,
+                    key,
+                    val,
+                } => {
+                    ty(k)?;
+                    ty(v)?;
+                    map.visit(ty, pre, post)?;
+                    key.visit(ty, pre, post)?;
+                    val.visit(ty, pre, post)?;
                 }
                 // error
                 Intrinsic::ErrFresh => (),
-                Intrinsic::ErrMerge(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::ErrMerge { lhs, rhs } => {
+                    lhs.visit(ty, pre, post)?;
+                    rhs.visit(ty, pre, post)?;
                 }
                 // smt
-                Intrinsic::SmtEq(e1, e2) | Intrinsic::SmtNe(e1, e2) => {
-                    e1.visit(pre, post)?;
-                    e2.visit(pre, post)?;
+                Intrinsic::SmtEq { t, lhs, rhs } | Intrinsic::SmtNe { t, lhs, rhs } => {
+                    ty(t)?;
+                    lhs.visit(ty, pre, post)?;
+                    rhs.visit(ty, pre, post)?;
                 }
             },
-            Op::Procedure { name: _, args } => {
+            Op::Procedure {
+                name: _,
+                inst,
+                args,
+            } => {
+                for targ in inst {
+                    ty(targ)?;
+                }
                 for arg in args {
-                    arg.visit(pre, post)?;
+                    arg.visit(ty, pre, post)?;
                 }
             }
         }
@@ -415,14 +495,15 @@ impl<'ctx> ExprParserRoot<'ctx> {
 
         // check type completeness of the expression
         let result = parsed.visit(
-            |expr| {
-                let refreshed = unifier.refresh_type(expr.ty());
+            |ty| {
+                let refreshed = unifier.refresh_type(ty);
                 if !refreshed.validate() {
                     anyhow::bail!("incomplete type");
                 }
-                expr.set_ty(refreshed);
+                *ty = refreshed;
                 Ok(())
             },
+            |_| Ok(()),
             |_| Ok(()),
         );
         match result {
@@ -595,7 +676,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         Op::Var(name)
                     }
                     ExprPathAsTarget::EnumUnit(adt) => {
-                        let variant = match self.root.get_adt_variant_details(&adt) {
+                        let (branch, inst) = adt.complete(unifier);
+                        let variant = match self.root.get_adt_variant_details(&branch) {
                             None => bail_on!(expr_path, "[invariant] no such type or variant"),
                             Some(details) => details,
                         };
@@ -603,10 +685,15 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             bail_on!(expr_path, "not a unit variant");
                         }
 
-                        // unify the type and then build the instruction
-                        let ty_ref = adt.as_ty_ref(unifier);
-                        ti_unify!(unifier, &ty_ref, &self.exp_ty, target);
-                        Op::EnumUnit(adt.into_branch())
+                        // unify the return type
+                        let ret_ty = inst.make_ty(branch.ty_name.clone());
+                        ti_unify!(unifier, &ret_ty, &self.exp_ty, target);
+
+                        // build the opcode
+                        Op::EnumUnit {
+                            branch,
+                            inst: inst.vec(),
+                        }
                     }
                 }
             }
@@ -637,7 +724,9 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 _ => bail_on!(expr_struct, "[invariant] not a record type"),
                             },
                         };
-                        let ret_ty = record.as_ty_ref(unifier);
+
+                        let inst = record.ty_args.complete(unifier);
+                        let ret_ty = inst.make_ty(record.ty_name.clone());
 
                         // parse the arguments
                         let field_vals =
@@ -646,14 +735,17 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // build the opcode
                         Op::Record {
                             name: record.ty_name,
+                            inst: inst.vec(),
                             fields: field_vals,
                         }
                     }
                     ExprPathAsRecord::CtorEnum(adt) => {
-                        let variant = match self.root.get_adt_variant_details(&adt) {
+                        let (branch, inst) = adt.complete(unifier);
+                        let variant = match self.root.get_adt_variant_details(&branch) {
                             None => bail_on!(expr_struct, "[invariant] no such type or variant"),
                             Some(details) => details,
                         };
+
                         let fields = match variant {
                             EnumVariant::Record(record_def) => record_def
                                 .fields
@@ -662,7 +754,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 .collect(),
                             _ => bail_on!(expr_struct, "not a record variant"),
                         };
-                        let ret_ty = adt.as_ty_ref(unifier);
+                        let ret_ty = inst.make_ty(branch.ty_name.clone());
 
                         // parse the arguments
                         let field_vals =
@@ -670,7 +762,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                         // build the opcode
                         Op::EnumRecord {
-                            branch: adt.into_branch(),
+                            branch,
+                            inst: inst.vec(),
                             fields: field_vals,
                         }
                     }
@@ -957,8 +1050,10 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             None => bail_on!(func, "[invariant] no such function"),
                             Some(fty) => fty,
                         };
+
+                        let inst = path.ty_args.complete(unifier);
                         let (params, ret_ty) =
-                            bail_on_ts_err!(unifier.instantiate_func_ty(fty, &path.ty_args), func);
+                            bail_on_ts_err!(unifier.instantiate_func_ty(fty, &inst), func);
 
                         // parse arguments
                         let parsed_args =
@@ -967,6 +1062,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // build the opcode
                         Op::Procedure {
                             name: path.fn_name.clone(),
+                            inst: inst.vec(),
                             args: parsed_args,
                         }
                     }
@@ -995,17 +1091,14 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // system function
                         QualifiedPath::SysFuncOnSysType(ty_name, ty_inst, fn_name) => {
                             // derive the operand type
+                            let ty_inst = ty_inst.complete(unifier);
                             let operand_ty = bail_on_ts_err!(
-                                TypeRef::substitute_params(
-                                    unifier,
-                                    &ty_name.as_type_tag(),
-                                    &ty_inst
-                                ),
+                                unifier.instantiate(&ty_name.as_type_tag(), &ty_inst),
                                 func
                             );
 
                             // parse arguments
-                            self.parse_sys_func_args(unifier, &fn_name, &operand_ty, expr_call)?
+                            self.parse_sys_func_args(unifier, &fn_name, operand_ty, expr_call)?
                         }
                         QualifiedPath::SysFuncOnUsrType(ty_name, ty_inst, fn_name) => {
                             // derive the operand type
@@ -1020,61 +1113,71 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                         .collect(),
                                 ),
                             };
-                            let operand_ty = bail_on_ts_err!(
-                                TypeRef::substitute_params(unifier, &operand_tag, &ty_inst),
-                                func
-                            );
+                            let ty_inst = ty_inst.complete(unifier);
+                            let operand_ty =
+                                bail_on_ts_err!(unifier.instantiate(&operand_tag, &ty_inst), func);
 
                             // parse arguments
-                            self.parse_sys_func_args(unifier, &fn_name, &operand_ty, expr_call)?
+                            self.parse_sys_func_args(unifier, &fn_name, operand_ty, expr_call)?
                         }
-                        QualifiedPath::SysFuncOnParamType(ty_name, fn_name) => {
-                            // derive the operand type
-                            let operand_ty = TypeRef::Parameter(ty_name);
-
-                            // parse arguments
-                            self.parse_sys_func_args(unifier, &fn_name, &operand_ty, expr_call)?
-                        }
+                        QualifiedPath::SysFuncOnParamType(ty_name, fn_name) => self
+                            .parse_sys_func_args(
+                                unifier,
+                                &fn_name,
+                                TypeRef::Parameter(ty_name),
+                                expr_call,
+                            )?,
                         // user-defined function on a system type (i.e., intrinsic function)
-                        QualifiedPath::UsrFuncOnSysType(ty_name, mut ty_inst, fn_name, fn_inst) => {
-                            // substitute types in function parameters
+                        QualifiedPath::UsrFuncOnSysType(ty_name, ty_inst, fn_name, fn_inst) => {
+                            // derive type param substitutions
                             let fty =
                                 match self.root.lookup_usr_func_on_sys_type(&ty_name, &fn_name) {
                                     None => bail_on!(func, "[invariant] no such function"),
                                     Some(fty) => fty,
                                 };
 
-                            if !ty_inst.append(fn_inst) {
-                                bail_on!(func, "conflicting type parameter name");
-                            }
+                            // for simplicity, require type generics be the first set of type parameters
+                            // TODO: relax this requirement
+                            let inst =
+                                match ty_inst.complete(unifier).merge(&fn_inst.complete(unifier)) {
+                                    None => bail_on!(func, "conflicting type parameter name"),
+                                    Some(inst) => inst,
+                                };
+
                             let (params, ret_ty) =
-                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_inst), func);
+                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &inst), func);
 
                             // parse the arguments
                             let parsed_args =
                                 self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
 
                             // build the opcode
-                            let intrinsic = match Intrinsic::new(&ty_name, &fn_name, parsed_args) {
-                                Ok(parsed) => parsed,
-                                Err(e) => bail_on!(target, "{}", e),
-                            };
+                            let intrinsic =
+                                match Intrinsic::new(&ty_name, &fn_name, inst.vec(), parsed_args) {
+                                    Ok(parsed) => parsed,
+                                    Err(e) => bail_on!(target, "{}", e),
+                                };
                             Op::Intrinsic(intrinsic)
                         }
                         // user-defined function on a user-defined type
-                        QualifiedPath::UsrFuncOnUsrType(ty_name, mut ty_inst, fn_name, fn_inst) => {
-                            // substitute types in function parameters
+                        QualifiedPath::UsrFuncOnUsrType(ty_name, ty_inst, fn_name, fn_inst) => {
+                            // derive type param substitutions
                             let fty =
                                 match self.root.lookup_usr_func_on_usr_type(&ty_name, &fn_name) {
                                     None => bail_on!(func, "[invariant] no such function"),
                                     Some(fty) => fty,
                                 };
 
-                            if !ty_inst.append(fn_inst) {
-                                bail_on!(func, "conflicting type parameter name");
-                            }
+                            // for simplicity, require type generics be the first set of type parameters
+                            // TODO: relax this requirement
+                            let inst =
+                                match ty_inst.complete(unifier).merge(&fn_inst.complete(unifier)) {
+                                    None => bail_on!(func, "conflicting type parameter name"),
+                                    Some(inst) => inst,
+                                };
+
                             let (params, ret_ty) =
-                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &ty_inst), func);
+                                bail_on_ts_err!(unifier.instantiate_func_ty(fty, &inst), func);
 
                             // parse the arguments
                             let parsed_args =
@@ -1083,6 +1186,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             // build the opcode
                             Op::Procedure {
                                 name: fn_name.clone(),
+                                inst: inst.vec(),
                                 args: parsed_args,
                             }
                         }
@@ -1097,7 +1201,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 _ => bail_on!(expr_call, "[invariant] not a tuple type"),
                             },
                         };
-                        let ret_ty = tuple.as_ty_ref(unifier);
+                        let inst = tuple.ty_args.complete(unifier);
+                        let ret_ty = inst.make_ty(tuple.ty_name.clone());
 
                         // parse the arguments
                         let parsed_slots =
@@ -1106,11 +1211,13 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // build the opcode
                         Op::Tuple {
                             name: tuple.ty_name,
+                            inst: inst.vec(),
                             slots: parsed_slots,
                         }
                     }
                     ExprPathAsCallee::CtorEnum(adt) => {
-                        let variant = match self.root.get_adt_variant_details(&adt) {
+                        let (branch, inst) = adt.complete(unifier);
+                        let variant = match self.root.get_adt_variant_details(&branch) {
                             None => bail_on!(expr_call, "[invariant] no such type or variant"),
                             Some(details) => details,
                         };
@@ -1120,16 +1227,17 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             }
                             _ => bail_on!(expr_call, "not a tuple variant"),
                         };
-                        let ret_ty = adt.as_ty_ref(unifier);
+                        let ret_ty = inst.make_ty(branch.ty_name.clone());
 
                         // parse the arguments
-                        let parsed_args =
+                        let parsed_slots =
                             self.parse_call_arguments(unifier, &params, &ret_ty, expr_call)?;
 
                         // build the opcode
                         Op::EnumTuple {
-                            branch: adt.into_branch(),
-                            slots: parsed_args,
+                            branch,
+                            inst: inst.vec(),
+                            slots: parsed_slots,
                         }
                     }
                 }
@@ -1180,14 +1288,20 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
 
                         // build the opcode
-                        match name {
-                            SysFuncName::Eq => {
-                                Op::Intrinsic(Intrinsic::SmtEq(parsed_lhs, parsed_rhs))
-                            }
-                            SysFuncName::Ne => {
-                                Op::Intrinsic(Intrinsic::SmtNe(parsed_lhs, parsed_rhs))
-                            }
-                        }
+                        let intrinsic = match name {
+                            SysFuncName::Eq => Intrinsic::SmtEq {
+                                t: unifier.refresh_type(&operand_ty),
+                                lhs: parsed_lhs,
+                                rhs: parsed_rhs,
+                            },
+                            SysFuncName::Ne => Intrinsic::SmtNe {
+                                t: unifier.refresh_type(&operand_ty),
+                                lhs: parsed_lhs,
+                                rhs: parsed_rhs,
+                            },
+                        };
+
+                        Op::Intrinsic(intrinsic)
                     }
                     FuncName::Usr(name) => {
                         // collect type arguments, if any
@@ -1352,7 +1466,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
         &self,
         unifier: &mut TypeUnifier,
         fn_name: &SysFuncName,
-        operand: &TypeRef,
+        operand: TypeRef,
         expr_call: &ExprCall,
     ) -> Result<Op> {
         // parse arguments
@@ -1370,8 +1484,16 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
         // build the opcode
         let op = match fn_name {
-            SysFuncName::Eq => Op::Intrinsic(Intrinsic::SmtEq(parsed_lhs, parsed_rhs)),
-            SysFuncName::Ne => Op::Intrinsic(Intrinsic::SmtNe(parsed_lhs, parsed_rhs)),
+            SysFuncName::Eq => Op::Intrinsic(Intrinsic::SmtEq {
+                t: operand,
+                lhs: parsed_lhs,
+                rhs: parsed_rhs,
+            }),
+            SysFuncName::Ne => Op::Intrinsic(Intrinsic::SmtNe {
+                t: operand,
+                lhs: parsed_lhs,
+                rhs: parsed_rhs,
+            }),
         };
         Ok(op)
     }

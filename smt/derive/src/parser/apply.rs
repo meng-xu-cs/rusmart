@@ -325,7 +325,7 @@ impl ApplyDatabase {
             }
 
             // instantiation
-            let mut inst_pack = match &ty_name {
+            let ty_inst = match &ty_name {
                 TypeName::Sys(sys_name) => {
                     GenericsInstPartial::new_without_args(&sys_name.generics())
                 }
@@ -336,22 +336,26 @@ impl ApplyDatabase {
             };
             let fn_inst = match inst {
                 None => GenericsInstPartial::new_without_args(&fty.generics),
-                Some(tags) => {
-                    if tags.len() != fty.generics.params.len() {
-                        continue;
-                    }
-                    GenericsInstPartial::new_with_args(&fty.generics, tags)
-                }
+                Some(tags) => match GenericsInstPartial::try_with_args(&fty.generics, tags) {
+                    None => continue,
+                    Some(inst) => inst,
+                },
             };
-            if !inst_pack.append(fn_inst) {
-                bail!("[invariant] conflicting type parameter name");
-            }
 
             // use a probing unifier to check
             let mut probing = unifier.clone();
 
+            // for simplicity, require type generics be the first set of type parameters
+            // TODO: relax this requirement
+            let inst_full = match ty_inst
+                .complete(&mut probing)
+                .merge(&fn_inst.complete(&mut probing))
+            {
+                None => bail!("[invariant] conflicting type parameter name"),
+                Some(inst) => inst,
+            };
+
             // try to match the function
-            let inst_full = inst_pack.complete(&mut probing);
             let (params, ret_ty) = match probing.instantiate_func_ty(fty, &inst_full) {
                 Ok(instantiated) => instantiated,
                 Err(TSError::NoSuchParameter) => bail!("no such type parameter"),
@@ -390,11 +394,11 @@ impl ApplyDatabase {
             if suitable.is_some() {
                 bail!("more than one candidate match the method call");
             }
-            suitable = Some((ty_name, probing));
+            suitable = Some((ty_name, probing, inst_full));
         }
 
         // check matching exists
-        let (ty_name, probing) = match suitable {
+        let (ty_name, probing, inst_full) = match suitable {
             None => bail!("no candidates matches the method call"),
             Some(matched) => matched,
         };
@@ -405,11 +409,12 @@ impl ApplyDatabase {
         // construct the operator and return it
         let op = match ty_name {
             TypeName::Sys(sys_name) => {
-                let intrinsic = Intrinsic::new(&sys_name, name, args)?;
+                let intrinsic = Intrinsic::new(&sys_name, name, inst_full.vec(), args)?;
                 Op::Intrinsic(intrinsic)
             }
             TypeName::Usr(_) => Op::Procedure {
                 name: name.clone(),
+                inst: inst_full.vec(),
                 args,
             },
             TypeName::Param(_) => panic!("unexpected"),

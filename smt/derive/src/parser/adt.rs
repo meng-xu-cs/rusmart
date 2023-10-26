@@ -7,7 +7,7 @@ use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::{CtxtForExpr, Expr, MatchCombo, MatchVariant, Unpack};
 use crate::parser::infer::{bail_on_ts_err, ti_unify, TypeRef, TypeUnifier};
 use crate::parser::name::{UsrTypeName, VarName};
-use crate::parser::path::ADTPath;
+use crate::parser::path::{ADTPath, GenericsInstFull};
 use crate::parser::ty::EnumVariant;
 use crate::parser::util::PatUtil;
 
@@ -48,10 +48,15 @@ impl MatchAnalyzer {
         ctxt: &T,
         unifier: &mut TypeUnifier,
         pat: &Pat,
-    ) -> Result<(ADTPath, Unpack, BTreeMap<VarName, TypeRef>)> {
+    ) -> Result<(
+        ADTBranch,
+        GenericsInstFull,
+        Unpack,
+        BTreeMap<VarName, TypeRef>,
+    )> {
         let mut bindings = BTreeMap::new();
 
-        let (adt, unpack) = match pat {
+        let (branch, inst, unpack) = match pat {
             Pat::Path(pat_path) => {
                 let ExprPath {
                     attrs: _,
@@ -61,15 +66,17 @@ impl MatchAnalyzer {
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
                 let adt = ADTPath::from_path(ctxt, path)?;
-                let variant = match ctxt.get_adt_variant_details(&adt) {
+                let (branch, inst) = adt.complete(unifier);
+                let variant = match ctxt.get_adt_variant_details(&branch) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
+
                 match variant {
                     EnumVariant::Unit => (),
                     _ => bail_on!(pat, "unexpected pattern"),
                 }
-                (adt, Unpack::Unit)
+                (branch, inst, Unpack::Unit)
             }
             Pat::TupleStruct(pat_tuple) => {
                 let PatTupleStruct {
@@ -82,10 +89,12 @@ impl MatchAnalyzer {
                 bail_if_exists!(qself.as_ref().map(|q| &q.ty));
 
                 let adt = ADTPath::from_path(ctxt, path)?;
-                let variant = match ctxt.get_adt_variant_details(&adt) {
+                let (branch, inst) = adt.complete(unifier);
+                let variant = match ctxt.get_adt_variant_details(&branch) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
+
                 match variant {
                     EnumVariant::Tuple(def_tuple) => {
                         let slots = &def_tuple.slots;
@@ -98,10 +107,8 @@ impl MatchAnalyzer {
                             match Self::analyze_pat_match_binding(elem)? {
                                 None => (),
                                 Some(var) => {
-                                    let ty_substitute = bail_on_ts_err!(
-                                        TypeRef::substitute_params(unifier, slot, &adt.ty_args),
-                                        elem
-                                    );
+                                    let ty_substitute =
+                                        bail_on_ts_err!(unifier.instantiate(slot, &inst), elem);
                                     match bindings.insert(var.clone(), ty_substitute) {
                                         None => (),
                                         Some(_) => {
@@ -112,7 +119,7 @@ impl MatchAnalyzer {
                                 }
                             }
                         }
-                        (adt, Unpack::Tuple(unpack))
+                        (branch, inst, Unpack::Tuple(unpack))
                     }
                     _ => bail_on!(pat, "unexpected pattern"),
                 }
@@ -130,10 +137,12 @@ impl MatchAnalyzer {
                 bail_if_exists!(rest);
 
                 let adt = ADTPath::from_path(ctxt, path)?;
-                let variant = match ctxt.get_adt_variant_details(&adt) {
+                let (branch, inst) = adt.complete(unifier);
+                let variant = match ctxt.get_adt_variant_details(&branch) {
                     None => bail_on!(path, "not a valid enum branch"),
                     Some(def) => def,
                 };
+
                 match variant {
                     EnumVariant::Record(def_record) => {
                         let records = &def_record.fields;
@@ -158,10 +167,8 @@ impl MatchAnalyzer {
                                 None => bail_on!(member, "no such field"),
                                 Some(t) => t,
                             };
-                            let ty_substitute = bail_on_ts_err!(
-                                TypeRef::substitute_params(unifier, field_type, &adt.ty_args),
-                                member
-                            );
+                            let ty_substitute =
+                                bail_on_ts_err!(unifier.instantiate(field_type, &inst), member);
 
                             match Self::analyze_pat_match_binding(pat)? {
                                 None => (),
@@ -176,7 +183,7 @@ impl MatchAnalyzer {
                                 }
                             }
                         }
-                        (adt, Unpack::Record(unpack))
+                        (branch, inst, Unpack::Record(unpack))
                     }
                     _ => bail_on!(pat, "unexpected pattern"),
                 }
@@ -184,7 +191,7 @@ impl MatchAnalyzer {
             _ => bail_on!(pat, "invalid case pattern"),
         };
 
-        Ok((adt, unpack, bindings))
+        Ok((branch, inst, unpack, bindings))
     }
 
     /// Analyze a pattern for: match arm -> head
@@ -209,29 +216,33 @@ impl MatchAnalyzer {
                 let pat_case = bail_if_missing!(iter.next(), pat_or, "case patterns");
 
                 // analyze the bindings
-                let (adt, unpack, ref_bindings) =
+                let (branch, inst, unpack, ref_bindings) =
                     Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
+
                 // unify the type
-                let ty_ref = adt.as_ty_ref(unifier);
+                let ty_ref = inst.make_ty(branch.ty_name.clone());
                 ti_unify!(unifier, ety, &ty_ref, pat_case);
+
                 // save it
-                if variants.insert(adt.into_branch(), unpack).is_some() {
+                if variants.insert(branch, unpack).is_some() {
                     bail_on!(cases, "duplicated adt variant");
                 }
 
                 for pat_case in iter.by_ref() {
                     // analyze the bindings
-                    let (adt, unpack, new_bindings) =
+                    let (branch, inst, unpack, new_bindings) =
                         Self::analyze_pat_match_case(ctxt, unifier, pat_case)?;
+
                     // unify the type
-                    let ty_ref = adt.as_ty_ref(unifier);
+                    let ty_ref = inst.make_ty(branch.ty_name.clone());
                     ti_unify!(unifier, ety, &ty_ref, pat_case);
+
                     // check binding consistency
                     if ref_bindings != new_bindings {
                         bail_on!(pat_case, "case patterns do not bind the same variable set");
                     }
                     // save it
-                    if variants.insert(adt.into_branch(), unpack).is_some() {
+                    if variants.insert(branch, unpack).is_some() {
                         bail_on!(cases, "duplicated adt variant");
                     }
                 }
@@ -241,12 +252,15 @@ impl MatchAnalyzer {
             }
             _ => {
                 // analyze the bindings
-                let (adt, unpack, bindings) = Self::analyze_pat_match_case(ctxt, unifier, pat)?;
+                let (branch, inst, unpack, bindings) =
+                    Self::analyze_pat_match_case(ctxt, unifier, pat)?;
+
                 // unify the type
-                let ty_ref = adt.as_ty_ref(unifier);
+                let ty_ref = inst.make_ty(branch.ty_name.clone());
                 ti_unify!(unifier, ety, &ty_ref, pat);
+
                 // done
-                let variants = std::iter::once((adt.into_branch(), unpack)).collect();
+                let variants = std::iter::once((branch, unpack)).collect();
                 (MatchAtom::Binding(variants), bindings)
             }
         };

@@ -125,30 +125,101 @@ pub enum Intrinsic {
 }
 
 macro_rules! mk0 {
-    ($op:ident, $args:expr) => {{
+    ($op:ident, $ty_args:expr, $args:expr) => {{
+        Intrinsic::unpack_ty_arg_0($ty_args)?;
         Intrinsic::unpack_expr_0($args)?;
         Intrinsic::$op
     }};
 }
 
 macro_rules! mk1 {
-    ($op:ident, $args:expr) => {{
+    ($op:ident, $ty_args:expr, $args:expr) => {{
+        Intrinsic::unpack_ty_arg_0($ty_args)?;
         let e1 = Intrinsic::unpack_expr_1($args)?;
-        Intrinsic::$op(e1)
+        Intrinsic::$op { val: e1 }
     }};
 }
 
 macro_rules! mk2 {
-    ($op:ident, $args:expr) => {{
+    ($op:ident, $ty_args:expr, $args:expr) => {{
+        Intrinsic::unpack_ty_arg_0($ty_args)?;
         let (e1, e2) = Intrinsic::unpack_expr_2($args)?;
-        Intrinsic::$op(e1, e2)
+        Intrinsic::$op { lhs: e1, rhs: e2 }
     }};
 }
 
-macro_rules! mk3 {
-    ($op:ident, $args:expr) => {{
+macro_rules! mk0_t {
+    ($op:ident, $ty_args:expr, $args:expr) => {{
+        let t1 = Intrinsic::unpack_ty_arg_1($ty_args)?;
+        Intrinsic::unpack_expr_0($args)?;
+        Intrinsic::$op { t: t1 }
+    }};
+}
+
+macro_rules! mk1_t {
+    ($op:ident, $ty_args:expr, $args:expr, $n1:ident) => {{
+        let t1 = Intrinsic::unpack_ty_arg_1($ty_args)?;
+        let e1 = Intrinsic::unpack_expr_1($args)?;
+        Intrinsic::$op { t: t1, $n1: e1 }
+    }};
+}
+
+macro_rules! mk2_t {
+    ($op:ident, $ty_args:expr, $args:expr, $n1:ident, $n2:ident) => {{
+        let t1 = Intrinsic::unpack_ty_arg_1($ty_args)?;
+        let (e1, e2) = Intrinsic::unpack_expr_2($args)?;
+        Intrinsic::$op {
+            t: t1,
+            $n1: e1,
+            $n2: e2,
+        }
+    }};
+}
+
+macro_rules! mk0_kv {
+    ($op:ident, $ty_args:expr, $args:expr) => {{
+        let (t1, t2) = Intrinsic::unpack_ty_arg_2($ty_args)?;
+        Intrinsic::unpack_expr_0($args)?;
+        Intrinsic::$op { k: t1, v: t2 }
+    }};
+}
+
+macro_rules! mk1_kv {
+    ($op:ident, $ty_args:expr, $args:expr, $n1:ident) => {{
+        let (t1, t2) = Intrinsic::unpack_ty_arg_2($ty_args)?;
+        let e1 = Intrinsic::unpack_expr_1($args)?;
+        Intrinsic::$op {
+            k: t1,
+            v: t2,
+            $n1: e1,
+        }
+    }};
+}
+
+macro_rules! mk2_kv {
+    ($op:ident, $ty_args:expr, $args:expr, $n1:ident, $n2:ident) => {{
+        let (t1, t2) = Intrinsic::unpack_ty_arg_2($ty_args)?;
+        let (e1, e2) = Intrinsic::unpack_expr_2($args)?;
+        Intrinsic::$op {
+            k: t1,
+            v: t2,
+            $n1: e1,
+            $n2: e2,
+        }
+    }};
+}
+
+macro_rules! mk3_kv {
+    ($op:ident, $ty_args:expr, $args:expr, $n1:ident, $n2:ident, $n3:ident) => {{
+        let (t1, t2) = Intrinsic::unpack_ty_arg_2($ty_args)?;
         let (e1, e2, e3) = Intrinsic::unpack_expr_3($args)?;
-        Intrinsic::$op(e1, e2, e3)
+        Intrinsic::$op {
+            k: t1,
+            v: t2,
+            $n1: e1,
+            $n2: e2,
+            $n3: e3,
+        }
     }};
 }
 
@@ -265,65 +336,105 @@ impl Intrinsic {
     pub fn new(
         ty_name: &SysTypeName,
         fn_name: &UsrFuncName,
+        ty_args: Vec<TypeRef>,
         args: Vec<Expr>,
     ) -> anyhow::Result<Self> {
         use SysTypeName as Q;
 
         let intrinsic = match (ty_name, fn_name.as_ref()) {
             // boolean
-            (Q::Boolean, "not") => mk1!(BoolNot, args),
-            (Q::Boolean, "and") => mk2!(BoolAnd, args),
-            (Q::Boolean, "or") => mk2!(BoolOr, args),
-            (Q::Boolean, "xor") => mk2!(BoolXor, args),
+            (Q::Boolean, "not") => mk1!(BoolNot, ty_args, args),
+            (Q::Boolean, "and") => mk2!(BoolAnd, ty_args, args),
+            (Q::Boolean, "or") => mk2!(BoolOr, ty_args, args),
+            (Q::Boolean, "xor") => mk2!(BoolXor, ty_args, args),
             // integer
-            (Q::Integer, "add") => mk2!(IntAdd, args),
-            (Q::Integer, "sub") => mk2!(IntSub, args),
-            (Q::Integer, "mul") => mk2!(IntMul, args),
-            (Q::Integer, "div") => mk2!(IntDiv, args),
-            (Q::Integer, "rem") => mk2!(IntRem, args),
-            (Q::Integer, "lt") => mk2!(IntLt, args),
-            (Q::Integer, "le") => mk2!(IntLe, args),
-            (Q::Integer, "ge") => mk2!(IntGe, args),
-            (Q::Integer, "gt") => mk2!(IntGt, args),
+            (Q::Integer, "add") => mk2!(IntAdd, ty_args, args),
+            (Q::Integer, "sub") => mk2!(IntSub, ty_args, args),
+            (Q::Integer, "mul") => mk2!(IntMul, ty_args, args),
+            (Q::Integer, "div") => mk2!(IntDiv, ty_args, args),
+            (Q::Integer, "rem") => mk2!(IntRem, ty_args, args),
+            (Q::Integer, "lt") => mk2!(IntLt, ty_args, args),
+            (Q::Integer, "le") => mk2!(IntLe, ty_args, args),
+            (Q::Integer, "ge") => mk2!(IntGe, ty_args, args),
+            (Q::Integer, "gt") => mk2!(IntGt, ty_args, args),
             // rational
-            (Q::Rational, "add") => mk2!(NumAdd, args),
-            (Q::Rational, "sub") => mk2!(NumSub, args),
-            (Q::Rational, "mul") => mk2!(NumMul, args),
-            (Q::Rational, "div") => mk2!(NumDiv, args),
-            (Q::Rational, "lt") => mk2!(NumLt, args),
-            (Q::Rational, "le") => mk2!(NumLe, args),
-            (Q::Rational, "ge") => mk2!(NumGe, args),
-            (Q::Rational, "gt") => mk2!(NumGt, args),
+            (Q::Rational, "add") => mk2!(NumAdd, ty_args, args),
+            (Q::Rational, "sub") => mk2!(NumSub, ty_args, args),
+            (Q::Rational, "mul") => mk2!(NumMul, ty_args, args),
+            (Q::Rational, "div") => mk2!(NumDiv, ty_args, args),
+            (Q::Rational, "lt") => mk2!(NumLt, ty_args, args),
+            (Q::Rational, "le") => mk2!(NumLe, ty_args, args),
+            (Q::Rational, "ge") => mk2!(NumGe, ty_args, args),
+            (Q::Rational, "gt") => mk2!(NumGt, ty_args, args),
             // text
-            (Q::Text, "lt") => mk2!(StrLt, args),
-            (Q::Text, "le") => mk2!(StrLe, args),
+            (Q::Text, "lt") => mk2!(StrLt, ty_args, args),
+            (Q::Text, "le") => mk2!(StrLe, ty_args, args),
             // cloak
-            (Q::Cloak, "shield") => mk1!(BoxShield, args),
-            (Q::Cloak, "reveal") => mk1!(BoxReveal, args),
+            (Q::Cloak, "shield") => mk1_t!(BoxShield, ty_args, args, val),
+            (Q::Cloak, "reveal") => mk1_t!(BoxReveal, ty_args, args, val),
             // seq
-            (Q::Seq, "empty") => mk0!(SeqEmpty, args),
-            (Q::Seq, "length") => mk1!(SeqLength, args),
-            (Q::Seq, "append") => mk2!(SeqAppend, args),
-            (Q::Seq, "at_unchecked") => mk2!(SeqAt, args),
-            (Q::Seq, "includes") => mk2!(SeqIncludes, args),
+            (Q::Seq, "empty") => mk0_t!(SeqEmpty, ty_args, args),
+            (Q::Seq, "length") => mk1_t!(SeqLength, ty_args, args, seq),
+            (Q::Seq, "append") => mk2_t!(SeqAppend, ty_args, args, seq, item),
+            (Q::Seq, "at_unchecked") => mk2_t!(SeqAt, ty_args, args, seq, idx),
+            (Q::Seq, "includes") => mk2_t!(SeqIncludes, ty_args, args, seq, item),
             // set
-            (Q::Set, "empty") => mk0!(SetEmpty, args),
-            (Q::Set, "length") => mk1!(SetLength, args),
-            (Q::Set, "insert") => mk2!(SetInsert, args),
-            (Q::Set, "contains") => mk2!(SetContains, args),
+            (Q::Set, "empty") => mk0_t!(SetEmpty, ty_args, args),
+            (Q::Set, "length") => mk1_t!(SetLength, ty_args, args, set),
+            (Q::Set, "insert") => mk2_t!(SetInsert, ty_args, args, set, item),
+            (Q::Set, "contains") => mk2_t!(SetContains, ty_args, args, set, item),
             // map
-            (Q::Map, "empty") => mk0!(MapEmpty, args),
-            (Q::Map, "length") => mk1!(MapLength, args),
-            (Q::Map, "put_unchecked") => mk3!(MapPut, args),
-            (Q::Map, "get_unchecked") => mk2!(MapGet, args),
-            (Q::Map, "contains_key") => mk2!(MapContainsKey, args),
+            (Q::Map, "empty") => mk0_kv!(MapEmpty, ty_args, args),
+            (Q::Map, "length") => mk1_kv!(MapLength, ty_args, args, map),
+            (Q::Map, "put_unchecked") => mk3_kv!(MapPut, ty_args, args, map, key, val),
+            (Q::Map, "get_unchecked") => mk2_kv!(MapGet, ty_args, args, map, key),
+            (Q::Map, "contains_key") => mk2_kv!(MapContainsKey, ty_args, args, map, key),
             // error
-            (Q::Error, "fresh") => mk0!(ErrFresh, args),
-            (Q::Error, "merge") => mk2!(ErrMerge, args),
+            (Q::Error, "fresh") => mk0!(ErrFresh, ty_args, args),
+            (Q::Error, "merge") => mk2!(ErrMerge, ty_args, args),
             // others
             _ => bail!("no such intrinsic"),
         };
         Ok(intrinsic)
+    }
+
+    /// Utility to unpack 0 type argument
+    fn unpack_ty_arg_0(ty_args: Vec<TypeRef>) -> anyhow::Result<()> {
+        let mut iter = ty_args.into_iter();
+        if iter.next().is_some() {
+            bail!("expect 0 type argument");
+        }
+        Ok(())
+    }
+
+    /// Utility to unpack 1 type argument
+    fn unpack_ty_arg_1(ty_args: Vec<TypeRef>) -> anyhow::Result<TypeRef> {
+        let mut iter = ty_args.into_iter();
+        let t1 = match iter.next() {
+            None => bail!("expect 1 type argument"),
+            Some(t) => t,
+        };
+        if iter.next().is_some() {
+            bail!("expect 1 type argument");
+        }
+        Ok(t1)
+    }
+
+    /// Utility to unpack 2 type arguments
+    fn unpack_ty_arg_2(ty_args: Vec<TypeRef>) -> anyhow::Result<(TypeRef, TypeRef)> {
+        let mut iter = ty_args.into_iter();
+        let t1 = match iter.next() {
+            None => bail!("expect 2 type arguments"),
+            Some(t) => t,
+        };
+        let t2 = match iter.next() {
+            None => bail!("expect 2 type arguments"),
+            Some(t) => t,
+        };
+        if iter.next().is_some() {
+            bail!("expect 2 type arguments");
+        }
+        Ok((t1, t2))
     }
 
     /// Utility to unpack 0 argument
