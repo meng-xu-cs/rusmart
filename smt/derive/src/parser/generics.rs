@@ -1,10 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
 use quote::quote_spanned;
 use syn::{
-    GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, Result, TraitBound,
-    TraitBoundModifier, TypeParam, TypeParamBound,
+    GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, PathArguments, Result,
+    TraitBound, TraitBoundModifier, TypeParam, TypeParamBound,
 };
 
 use rusmart_utils::display::format_seq;
@@ -13,7 +13,10 @@ use crate::parser::ctxt::MarkedType;
 use crate::parser::err::{
     bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
 };
-use crate::parser::name::{ReservedIdent, TypeParamName};
+use crate::parser::expr::CtxtForExpr;
+use crate::parser::infer::{TypeRef, TypeUnifier};
+use crate::parser::name::{ReservedIdent, TypeParamName, UsrTypeName};
+use crate::parser::ty::TypeTag;
 use crate::parser::util::PathUtil;
 
 /// Reserved trait
@@ -182,6 +185,129 @@ impl Display for Generics {
             f.write_str("")
         } else {
             format_seq(",", "<", ">", &self.params).fmt(f)
+        }
+    }
+}
+
+/// Partial instantiation of generics
+pub struct GenericsInstPartial {
+    args: BTreeMap<TypeParamName, (usize, Option<TypeTag>)>,
+}
+
+impl GenericsInstPartial {
+    /// Create an instantiation by setting
+    pub fn new_without_args(generics: &Generics) -> Self {
+        let ty_args = generics
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.clone(), (i, None)))
+            .collect();
+        GenericsInstPartial { args: ty_args }
+    }
+
+    /// Create an instantiation with generics and type argument (optionally parsed)
+    pub fn try_with_args(generics: &Generics, args: &[TypeTag]) -> Option<Self> {
+        if generics.params.len() != args.len() {
+            return None;
+        }
+        let ty_args = generics
+            .params
+            .iter()
+            .zip(args)
+            .enumerate()
+            .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
+            .collect();
+        Some(GenericsInstPartial { args: ty_args })
+    }
+
+    /// A utility function to parse type arguments
+    pub fn from_args<T: CtxtForExpr>(
+        ctxt: &T,
+        generics: &Generics,
+        arguments: &PathArguments,
+    ) -> Result<Self> {
+        let ty_params = &generics.params;
+        let ty_args = match arguments {
+            PathArguments::None => ty_params
+                .iter()
+                .enumerate()
+                .map(|(i, n)| (n.clone(), (i, None)))
+                .collect(),
+            PathArguments::AngleBracketed(pack) => {
+                let ty_args = TypeTag::from_args(ctxt, pack)?;
+                if ty_args.len() != ty_params.len() {
+                    bail_on!(pack, "type argument number mismatch");
+                }
+                ty_params
+                    .iter()
+                    .zip(ty_args)
+                    .enumerate()
+                    .map(|(i, (n, t))| (n.clone(), (i, Some(t))))
+                    .collect()
+            }
+            PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
+        };
+        Ok(GenericsInstPartial { args: ty_args })
+    }
+
+    /// Complete the instantiation with the help of a type unifier
+    pub fn complete(self, unifier: &mut TypeUnifier) -> GenericsInstFull {
+        let args = self
+            .args
+            .into_iter()
+            .map(|(k, (i, inst))| {
+                let completed = match inst {
+                    None => TypeRef::Var(unifier.mk_var()),
+                    Some(tag) => (&tag).into(),
+                };
+                (k, (i, completed))
+            })
+            .collect();
+        GenericsInstFull { args }
+    }
+}
+
+/// Complete instantiation of generics
+pub struct GenericsInstFull {
+    args: BTreeMap<TypeParamName, (usize, TypeRef)>,
+}
+
+impl GenericsInstFull {
+    /// Retrieve an argument
+    pub fn get(&self, name: &TypeParamName) -> Option<&TypeRef> {
+        self.args.get(name).map(|(_, t)| t)
+    }
+
+    /// Shape the arguments in its declaration order, filling missed ones with fresh type variables
+    pub fn vec(&self) -> Vec<TypeRef> {
+        let rev: BTreeMap<_, _> = self
+            .args
+            .iter()
+            .map(|(_, (i, t))| (*i, t.clone()))
+            .collect();
+        rev.into_values().collect()
+    }
+
+    /// Make a type ref combined with type name
+    pub fn make_ty(&self, name: UsrTypeName) -> TypeRef {
+        TypeRef::User(name, self.vec())
+    }
+
+    /// Merge two generics into one
+    pub fn merge(&self, other: &Self) -> Option<Self> {
+        let args: BTreeMap<_, _> = self
+            .args
+            .iter()
+            .chain(&other.args)
+            .map(|(name, (idx, ty))| (name.clone(), (*idx + self.args.len(), ty.clone())))
+            .collect();
+
+        // should not have conflicting type parameter names
+        if args.len() == self.args.len() + other.args.len() {
+            Some(Self { args })
+        } else {
+            None
         }
     }
 }

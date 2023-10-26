@@ -6,7 +6,6 @@ use rusmart_utils::display::format_seq;
 
 use crate::parser::apply::TypeFn;
 use crate::parser::name::{TypeParamName, UsrTypeName};
-use crate::parser::path::GenericsInstFull;
 use crate::parser::ty::TypeTag;
 
 /// An error for type inference
@@ -59,6 +58,7 @@ macro_rules! bail_on_ts_err {
         }
     };
 }
+use crate::parser::generics::GenericsInstFull;
 pub(crate) use bail_on_ts_err;
 
 /// Represents a type variable participating in type unification

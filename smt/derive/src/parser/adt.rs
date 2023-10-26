@@ -5,9 +5,10 @@ use syn::{ExprMatch, ExprPath, FieldPat, Member, Pat, PatOr, PatStruct, PatTuple
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::{CtxtForExpr, Expr, MatchCombo, MatchVariant, Unpack};
+use crate::parser::generics::GenericsInstFull;
 use crate::parser::infer::{bail_on_ts_err, ti_unify, TypeRef, TypeUnifier};
 use crate::parser::name::{UsrTypeName, VarName};
-use crate::parser::path::{ADTPath, GenericsInstFull};
+use crate::parser::path::ADTPath;
 use crate::parser::ty::EnumVariant;
 use crate::parser::util::PatUtil;
 

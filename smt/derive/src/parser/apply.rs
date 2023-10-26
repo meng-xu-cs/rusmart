@@ -4,11 +4,10 @@ use anyhow::{bail, Result};
 
 use crate::parser::expr::{CtxtForExpr, Expr, Op};
 use crate::parser::func::FuncSig;
-use crate::parser::generics::Generics;
+use crate::parser::generics::{Generics, GenericsInstPartial};
 use crate::parser::infer::{TIError, TSError, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
-use crate::parser::path::GenericsInstPartial;
 use crate::parser::ty::{SysTypeName, TypeName, TypeTag};
 
 /// Marks whether this function is for impl or spec

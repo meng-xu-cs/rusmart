@@ -4,18 +4,18 @@ mod test;
 
 mod attr;
 mod name;
-mod util;
 
-mod func;
 mod generics;
+mod infer;
 mod ty;
 
 mod apply;
-mod infer;
+mod func;
 
-mod dsl;
 mod path;
+mod util;
 
 mod adt;
+mod dsl;
 mod expr;
 mod intrinsics;
