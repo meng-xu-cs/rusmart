@@ -73,7 +73,7 @@ impl GenericsInstPartial {
         Ok(GenericsInstPartial { args: ty_args })
     }
 
-    /// Complete the instantiation with the help of a tupe unifier
+    /// Complete the instantiation with the help of a type unifier
     pub fn complete(self, unifier: &mut TypeUnifier) -> GenericsInstFull {
         let args = self
             .args
@@ -136,8 +136,8 @@ impl GenericsInstFull {
 
 /// An identifier to a tuple with optional type arguments
 pub struct TuplePath {
-    pub ty_name: UsrTypeName,
-    pub ty_args: GenericsInstPartial,
+    ty_name: UsrTypeName,
+    ty_args: GenericsInstPartial,
 }
 
 impl TuplePath {
@@ -168,12 +168,18 @@ impl TuplePath {
         bail_if_exists!(iter.next());
         Ok(Self { ty_name, ty_args })
     }
+
+    /// Turn the path into a name and full instantiation
+    pub fn complete(self, unifier: &mut TypeUnifier) -> (UsrTypeName, GenericsInstFull) {
+        let Self { ty_name, ty_args } = self;
+        (ty_name, ty_args.complete(unifier))
+    }
 }
 
 /// An identifier to a record with optional type arguments
 pub struct RecordPath {
-    pub ty_name: UsrTypeName,
-    pub ty_args: GenericsInstPartial,
+    ty_name: UsrTypeName,
+    ty_args: GenericsInstPartial,
 }
 
 impl RecordPath {
@@ -203,6 +209,12 @@ impl RecordPath {
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
         Ok(Self { ty_name, ty_args })
+    }
+
+    /// Turn the path into a name and full instantiation
+    pub fn complete(self, unifier: &mut TypeUnifier) -> (UsrTypeName, GenericsInstFull) {
+        let Self { ty_name, ty_args } = self;
+        (ty_name, ty_args.complete(unifier))
     }
 }
 
@@ -267,8 +279,8 @@ impl ADTPath {
 
 /// An identifier to a function without a qualified type
 pub struct FuncPath {
-    pub fn_name: UsrFuncName,
-    pub ty_args: GenericsInstPartial,
+    fn_name: UsrFuncName,
+    ty_args: GenericsInstPartial,
 }
 
 impl FuncPath {
@@ -293,6 +305,12 @@ impl FuncPath {
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
         Ok(Self { fn_name, ty_args })
+    }
+
+    /// Turn the path into a name and full instantiation
+    pub fn complete(self, unifier: &mut TypeUnifier) -> (UsrFuncName, GenericsInstFull) {
+        let Self { fn_name, ty_args } = self;
+        (fn_name, ty_args.complete(unifier))
     }
 }
 

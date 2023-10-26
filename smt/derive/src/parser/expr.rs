@@ -183,14 +183,6 @@ impl Expr {
         &i.ty
     }
 
-    /// Set the type
-    pub fn set_ty(&mut self, ty: TypeRef) {
-        match self {
-            Self::Unit(inst) => inst.ty = ty,
-            Self::Block { lets: _, body } => body.ty = ty,
-        }
-    }
-
     /// Visitor with ty/pre/post traversal function
     pub fn visit<TY, PRE, POST>(
         &mut self,
@@ -713,7 +705,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                 match ExprPathAsRecord::parse(self.root, path)? {
                     ExprPathAsRecord::CtorRecord(record) => {
-                        let fields = match self.root.get_type_def(&record.ty_name) {
+                        let (ty_name, inst) = record.complete(unifier);
+                        let fields = match self.root.get_type_def(&ty_name) {
                             None => bail_on!(expr_struct, "[invariant] no such type"),
                             Some(def) => match &def.body {
                                 TypeBody::Record(record_def) => record_def
@@ -724,9 +717,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 _ => bail_on!(expr_struct, "[invariant] not a record type"),
                             },
                         };
-
-                        let inst = record.ty_args.complete(unifier);
-                        let ret_ty = inst.make_ty(record.ty_name.clone());
+                        let ret_ty = inst.make_ty(ty_name.clone());
 
                         // parse the arguments
                         let field_vals =
@@ -734,7 +725,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                         // build the opcode
                         Op::Record {
-                            name: record.ty_name,
+                            name: ty_name,
                             inst: inst.vec(),
                             fields: field_vals,
                         }
@@ -1045,13 +1036,14 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 // extract the callee
                 match ExprPathAsCallee::parse(self.root, func)? {
                     ExprPathAsCallee::FuncNoPrefix(path) => {
+                        let (fn_name, inst) = path.complete(unifier);
+
                         // substitute types in function parameters
-                        let fty = match self.root.lookup_unqualified(&path.fn_name) {
+                        let fty = match self.root.lookup_unqualified(&fn_name) {
                             None => bail_on!(func, "[invariant] no such function"),
                             Some(fty) => fty,
                         };
 
-                        let inst = path.ty_args.complete(unifier);
                         let (params, ret_ty) =
                             bail_on_ts_err!(unifier.instantiate_func_ty(fty, &inst), func);
 
@@ -1061,7 +1053,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                         // build the opcode
                         Op::Procedure {
-                            name: path.fn_name.clone(),
+                            name: fn_name,
                             inst: inst.vec(),
                             args: parsed_args,
                         }
@@ -1192,7 +1184,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
                     },
                     ExprPathAsCallee::CtorTuple(tuple) => {
-                        let params: Vec<_> = match self.root.get_type_def(&tuple.ty_name) {
+                        let (ty_name, inst) = tuple.complete(unifier);
+                        let params: Vec<_> = match self.root.get_type_def(&ty_name) {
                             None => bail_on!(expr_call, "[invariant] no such type"),
                             Some(def) => match &def.body {
                                 TypeBody::Tuple(tuple_def) => {
@@ -1201,8 +1194,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 _ => bail_on!(expr_call, "[invariant] not a tuple type"),
                             },
                         };
-                        let inst = tuple.ty_args.complete(unifier);
-                        let ret_ty = inst.make_ty(tuple.ty_name.clone());
+                        let ret_ty = inst.make_ty(ty_name.clone());
 
                         // parse the arguments
                         let parsed_slots =
@@ -1210,7 +1202,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                         // build the opcode
                         Op::Tuple {
-                            name: tuple.ty_name,
+                            name: ty_name,
                             inst: inst.vec(),
                             slots: parsed_slots,
                         }
