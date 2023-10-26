@@ -99,6 +99,6 @@ pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
 }
 
 #[smt_spec(impls = [seq_lt])]
-pub fn spec_seq_lt(lhs: Seq<Value>, rhs: Seq<Value>) -> Boolean {
+pub fn spec_seq_lt(_lhs: Seq<Value>, _rhs: Seq<Value>) -> Boolean {
     forall!(|k: Integer| Integer::ge(k, Integer::from(0)))
 }

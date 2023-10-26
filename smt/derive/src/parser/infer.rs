@@ -435,7 +435,7 @@ impl TypeUnifier {
         self.typing.unify(lhs, rhs, &mut involved)
     }
 
-    /// Instantiate a type tag by applying type parameter subsitution
+    /// Instantiate a type tag by applying type parameter substitution
     pub fn instantiate(&mut self, tag: &TypeTag, subst: &GenericsInstFull) -> TSResult<TypeRef> {
         let updated = match tag {
             TypeTag::Boolean => TypeRef::Boolean,
