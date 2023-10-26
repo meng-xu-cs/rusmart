@@ -66,20 +66,20 @@ pub fn lt(lhs: Value, rhs: Value) -> Boolean {
         ) => true.into(),
 
         // boolean
-        (Value::Boolean(v_lhs), Value::Boolean(v_rhs)) => Boolean::and(v_lhs, Boolean::not(v_rhs)),
+        (Value::Boolean(v_lhs), Value::Boolean(v_rhs)) => v_lhs.not().and(v_rhs),
         (
             Value::Boolean(_),
             Value::Number(_) | Value::String(_) | Value::Seq(_) | Value::Map(_) | Value::Set(_),
         ) => true.into(),
 
         // number
-        (Value::Number(v_lhs), Value::Number(v_rhs)) => Rational::lt(v_lhs, v_rhs),
+        (Value::Number(v_lhs), Value::Number(v_rhs)) => v_lhs.lt(v_rhs),
         (Value::Number(_), Value::String(_) | Value::Seq(_) | Value::Map(_) | Value::Set(_)) => {
             true.into()
         }
 
         // string
-        (Value::String(v_lhs), Value::String(v_rhs)) => Text::lt(v_lhs, v_rhs),
+        (Value::String(v_lhs), Value::String(v_rhs)) => v_lhs.lt(v_rhs),
         (Value::String(_), Value::Seq(_) | Value::Map(_) | Value::Set(_)) => true.into(),
 
         // seq
