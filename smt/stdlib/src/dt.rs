@@ -248,6 +248,11 @@ impl<T: SMT> Seq<T> {
     pub fn includes(self, e: T) -> Boolean {
         self.inner.contains(&e).into()
     }
+
+    /// iterator
+    pub fn iterator(self) -> Vec<Integer> {
+        (0..self.inner.len()).map(Integer::from).collect()
+    }
 }
 
 impl<T: SMT> SMT for Seq<T> {}
@@ -287,6 +292,11 @@ impl<T: SMT> Set<T> {
     /// operation: `v.contains(e)`
     pub fn contains(self, e: T) -> Boolean {
         self.inner.contains(&e).into()
+    }
+
+    /// iterator
+    pub fn iterator(self) -> Vec<T> {
+        self.inner.iter().copied().collect()
     }
 }
 
@@ -332,6 +342,11 @@ impl<K: SMT, V: SMT> Map<K, V> {
     /// operation: `v.contains_key(e)`
     pub fn contains_key(self, k: K) -> Boolean {
         self.inner.contains_key(&k).into()
+    }
+
+    /// iterator
+    pub fn iterator(self) -> Vec<K> {
+        self.inner.keys().copied().collect()
     }
 }
 

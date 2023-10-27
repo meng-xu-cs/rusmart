@@ -1,6 +1,6 @@
 use rusmart_smt_remark::{smt_impl, smt_spec, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Map, Rational, Seq, Set, Text, SMT};
-use rusmart_smt_stdlib::exp::forall;
+use rusmart_smt_stdlib::{choose, forall};
 
 /// A term *in its valid state* is defined by the following ADT
 #[smt_type]
@@ -31,12 +31,12 @@ pub enum State {
 impl SMT for State {}
 
 #[smt_impl]
-pub fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
+fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
     #[allow(clippy::if_same_then_else)]
     if *l.length().eq(i) {
-        Boolean::from(false)
+        r.length().ne(i)
     } else if *r.length().eq(i) {
-        Boolean::from(true)
+        Boolean::from(false)
     } else if *l.at_unchecked(i).lt(r.at_unchecked(i)) {
         Boolean::from(true)
     } else if *r.at_unchecked(i).lt(l.at_unchecked(i)) {
@@ -47,8 +47,14 @@ pub fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {
 }
 
 #[smt_impl]
-pub fn seq_lt(l: Seq<Value>, r: Seq<Value>) -> Boolean {
+fn seq_lt(l: Seq<Value>, r: Seq<Value>) -> Boolean {
     seq_lt_recursive(l, r, Integer::from(0))
+}
+
+#[smt_impl]
+fn set_min(set: Set<Value>) -> Value {
+    choose!(v in set => forall!(e in set => v.eq(e).or(v.lt(e))));
+    v
 }
 
 #[smt_impl(method = lt)]
