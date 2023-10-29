@@ -1,17 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use proc_macro2::TokenStream;
 use syn::{
-    parse2, Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprClosure, ExprField, ExprIf,
-    ExprMacro, ExprMatch, ExprMethodCall, ExprStruct, ExprTuple, ExprUnary, FieldValue, Local,
-    LocalInit, Macro, MacroDelimiter, Member, Pat, PatTuple, PatType, Result, ReturnType, Stmt,
-    UnOp,
+    Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprField, ExprIf, ExprMatch, ExprMethodCall,
+    ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit, Member, Pat, PatTuple, PatType,
+    Result, Stmt, UnOp,
 };
 
 use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
 use crate::parser::apply::{Kind, TypeFn};
 use crate::parser::ctxt::ContextWithSig;
-use crate::parser::dsl::SysMacroName;
+use crate::parser::dsl::{Quantifier, SysMacroName};
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::func::{CastFuncName, FuncName, FuncSig, SysFuncName};
 use crate::parser::generics::Generics;
@@ -20,9 +18,7 @@ use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
 use crate::parser::path::QualifiedPath;
 use crate::parser::ty::{CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeTag};
-use crate::parser::util::{
-    ExprPathAsCallee, ExprPathAsRecord, ExprPathAsTarget, PatUtil, PathUtil,
-};
+use crate::parser::util::{ExprPathAsCallee, ExprPathAsRecord, ExprPathAsTarget, PatUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -1371,31 +1367,38 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
             }
             // SMT-specific macro (i.e., DSL)
             Exp::Macro(expr_macro) => {
-                let ExprMacro {
-                    attrs: _,
-                    mac:
-                        Macro {
-                            path,
-                            bang_token: _,
-                            delimiter,
-                            tokens,
-                        },
-                } = expr_macro;
-                if !matches!(delimiter, MacroDelimiter::Paren(_)) {
-                    bail_on!(expr_macro, "expect macro invocation with parenthesis");
-                }
-
-                let quant = PathUtil::expect_ident_reserved(path)?;
-                let (vars, body) = self.parse_dsl_quantifier(unifier, tokens)?;
-
-                // unity the return type
-                ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
-
-                // pack into opcode
+                let quant = Quantifier::parse(self.root, expr_macro)?;
                 match quant {
-                    SysMacroName::Exists => Op::Exists { vars, body },
-                    SysMacroName::Forall => Op::Forall { vars, body },
-                    SysMacroName::Choose => todo!(),
+                    Quantifier::Typed { name, vars, body } => {
+                        let mut new_ctxt = self.fork(TypeRef::Boolean);
+                        for (var, ty) in &vars {
+                            if new_ctxt.vars.insert(var.clone(), ty.into()).is_some() {
+                                bail_on!(expr_macro, "duplicated variable binding");
+                            }
+                        }
+                        let quant_body = new_ctxt.convert_expr(unifier, &body)?;
+
+                        match name {
+                            SysMacroName::Forall => {
+                                ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
+                                Op::Forall {
+                                    vars,
+                                    body: quant_body,
+                                }
+                            }
+                            SysMacroName::Exists => {
+                                ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
+                                Op::Exists {
+                                    vars,
+                                    body: quant_body,
+                                }
+                            }
+                            SysMacroName::Choose => todo!(),
+                        }
+                    }
+                    Quantifier::Iterated { name, vars, body } => {
+                        todo!()
+                    }
                 }
             }
             _ => bail_on!(target, "invalid expression"),
@@ -1526,73 +1529,6 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
             }),
         };
         Ok(op)
-    }
-
-    /// Convert a DSL macro to a quantifier body
-    fn parse_dsl_quantifier(
-        &self,
-        unifier: &mut TypeUnifier,
-        raw: &TokenStream,
-    ) -> Result<(BTreeMap<VarName, TypeTag>, Expr)> {
-        let stream = raw.clone();
-        let closure = parse2::<ExprClosure>(stream)?;
-        let ExprClosure {
-            attrs: _,
-            lifetimes,
-            constness,
-            movability,
-            asyncness,
-            capture,
-            or1_token: _,
-            inputs,
-            or2_token: _,
-            output,
-            body,
-        } = &closure;
-        bail_if_exists!(lifetimes);
-        bail_if_exists!(constness);
-        bail_if_exists!(movability);
-        bail_if_exists!(asyncness);
-        bail_if_exists!(capture);
-
-        // parameters
-        let mut param_decls = BTreeMap::new();
-        for param in inputs {
-            match param {
-                Pat::Type(typed) => {
-                    let PatType {
-                        attrs: _,
-                        pat,
-                        colon_token: _,
-                        ty,
-                    } = typed;
-
-                    let name = PatUtil::expect_name(pat)?;
-                    if self.vars.contains_key(&name) || param_decls.contains_key(&name) {
-                        bail_on!(pat, "conflicting quantifier variable name");
-                    }
-                    let ty = TypeTag::from_type(self.root, ty)?;
-                    param_decls.insert(name, ty);
-                }
-                _ => bail_on!(param, "invalid quantifier variable declaration"),
-            }
-        }
-
-        // expect no return type
-        match output {
-            ReturnType::Default => (),
-            ReturnType::Type(_, rty) => bail_on!(rty, "unexpected return type"),
-        };
-
-        // analyze the body
-        let mut parser = self.fork(TypeRef::Boolean);
-        parser
-            .vars
-            .extend(param_decls.iter().map(|(k, v)| (k.clone(), v.into())));
-        let body_expr = parser.convert_expr(unifier, body)?;
-
-        // return the parsed result
-        Ok((param_decls, body_expr))
     }
 }
 
