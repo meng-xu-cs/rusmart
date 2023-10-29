@@ -34,20 +34,20 @@ macro_rules! exists {
 #[macro_export]
 macro_rules! choose {
     (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $constraint:expr) => {
-        let ($v0 $(, $vn)*) = if *$crate::exists!(|$v0 : $t0 $(, $vn : $tn)*| $constraint) {
+        if *$crate::exists!(|$v0 : $t0 $(, $vn : $tn)*| $constraint) {
             (<$t0>::default() $(, <$tn>::default())*)
         } else {
             panic!("no valid choice");
-        };
+        }
     };
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
-        let ($v0 $(, $vn)*) = (|| {
+        (|| {
             for ($v0 $(, $vn)*) in $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*) {
                 if *$constraint {
                     return ($v0 $(, $vn)*);
                 }
             }
             panic!("no valid choice");
-        }) ();
+        }) ()
     };
 }
