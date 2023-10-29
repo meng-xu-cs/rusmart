@@ -134,14 +134,29 @@ pub enum Op {
     },
     /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
     Phi { nodes: Vec<PhiNode>, default: Expr },
-    /// `forall(|<v>: <t>| {<expr>})`
+    /// `forall!(|<v>: <t>| {<expr>})`
     Forall {
         vars: BTreeMap<VarName, TypeTag>,
         body: Expr,
     },
-    /// `exists(|<v>: <t>| {<expr>})`
+    /// `exists!(|<v>: <t>| {<expr>})`
     Exists {
         vars: BTreeMap<VarName, TypeTag>,
+        body: Expr,
+    },
+    /// `forall!(<v> in <c> ... => <expr>)`
+    IterForall {
+        vars: BTreeMap<VarName, Expr>,
+        body: Expr,
+    },
+    /// `exists!(<v> in <c> ... => <expr>)`
+    IterExists {
+        vars: BTreeMap<VarName, Expr>,
+        body: Expr,
+    },
+    /// `choose!(<v> in <c> ... => <expr>)`
+    Choose {
+        vars: BTreeMap<VarName, Expr>,
         body: Expr,
     },
     /// `<class>::<method>(<a1>, <a2>, ...)`

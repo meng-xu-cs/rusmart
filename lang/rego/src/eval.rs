@@ -52,7 +52,7 @@ fn seq_lt(l: Seq<Value>, r: Seq<Value>) -> Boolean {
 }
 
 #[smt_impl]
-fn set_min(set: Set<Value>) -> Value {
+fn _set_min(set: Set<Value>) -> Value {
     choose!(v in set => forall!(e in set => v.eq(e).or(v.lt(e))));
     v
 }
