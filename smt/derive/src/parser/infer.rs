@@ -74,6 +74,8 @@ pub enum TypeRef {
     Error,
     /// user-defined type
     User(UsrTypeName, Vec<TypeRef>),
+    /// a tuple of types
+    Pack(Vec<TypeRef>),
     /// parameter
     Parameter(TypeParamName),
 }
@@ -95,6 +97,7 @@ impl From<&TypeTag> for TypeRef {
             TypeTag::User(name, tags) => {
                 Self::User(name.clone(), tags.iter().map(|t| t.into()).collect())
             }
+            TypeTag::Pack(elems) => Self::Pack(elems.iter().map(|t| t.into()).collect()),
             TypeTag::Parameter(name) => Self::Parameter(name.clone()),
         }
     }
@@ -113,6 +116,7 @@ impl TypeRef {
             | Self::Parameter(_) => true,
             Self::Cloak(sub) | Self::Seq(sub) | Self::Set(sub) => sub.validate(),
             Self::Map(key, val) => key.validate() && val.validate(),
+            Self::Pack(elems) => elems.iter().all(|t| t.validate()),
             Self::User(_, args) => args.iter().all(|t| t.validate()),
         }
     }
@@ -139,6 +143,7 @@ impl Display for TypeRef {
                     write!(f, "{}{}", name, content)
                 }
             }
+            Self::Pack(elems) => format_seq(",", "(", ")", elems).fmt(f),
             Self::Parameter(name) => name.fmt(f),
         }
     }
@@ -346,24 +351,37 @@ impl Typing {
                 ti_unwrap!(self.unify(val_lhs, val_rhs, involved)).into(),
             ),
             // user-define types
-            (User(name_lhs, vars_lhs), User(name_rhs, vars_rhs)) => {
+            (User(name_lhs, args_lhs), User(name_rhs, args_rhs)) => {
                 // filter obvious type mismatches
                 if name_lhs != name_rhs {
                     return Ok(None);
                 }
 
                 // invariant checking
-                if vars_rhs.len() != vars_rhs.len() {
+                if args_lhs.len() != args_rhs.len() {
                     panic!("type argument number mismatch");
                 }
 
                 // try to unify the type arguments
-                let mut new_vars = vec![];
-                for (v_lhs, v_rhs) in vars_lhs.iter().zip(vars_rhs.iter()) {
-                    let unified = ti_unwrap!(self.unify(v_lhs, v_rhs, involved));
-                    new_vars.push(unified);
+                let mut new_args = vec![];
+                for (v_lhs, v_rhs) in args_lhs.iter().zip(args_rhs) {
+                    new_args.push(ti_unwrap!(self.unify(v_lhs, v_rhs, involved)));
                 }
-                User(name_lhs.clone(), new_vars)
+                User(name_lhs.clone(), new_args)
+            }
+            // packs (i.e., type tuples)
+            (Pack(pack_lhs), Pack(pack_rhs)) => {
+                // filter obvious type mismatches
+                if pack_lhs.len() != pack_rhs.len() {
+                    return Ok(None);
+                }
+
+                // try to unify the elements
+                let mut new_elems = vec![];
+                for (v_lhs, v_rhs) in pack_lhs.iter().zip(pack_rhs) {
+                    new_elems.push(ti_unwrap!(self.unify(v_lhs, v_rhs, involved)));
+                }
+                Pack(new_elems)
             }
             // type parameters
             (Parameter(name_lhs), Parameter(name_rhs)) => {
@@ -433,10 +451,13 @@ impl TypeUnifier {
                 TypeRef::Map(self.refresh_type(key).into(), self.refresh_type(val).into())
             }
             TypeRef::Error => TypeRef::Error,
-            TypeRef::User(name, tys) => TypeRef::User(
+            TypeRef::User(name, args) => TypeRef::User(
                 name.clone(),
-                tys.iter().map(|t| self.refresh_type(t)).collect(),
+                args.iter().map(|t| self.refresh_type(t)).collect(),
             ),
+            TypeRef::Pack(elems) => {
+                TypeRef::Pack(elems.iter().map(|t| self.refresh_type(t)).collect())
+            }
             TypeRef::Parameter(name) => TypeRef::Parameter(name.clone()),
         }
     }

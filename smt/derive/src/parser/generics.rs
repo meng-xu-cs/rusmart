@@ -326,6 +326,12 @@ impl GenericsInstFull {
                     .map(|t| self.instantiate(t))
                     .collect::<Option<_>>()?,
             ),
+            TypeTag::Pack(elems) => TypeRef::Pack(
+                elems
+                    .iter()
+                    .map(|t| self.instantiate(t))
+                    .collect::<Option<_>>()?,
+            ),
             TypeTag::Parameter(name) => self.args.get(name).map(|(_, t)| t)?.clone(),
         };
         Some(updated)

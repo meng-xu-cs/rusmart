@@ -3,7 +3,8 @@ use std::fmt::{Display, Formatter};
 
 use syn::{
     AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
-    Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
+    Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath,
+    TypeTuple as TypePack, Variant,
 };
 
 use rusmart_utils::display::{format_map, format_seq};
@@ -185,6 +186,8 @@ pub enum TypeTag {
     Error,
     /// user-defined type
     User(UsrTypeName, Vec<TypeTag>),
+    /// a tuple of types
+    Pack(Vec<TypeTag>),
     /// parameter
     Parameter(TypeParamName),
 }
@@ -325,7 +328,17 @@ impl TypeTag {
                 bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
                 Self::from_path(ctxt, path)
             }
-            _ => bail_on!(ty, "expect type path"),
+            Type::Tuple(TypePack {
+                paren_token: _,
+                elems,
+            }) => {
+                let mut pack = vec![];
+                for elem in elems {
+                    pack.push(Self::from_type(ctxt, elem)?);
+                }
+                Ok(Self::Pack(pack))
+            }
+            _ => bail_on!(ty, "expect type path or tuple"),
         }
     }
 
@@ -377,6 +390,7 @@ impl Display for TypeTag {
                     write!(f, "{}{}", name, content)
                 }
             }
+            Self::Pack(elems) => format_seq(",", "(", ")", elems).fmt(f),
             Self::Parameter(name) => name.fmt(f),
         }
     }
