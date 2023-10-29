@@ -8,8 +8,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-internment = { version = "0.7.1", features = ["arc"] }
+internment = { version = "0.7.4", features = ["arc"] }
 itertools = "0.11.0"
 num-bigint = "0.4.4"
 num-rational = "0.4.1"
-num-traits = "0.2.16"
+num-traits = "0.2.17"

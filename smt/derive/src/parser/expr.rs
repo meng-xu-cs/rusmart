@@ -155,7 +155,7 @@ pub enum Op {
         body: Expr,
     },
     /// `choose!(<v> in <c> ... => <expr>)`
-    Choose {
+    IterChoose {
         vars: BTreeMap<VarName, Expr>,
         body: Expr,
     },
@@ -302,6 +302,14 @@ impl Expr {
                 default.visit(ty, pre, post)?;
             }
             Op::Forall { vars: _, body } | Op::Exists { vars: _, body } => {
+                body.visit(ty, pre, post)?;
+            }
+            Op::IterForall { vars, body }
+            | Op::IterExists { vars, body }
+            | Op::IterChoose { vars, body } => {
+                for val in vars.values_mut() {
+                    val.visit(ty, pre, post)?;
+                }
                 body.visit(ty, pre, post)?;
             }
             Op::Intrinsic(intrinsic) => match intrinsic {
