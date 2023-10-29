@@ -144,6 +144,11 @@ pub enum Op {
         vars: BTreeMap<VarName, TypeTag>,
         body: Expr,
     },
+    /// `choose!(|<v>: <t>| {<expr>})`
+    Choose {
+        vars: BTreeMap<VarName, TypeTag>,
+        body: Expr,
+    },
     /// `forall!(<v> in <c> ... => <expr>)`
     IterForall {
         vars: BTreeMap<VarName, Expr>,
@@ -301,7 +306,9 @@ impl Expr {
                 }
                 default.visit(ty, pre, post)?;
             }
-            Op::Forall { vars: _, body } | Op::Exists { vars: _, body } => {
+            Op::Forall { vars: _, body }
+            | Op::Exists { vars: _, body }
+            | Op::Choose { vars: _, body } => {
                 body.visit(ty, pre, post)?;
             }
             Op::IterForall { vars, body }
@@ -1388,6 +1395,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 match quant {
                     SysMacroName::Exists => Op::Exists { vars, body },
                     SysMacroName::Forall => Op::Forall { vars, body },
+                    SysMacroName::Choose => todo!(),
                 }
             }
             _ => bail_on!(target, "invalid expression"),
