@@ -1,4 +1,4 @@
-use syn::{Path, PathArguments, PathSegment, Result};
+use syn::{Expr as Exp, ExprPath, Path, PathArguments, PathSegment, Result};
 
 use crate::parser::adt::ADTBranch;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
@@ -6,7 +6,7 @@ use crate::parser::expr::CtxtForExpr;
 use crate::parser::func::{CastFuncName, FuncName, SysFuncName};
 use crate::parser::generics::{Generics, GenericsInstFull, GenericsInstPartial};
 use crate::parser::infer::TypeUnifier;
-use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName};
+use crate::parser::name::{TypeParamName, UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{SysTypeName, TypeBody, TypeName};
 
 /// An identifier to a tuple with optional type arguments
@@ -300,5 +300,122 @@ impl QualifiedPath {
         // ensure that there are no more tokens
         bail_if_exists!(iter.next());
         Ok(converted)
+    }
+}
+
+/// Marks what a path serving as a standalone expr can be
+pub enum ExprPathAsTarget {
+    /// a local variable
+    Var(VarName),
+    /// a unit variant in an enum
+    EnumUnit(ADTPath),
+}
+
+impl ExprPathAsTarget {
+    /// Parse from an expression
+    pub fn parse<T: CtxtForExpr>(ctxt: &T, expr_path: &ExprPath) -> Result<Self> {
+        let ExprPath {
+            attrs: _,
+            qself,
+            path,
+        } = expr_path;
+        bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+
+        // case by number of path segments
+        let parsed = match path.segments.len() {
+            1 => Self::Var(path.try_into()?),
+            2 => Self::EnumUnit(ADTPath::from_path(ctxt, path)?),
+            _ => bail_on!(path, "unrecognized path"),
+        };
+        Ok(parsed)
+    }
+}
+
+/// Marks what a path serving as a callee expr can be
+pub enum ExprPathAsCallee {
+    /// `<type-name>::[ty-args]::<func-name>::[ty-args](...)`
+    FuncWithType(QualifiedPath),
+    /// `<usr-func-name>::[ty-args](...)`
+    FuncNoPrefix(FuncPath),
+    /// `<adt>::[ty-args]::<variant>(...)`
+    CtorEnum(ADTPath),
+    /// `<tuple>::[ty-args](...)`
+    CtorTuple(TuplePath),
+}
+
+impl ExprPathAsCallee {
+    /// Parse from an expression
+    pub fn parse<T: CtxtForExpr>(ctxt: &T, expr: &Exp) -> Result<Self> {
+        let path = match expr {
+            Exp::Path(p) => {
+                let ExprPath {
+                    attrs: _,
+                    qself,
+                    path,
+                } = p;
+                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+                path
+            }
+            _ => bail_on!(expr, "invalid callee"),
+        };
+
+        // case by number of path segments
+        let parsed = match path.segments.len() {
+            1 => {
+                // type takes first priority
+                match TuplePath::from_path(ctxt, path) {
+                    Ok(tuple) => Self::CtorTuple(tuple),
+                    Err(mut e1) => {
+                        // try to see whether this is a function call
+                        match FuncPath::from_path(ctxt, path) {
+                            Ok(func) => Self::FuncNoPrefix(func),
+                            Err(e2) => {
+                                e1.combine(e2);
+                                return Err(e1);
+                            }
+                        }
+                    }
+                }
+            }
+            2 => {
+                // type takes first priority
+                match ADTPath::from_path(ctxt, path) {
+                    Ok(adt) => Self::CtorEnum(adt),
+                    Err(mut e1) => {
+                        // try to see whether this is a function call
+                        match QualifiedPath::from_path(ctxt, path) {
+                            Ok(qualified) => Self::FuncWithType(qualified),
+                            Err(e2) => {
+                                e1.combine(e2);
+                                return Err(e1);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => bail_on!(path, "unrecognized callee"),
+        };
+        Ok(parsed)
+    }
+}
+
+/// Marks what a path serving as a record expr can be
+pub enum ExprPathAsRecord {
+    /// `<adt>::[ty-args]::<variant> { ... }`
+    CtorEnum(ADTPath),
+    /// `<record>::[ty-args] { ... }`
+    CtorRecord(RecordPath),
+}
+
+impl ExprPathAsRecord {
+    /// Parse from an expression
+    pub fn parse<T: CtxtForExpr>(ctxt: &T, path: &Path) -> Result<Self> {
+        // case by number of path segments
+        let parsed = match path.segments.len() {
+            1 => Self::CtorRecord(RecordPath::from_path(ctxt, path)?),
+            2 => Self::CtorEnum(ADTPath::from_path(ctxt, path)?),
+            _ => bail_on!(path, "unrecognized record"),
+        };
+        Ok(parsed)
     }
 }

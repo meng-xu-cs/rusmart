@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
 
-use syn::{Ident, Result};
+use syn::{Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result};
 
 use crate::parser::dsl::SysMacroName;
-use crate::parser::err::bail_on;
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::func::SysFuncName;
 use crate::parser::generics::SysTrait;
 use crate::parser::ty::SysTypeName;
@@ -12,6 +12,15 @@ use crate::parser::ty::SysTypeName;
 pub trait ReservedIdent: Sized {
     /// try to parse from an identifier
     fn from_str(ident: &str) -> Option<Self>;
+
+    /// Expect a reserved identifier from the path
+    fn parse_path(path: &Path) -> Result<Self> {
+        let ident = parse_ident_from_path(path)?;
+        match Self::from_str(ident.to_string().as_str()) {
+            None => bail_on!(ident, "not a reserved identifier"),
+            Some(v) => Ok(v),
+        }
+    }
 }
 
 /// Test whether an identifier is a reserved keyword
@@ -36,6 +45,47 @@ fn validate_user_ident(ident: &Ident) -> Result<String> {
     }
 
     Ok(name)
+}
+
+/// Parse a plain identifier from a path
+fn parse_ident_from_path(path: &Path) -> Result<&Ident> {
+    let Path {
+        leading_colon,
+        segments,
+    } = path;
+    bail_if_exists!(leading_colon);
+
+    let mut iter = segments.iter().rev();
+    let segment = bail_if_missing!(iter.next(), path, "invalid path");
+    let PathSegment { ident, arguments } = segment;
+    if !matches!(arguments, PathArguments::None) {
+        bail_on!(arguments, "unexpected arguments");
+    }
+    bail_if_exists!(iter.next());
+
+    Ok(ident)
+}
+
+/// Parse a plain identifier from a pattern
+fn parse_ident_from_pat(pat: &Pat) -> Result<&Ident> {
+    match pat {
+        Pat::Ident(decl) => {
+            let PatIdent {
+                attrs: _,
+                by_ref,
+                mutability,
+                ident,
+                subpat,
+            } = decl;
+
+            // plain name only
+            bail_if_exists!(by_ref);
+            bail_if_exists!(mutability);
+            bail_if_exists!(subpat.as_ref().map(|(_, sub)| sub));
+            Ok(ident)
+        }
+        _ => bail_on!(pat, "not an ident"),
+    }
 }
 
 /// Utility macro to define a name
@@ -64,6 +114,22 @@ macro_rules! name {
 
             fn try_from(value: &Ident) -> Result<Self> {
                 validate_user_ident(value).map(|ident| Self { ident })
+            }
+        }
+
+        impl TryFrom<&Path> for $name {
+            type Error = syn::Error;
+
+            fn try_from(value: &Path) -> Result<Self> {
+                parse_ident_from_path(value)?.try_into()
+            }
+        }
+
+        impl TryFrom<&Pat> for $name {
+            type Error = syn::Error;
+
+            fn try_from(value: &Pat) -> Result<Self> {
+                parse_ident_from_pat(value)?.try_into()
             }
         }
     };

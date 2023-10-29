@@ -16,9 +16,8 @@ use crate::parser::generics::Generics;
 use crate::parser::infer::{ti_unify, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
-use crate::parser::path::QualifiedPath;
+use crate::parser::path::{ExprPathAsCallee, ExprPathAsRecord, ExprPathAsTarget, QualifiedPath};
 use crate::parser::ty::{CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeTag};
-use crate::parser::util::{ExprPathAsCallee, ExprPathAsRecord, ExprPathAsTarget, PatUtil};
 
 /// A context suitable for expr analysis
 pub trait CtxtForExpr: CtxtForType {
@@ -608,7 +607,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                     // find the name and type (optionally)
                     let (name, vty) = match pat {
-                        Pat::Ident(_) => (PatUtil::expect_name(pat)?, None),
+                        Pat::Ident(_) => (pat.try_into()?, None),
                         Pat::Type(pty) => {
                             let PatType {
                                 attrs: _,
@@ -617,7 +616,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                                 ty,
                             } = pty;
                             (
-                                PatUtil::expect_name(pat)?,
+                                pat.as_ref().try_into()?,
                                 Some(TypeTag::from_type(self.root, ty.as_ref())?),
                             )
                         }

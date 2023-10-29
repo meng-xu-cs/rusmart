@@ -17,7 +17,6 @@ use crate::parser::expr::CtxtForExpr;
 use crate::parser::infer::{TypeRef, TypeUnifier};
 use crate::parser::name::{ReservedIdent, TypeParamName, UsrTypeName};
 use crate::parser::ty::TypeTag;
-use crate::parser::util::PathUtil;
 
 /// Reserved trait
 #[allow(clippy::upper_case_acronyms)]
@@ -70,7 +69,7 @@ impl SysTrait {
                     bail_on!(modifier, "unexpected");
                 }
 
-                let trait_name: SysTrait = PathUtil::expect_ident_reserved(path)?;
+                let trait_name = SysTrait::parse_path(path)?;
                 if !matches!(trait_name, SysTrait::SMT) {
                     bail_on!(path, "unexpected trait")
                 }

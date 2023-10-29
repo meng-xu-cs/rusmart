@@ -10,7 +10,6 @@ use crate::parser::infer::{ti_unify, TypeRef, TypeUnifier};
 use crate::parser::name::{UsrTypeName, VarName};
 use crate::parser::path::ADTPath;
 use crate::parser::ty::EnumVariant;
-use crate::parser::util::PatUtil;
 
 /// An identifier for a ADT variant
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -39,7 +38,7 @@ impl MatchAnalyzer {
     fn analyze_pat_match_binding(pat: &Pat) -> Result<Option<VarName>> {
         let binding = match pat {
             Pat::Wild(_) => None,
-            _ => Some(PatUtil::expect_name(pat)?),
+            _ => Some(pat.try_into()?),
         };
         Ok(binding)
     }

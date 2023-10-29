@@ -9,7 +9,6 @@ use crate::parser::err::{bail_if_exists, bail_on};
 use crate::parser::expr::CtxtForExpr;
 use crate::parser::name::{ReservedIdent, VarName};
 use crate::parser::ty::TypeTag;
-use crate::parser::util::{PatUtil, PathUtil};
 
 /// Reserved macro name
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -63,7 +62,7 @@ impl Quantifier {
         }
 
         // basics
-        let name = PathUtil::expect_ident_reserved(path)?;
+        let name = SysMacroName::parse_path(path)?;
 
         // check the macro style
         let tester = tokens.clone();
@@ -106,7 +105,7 @@ impl Quantifier {
                                 ty,
                             } = &typed;
 
-                            let name = PatUtil::expect_name(pat)?;
+                            let name = pat.as_ref().try_into()?;
                             if param_decls.contains_key(&name) {
                                 bail_on!(pat, "conflicting quantifier variable name");
                             }

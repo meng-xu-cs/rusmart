@@ -9,7 +9,6 @@ use crate::parser::expr::Expr;
 use crate::parser::generics::Generics;
 use crate::parser::name::{ReservedIdent, UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
-use crate::parser::util::PatUtil;
 
 /// Reserved function name
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -168,7 +167,7 @@ impl FuncSig {
                         ty,
                     } = typed;
 
-                    let name: VarName = PatUtil::expect_name(pat)?;
+                    let name: VarName = pat.as_ref().try_into()?;
                     if !param_names.insert(name.clone()) {
                         bail_on!(pat, "duplicated parameter name");
                     }

@@ -12,8 +12,8 @@ mod ty;
 mod apply;
 mod func;
 
+mod pat;
 mod path;
-mod util;
 
 mod adt;
 mod dsl;
