@@ -1,6 +1,9 @@
 use proc_macro2::TokenTree;
+use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
 use syn::{
-    Expr, ExprClosure, ExprMacro, Macro, MacroDelimiter, parse2, Pat, PatType, Result, ReturnType,
+    parse2, Expr, ExprClosure, ExprMacro, Ident, Macro, MacroDelimiter, Pat, PatType, Result,
+    ReturnType, Token,
 };
 
 use crate::parser::err::{bail_if_exists, bail_on};
@@ -28,12 +31,48 @@ impl ReservedIdent for SysMacroName {
     }
 }
 
+/// AST for a variable declaration in an iterative quantifiers
+struct IterVar {
+    ident: Ident,
+    #[allow(dead_code)]
+    in_token: Token![in],
+    collection: Expr,
+}
+
+impl Parse for IterVar {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Self {
+            ident: input.parse()?,
+            in_token: input.parse()?,
+            collection: input.parse()?,
+        })
+    }
+}
+
+/// AST for an iterative quantifiers
+struct IterQuant {
+    vars: Punctuated<IterVar, Token![,]>,
+    #[allow(dead_code)]
+    imply_token: Token![=>],
+    body: Expr,
+}
+
+impl Parse for IterQuant {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Self {
+            vars: input.parse_terminated(IterVar::parse, Token![,])?,
+            imply_token: input.parse()?,
+            body: input.parse()?,
+        })
+    }
+}
+
 /// Details of a quantified operation
 pub enum Quantifier {
     Typed {
         name: SysMacroName,
         vars: Vec<(VarName, TypeTag)>,
-        body: Box<Expr>,
+        body: Expr,
     },
     Iterated {
         name: SysMacroName,
@@ -124,12 +163,43 @@ impl Quantifier {
                 Self::Typed {
                     name,
                     vars: param_decls,
-                    body,
+                    body: body.as_ref().clone(),
                 }
             }
             Some(_) => {
                 // foreach style
-                todo!()
+                let stream = tokens.clone();
+
+                // parse into a custom syntax
+                let syntax = parse2::<IterQuant>(stream)?;
+                let IterQuant {
+                    vars,
+                    imply_token: _,
+                    body,
+                } = syntax;
+
+                // variables
+                let mut var_decls = vec![];
+                for var in vars {
+                    let IterVar {
+                        ident,
+                        in_token: _,
+                        collection,
+                    } = var;
+
+                    let name: VarName = (&ident).try_into()?;
+                    if var_decls.iter().any(|(n, _)| n == &name) {
+                        bail_on!(&ident, "conflicting quantifier variable name");
+                    }
+                    var_decls.push((name, collection));
+                }
+
+                // done with parsing
+                Self::Iterated {
+                    name,
+                    vars: var_decls,
+                    body,
+                }
             }
         };
         Ok(parsed)
