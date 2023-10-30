@@ -1412,18 +1412,74 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         op
                     }
                     Quantifier::Iterated { name, vars, body } => {
+                        // context for body parsing
+                        let mut new_ctxt = self.fork(TypeRef::Boolean);
+                        let mut var_tys = vec![];
+
                         // parse collection expressions
-                        for (name, collection) in vars {
+                        for (var, collection) in vars {
                             let sub_ctxt = self.fork(TypeRef::Var(unifier.mk_var()));
-                            let coll_expr = sub_ctxt.convert_expr(unifier, &collection)?;
-                            match coll_expr.ty() {
+                            let sub_expr = sub_ctxt.convert_expr(unifier, &collection)?;
+                            let var_ty = match sub_expr.ty() {
                                 TypeRef::Seq(_) => TypeRef::Integer,
                                 TypeRef::Set(sub) => sub.as_ref().clone(),
-                                TypeRef::Mkaap
+                                TypeRef::Map(key, _) => key.as_ref().clone(),
+                                TypeRef::Var(_) => {
+                                    bail_on!(&collection, "unable to infer collection type")
+                                }
+                                _ => bail_on!(&collection, "not a collection type"),
+                            };
+
+                            // add the variable declaration to the context of body parsing
+                            if new_ctxt.vars.insert(var, var_ty.clone()).is_some() {
+                                bail_on!(expr_macro, "duplicated variable binding");
                             }
+
+                            // save the variable type for choose operator
+                            var_tys.push(var_ty);
                         }
 
-                        todo!()
+                        // parse the constraint
+                        let quant_body = new_ctxt.convert_expr(unifier, &body)?;
+
+                        // decide return type and opcode
+                        let (rty, op) = match name {
+                            SysMacroName::Forall => (
+                                TypeRef::Boolean,
+                                Op::IterForall {
+                                    vars,
+                                    body: quant_body,
+                                },
+                            ),
+                            SysMacroName::Exists => (
+                                TypeRef::Boolean,
+                                Op::Exists {
+                                    vars,
+                                    body: quant_body,
+                                },
+                            ),
+                            SysMacroName::Choose => {
+                                let rty = if vars.len() == 1 {
+                                    let (_, ty) = vars.first().unwrap();
+                                    ty.into()
+                                } else {
+                                    TypeRef::Pack(vars.iter().map(|(_, t)| t.into()).collect())
+                                };
+                                (
+                                    rty,
+                                    Op::Choose {
+                                        vars,
+                                        body: quant_body,
+                                    },
+                                )
+                            }
+                        };
+
+                        // unify the return type
+                        ti_unify!(unifier, &rty, &self.exp_ty, target);
+
+                        // done
+                        op
                     }
                 }
             }
