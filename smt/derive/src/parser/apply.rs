@@ -183,6 +183,7 @@ impl ApplyDatabase {
         db.builtin("length", Q::Map, fn1(map_kv(), Integer));
         db.builtin("put_unchecked", Q::Map, fn3(map_kv(), k(), v(), map_kv()));
         db.builtin("get_unchecked", Q::Map, fn2(map_kv(), k(), v()));
+        db.builtin("del_unchecked", Q::Map, fn2(map_kv(), k(), map_kv()));
         db.builtin("contains_key", Q::Map, fn2(map_kv(), k(), Boolean));
         // error
         db.builtin("fresh", Q::Error, fn0(Error));

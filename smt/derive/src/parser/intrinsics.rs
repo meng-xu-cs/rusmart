@@ -109,6 +109,13 @@ pub enum Intrinsic {
         map: Expr,
         key: Expr,
     },
+    /// `Map::del_unchecked`
+    MapDel {
+        k: TypeRef,
+        v: TypeRef,
+        map: Expr,
+        key: Expr,
+    },
     /// `Map::contains_key`
     MapContainsKey {
         k: TypeRef,
@@ -391,6 +398,7 @@ impl Intrinsic {
             (Q::Map, "length") => mk1_kv!(MapLength, ty_args, args, map),
             (Q::Map, "put_unchecked") => mk3_kv!(MapPut, ty_args, args, map, key, val),
             (Q::Map, "get_unchecked") => mk2_kv!(MapGet, ty_args, args, map, key),
+            (Q::Map, "del_unchecked") => mk2_kv!(MapDel, ty_args, args, map, key),
             (Q::Map, "contains_key") => mk2_kv!(MapContainsKey, ty_args, args, map, key),
             // error
             (Q::Error, "fresh") => mk0!(ErrFresh, ty_args, args),

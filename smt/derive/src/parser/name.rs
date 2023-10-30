@@ -189,7 +189,7 @@ impl UsrFuncName {
             // set
             | "insert" | "remove" | "contains"
             // map
-            | "put_unchecked" | "get_unchecked" | "contains_key"
+            | "put_unchecked" | "get_unchecked" | "del_unchecked" | "contains_key"
             // done
             => Self { ident: name.to_string() },
             // all other names are invalid

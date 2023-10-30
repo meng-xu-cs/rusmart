@@ -346,6 +346,18 @@ impl<K: SMT, V: SMT> Map<K, V> {
         *self.inner.get(&k).expect("key does not exist")
     }
 
+    /// operation: `m.del(k, v)`, will delete the (`k`, `v`) pair only when `k` exists
+    pub fn del_unchecked(m: Self, k: K) -> Self {
+        Self {
+            inner: Intern::new(
+                m.inner
+                    .iter()
+                    .filter_map(|(i, v)| if i == &k { None } else { Some((*i, *v)) })
+                    .collect(),
+            ),
+        }
+    }
+
     /// operation: `v.contains_key(e)`
     pub fn contains_key(self, k: K) -> Boolean {
         self.inner.contains_key(&k).into()

@@ -414,6 +414,7 @@ impl Expr {
                     map.visit(ty, pre, post)?
                 }
                 Intrinsic::MapGet { k, v, map, key }
+                | Intrinsic::MapDel { k, v, map, key }
                 | Intrinsic::MapContainsKey { k, v, map, key } => {
                     ty(k)?;
                     ty(v)?;
