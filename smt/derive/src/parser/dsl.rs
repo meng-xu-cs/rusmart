@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 use proc_macro2::TokenTree;
 use syn::{
-    parse2, Expr, ExprClosure, ExprMacro, Macro, MacroDelimiter, Pat, PatType, Result, ReturnType,
+    Expr, ExprClosure, ExprMacro, Macro, MacroDelimiter, parse2, Pat, PatType, Result, ReturnType,
 };
 
 use crate::parser::err::{bail_if_exists, bail_on};
@@ -34,12 +32,12 @@ impl ReservedIdent for SysMacroName {
 pub enum Quantifier {
     Typed {
         name: SysMacroName,
-        vars: BTreeMap<VarName, TypeTag>,
+        vars: Vec<(VarName, TypeTag)>,
         body: Box<Expr>,
     },
     Iterated {
         name: SysMacroName,
-        vars: BTreeMap<VarName, Expr>,
+        vars: Vec<(VarName, Expr)>,
         body: Expr,
     },
 }
@@ -94,7 +92,7 @@ impl Quantifier {
                 bail_if_exists!(capture);
 
                 // parameters
-                let mut param_decls = BTreeMap::new();
+                let mut param_decls = vec![];
                 for param in inputs {
                     match param {
                         Pat::Type(typed) => {
@@ -105,12 +103,12 @@ impl Quantifier {
                                 ty,
                             } = &typed;
 
-                            let name = pat.as_ref().try_into()?;
-                            if param_decls.contains_key(&name) {
+                            let name: VarName = pat.as_ref().try_into()?;
+                            if param_decls.iter().any(|(n, _)| n == &name) {
                                 bail_on!(pat, "conflicting quantifier variable name");
                             }
                             let ty = TypeTag::from_type(ctxt, ty)?;
-                            param_decls.insert(name, ty);
+                            param_decls.push((name, ty));
                         }
                         _ => bail_on!(param, "invalid quantifier variable declaration"),
                     }

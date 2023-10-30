@@ -146,32 +146,32 @@ pub enum Op {
     Phi { nodes: Vec<PhiNode>, default: Expr },
     /// `forall!(|<v>: <t>| {<expr>})`
     Forall {
-        vars: BTreeMap<VarName, TypeTag>,
+        vars: Vec<(VarName, TypeTag)>,
         body: Expr,
     },
     /// `exists!(|<v>: <t>| {<expr>})`
     Exists {
-        vars: BTreeMap<VarName, TypeTag>,
+        vars: Vec<(VarName, TypeTag)>,
         body: Expr,
     },
     /// `choose!(|<v>: <t>| {<expr>})`
     Choose {
-        vars: BTreeMap<VarName, TypeTag>,
+        vars: Vec<(VarName, TypeTag)>,
         body: Expr,
     },
     /// `forall!(<v> in <c> ... => <expr>)`
     IterForall {
-        vars: BTreeMap<VarName, Expr>,
+        vars: Vec<(VarName, Expr)>,
         body: Expr,
     },
     /// `exists!(<v> in <c> ... => <expr>)`
     IterExists {
-        vars: BTreeMap<VarName, Expr>,
+        vars: Vec<(VarName, Expr)>,
         body: Expr,
     },
     /// `choose!(<v> in <c> ... => <expr>)`
     IterChoose {
-        vars: BTreeMap<VarName, Expr>,
+        vars: Vec<(VarName, Expr)>,
         body: Expr,
     },
     /// `<class>::<method>(<a1>, <a2>, ...)`
@@ -321,8 +321,8 @@ impl Expr {
             Op::IterForall { vars, body }
             | Op::IterExists { vars, body }
             | Op::IterChoose { vars, body } => {
-                for val in vars.values_mut() {
-                    val.visit(ty, pre, post)?;
+                for (_, bind) in vars {
+                    bind.visit(ty, pre, post)?;
                 }
                 body.visit(ty, pre, post)?;
             }
@@ -1363,6 +1363,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 let quant = Quantifier::parse(self.root, expr_macro)?;
                 match quant {
                     Quantifier::Typed { name, vars, body } => {
+                        // parse body
                         let mut new_ctxt = self.fork(TypeRef::Boolean);
                         for (var, ty) in &vars {
                             if new_ctxt.vars.insert(var.clone(), ty.into()).is_some() {
@@ -1371,23 +1372,44 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         }
                         let quant_body = new_ctxt.convert_expr(unifier, &body)?;
 
-                        match name {
-                            SysMacroName::Forall => {
-                                ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
+                        // decide return type and opcode
+                        let (rty, op) = match name {
+                            SysMacroName::Forall => (
+                                TypeRef::Boolean,
                                 Op::Forall {
                                     vars,
                                     body: quant_body,
-                                }
-                            }
-                            SysMacroName::Exists => {
-                                ti_unify!(unifier, &TypeRef::Boolean, &self.exp_ty, target);
+                                },
+                            ),
+                            SysMacroName::Exists => (
+                                TypeRef::Boolean,
                                 Op::Exists {
                                     vars,
                                     body: quant_body,
-                                }
+                                },
+                            ),
+                            SysMacroName::Choose => {
+                                let rty = if vars.len() == 1 {
+                                    let (_, ty) = vars.first().unwrap();
+                                    ty.into()
+                                } else {
+                                    TypeRef::Pack(vars.iter().map(|(_, t)| t.into()).collect())
+                                };
+                                (
+                                    rty,
+                                    Op::Choose {
+                                        vars,
+                                        body: quant_body,
+                                    },
+                                )
                             }
-                            SysMacroName::Choose => todo!(),
-                        }
+                        };
+
+                        // unify the return type
+                        ti_unify!(unifier, &rty, &self.exp_ty, target);
+
+                        // done
+                        op
                     }
                     Quantifier::Iterated { name, vars, body } => {
                         todo!()
