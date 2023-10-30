@@ -1363,6 +1363,11 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 let quant = Quantifier::parse(self.root, expr_macro)?;
                 match quant {
                     Quantifier::Typed { name, vars, body } => {
+                        // early filtering
+                        if !matches!(self.root.kind, Kind::Spec) {
+                            bail_on!(expr_macro, "only allowed in spec context");
+                        }
+
                         // parse body
                         let mut new_ctxt = self.fork(TypeRef::Boolean);
                         for (var, ty) in &vars {
