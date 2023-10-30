@@ -52,8 +52,41 @@ fn seq_lt(l: Seq<Value>, r: Seq<Value>) -> Boolean {
 }
 
 #[smt_impl]
-fn _set_min(set: Set<Value>) -> Value {
+fn set_min(set: Set<Value>) -> Value {
     choose!(v in set => forall!(e in set => v.eq(e).or(v.lt(e))))
+}
+
+#[smt_type]
+enum SetCmpResult {
+    Done(Boolean),
+    Next(Set<Value>, Set<Value>),
+}
+
+#[smt_impl]
+fn set_lt_recursive(l: Set<Value>, r: Set<Value>) -> SetCmpResult {
+    if *l.length().eq(0.into()) {
+        SetCmpResult::Done(r.length().ne(0.into()))
+    } else if *r.length().eq(0.into()) {
+        SetCmpResult::Done(false.into())
+    } else {
+        let min_l = set_min(l);
+        let min_r = set_min(r);
+        if *min_l.lt(min_r) {
+            SetCmpResult::Done(true.into())
+        } else if *min_r.lt(min_l) {
+            SetCmpResult::Done(false.into())
+        } else {
+            SetCmpResult::Next(l.remove(min_l), r.remove(min_r))
+        }
+    }
+}
+
+#[smt_impl]
+fn set_lt(l: Set<Value>, r: Set<Value>) -> Boolean {
+    match set_lt_recursive(l, r) {
+        SetCmpResult::Done(result) => result,
+        SetCmpResult::Next(next_l, next_r) => set_lt(next_l, next_r),
+    }
 }
 
 #[smt_impl(method = lt)]
@@ -91,7 +124,10 @@ pub fn lt(lhs: Value, rhs: Value) -> Boolean {
         (Value::Seq(v_lhs), Value::Seq(v_rhs)) => seq_lt(v_lhs, v_rhs),
         (Value::Seq(_), Value::Map(_) | Value::Set(_)) => true.into(),
 
-        // TODO (others)
+        // TODO (map)
+
+        // set
+        (Value::Set(v_lhs), Value::Set(v_rhs)) => set_lt(v_lhs, v_rhs),
 
         // default
         (_, _) => false.into(),
