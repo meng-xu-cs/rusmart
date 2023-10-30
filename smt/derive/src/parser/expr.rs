@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use syn::{
     Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprField, ExprIf, ExprMatch, ExprMethodCall,
-    ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit, Member, Pat, PatTuple, PatType,
-    Result, Stmt, UnOp,
+    ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit, Member, Pat, PatTuple, Result,
+    Stmt, UnOp,
 };
 
 use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
@@ -16,6 +16,7 @@ use crate::parser::generics::Generics;
 use crate::parser::infer::{ti_unify, TypeRef, TypeUnifier};
 use crate::parser::intrinsics::Intrinsic;
 use crate::parser::name::{UsrFuncName, UsrTypeName, VarName};
+use crate::parser::pat::LetDecl;
 use crate::parser::path::{ExprPathAsCallee, ExprPathAsRecord, ExprPathAsTarget, QualifiedPath};
 use crate::parser::ty::{CtxtForType, EnumVariant, SysTypeName, TypeBody, TypeDef, TypeTag};
 
@@ -82,6 +83,20 @@ pub struct MatchCombo {
 pub struct PhiNode {
     pub cond: Expr,
     pub body: Expr,
+}
+
+/// Marks a declaration of variable(s)
+#[derive(Clone)]
+pub enum VarDecl {
+    One(VarName),
+    Pack(Vec<VarDecl>),
+}
+
+/// Let bindings
+#[derive(Clone)]
+pub struct LetBinding {
+    pub decl: VarDecl,
+    pub bind: Expr,
 }
 
 /// Operations
@@ -182,10 +197,7 @@ pub enum Expr {
     /// a single instruction
     Unit(Inst),
     /// `{ let <v1> = ...; let <v2> = ...; ...; <op>(<v1>, <v2>, ...) }`
-    Block {
-        lets: Vec<(VarName, Expr)>,
-        body: Inst,
-    },
+    Block { lets: Vec<LetBinding>, body: Inst },
 }
 
 impl Expr {
@@ -217,8 +229,8 @@ impl Expr {
         let inst = match self {
             Expr::Unit(inst) => inst,
             Expr::Block { lets, body } => {
-                for (_, sub) in lets {
-                    sub.visit(ty, pre, post)?;
+                for binding in lets {
+                    binding.bind.visit(ty, pre, post)?;
                 }
                 body
             }
@@ -477,7 +489,7 @@ struct ExprParserCursor<'r, 'ctx: 'r> {
     /// variables in scope and their types
     vars: BTreeMap<VarName, TypeRef>,
     /// new let-bindings created, if any
-    bindings: Vec<(VarName, Expr)>,
+    bindings: Vec<LetBinding>,
 }
 
 impl<'ctx> ExprParserRoot<'ctx> {
@@ -605,26 +617,8 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         semi_token: _,
                     } = binding;
 
-                    // find the name and type (optionally)
-                    let (name, vty) = match pat {
-                        Pat::Ident(_) => (pat.try_into()?, None),
-                        Pat::Type(pty) => {
-                            let PatType {
-                                attrs: _,
-                                pat,
-                                colon_token: _,
-                                ty,
-                            } = pty;
-                            (
-                                pat.as_ref().try_into()?,
-                                Some(TypeTag::from_type(self.root, ty.as_ref())?),
-                            )
-                        }
-                        _ => bail_on!(pat, "unrecognized binding"),
-                    };
-                    if self.vars.get(&name).is_some() {
-                        bail_on!(pat, "name conflict");
-                    }
+                    // extract names and optionally, the type
+                    let LetDecl { vars, decl, ty } = LetDecl::parse(self.root, unifier, pat)?;
 
                     // extract the body
                     let body = bail_if_missing!(init, binding, "expect initializer");
@@ -636,18 +630,18 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     bail_if_exists!(diverge.as_ref().map(|(_, div)| div));
 
                     // parse the body with a new parser
-                    let exp_ty = match vty.as_ref() {
-                        None => {
-                            // assign a new type var to this variable (i.e., to be inferred)
-                            TypeRef::Var(unifier.mk_var())
-                        }
-                        Some(t) => t.into(),
-                    };
-                    let body_expr = self.fork(exp_ty).convert_expr(unifier, expr)?;
+                    let body_expr = self.fork(ty).convert_expr(unifier, expr)?;
 
                     // done, continue to next statement
-                    self.vars.insert(name.clone(), body_expr.ty().clone());
-                    self.bindings.push((name, body_expr));
+                    for (name, ty) in vars {
+                        if self.vars.insert(name, ty).is_some() {
+                            bail_on!(pat, "conflicting variable names");
+                        }
+                    }
+                    self.bindings.push(LetBinding {
+                        decl,
+                        bind: body_expr,
+                    });
                 }
                 Stmt::Expr(expr, semi_token) => {
                     // expecting a unit expression
