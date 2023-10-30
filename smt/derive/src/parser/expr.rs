@@ -1412,6 +1412,17 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         op
                     }
                     Quantifier::Iterated { name, vars, body } => {
+                        // parse collection expressions
+                        for (name, collection) in vars {
+                            let sub_ctxt = self.fork(TypeRef::Var(unifier.mk_var()));
+                            let coll_expr = sub_ctxt.convert_expr(unifier, &collection)?;
+                            match coll_expr.ty() {
+                                TypeRef::Seq(_) => TypeRef::Integer,
+                                TypeRef::Set(sub) => sub.as_ref().clone(),
+                                TypeRef::Mkaap
+                            }
+                        }
+
                         todo!()
                     }
                 }
