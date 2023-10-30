@@ -396,7 +396,9 @@ impl Expr {
                     ty(t)?;
                     set.visit(ty, pre, post)?;
                 }
-                Intrinsic::SetInsert { t, set, item } | Intrinsic::SetContains { t, set, item } => {
+                Intrinsic::SetInsert { t, set, item }
+                | Intrinsic::SetRemove { t, set, item }
+                | Intrinsic::SetContains { t, set, item } => {
                     ty(t)?;
                     set.visit(ty, pre, post)?;
                     item.visit(ty, pre, post)?;

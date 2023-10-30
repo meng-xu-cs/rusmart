@@ -187,7 +187,7 @@ impl UsrFuncName {
             // seq
             | "append" | "at_unchecked" | "includes"
             // set
-            | "insert" | "contains"
+            | "insert" | "remove" | "contains"
             // map
             | "put_unchecked" | "get_unchecked" | "contains_key"
             // done

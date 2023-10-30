@@ -289,6 +289,13 @@ impl<T: SMT> Set<T> {
         }
     }
 
+    /// operation: `s.remove(e)`
+    pub fn remove(self, e: T) -> Self {
+        Self {
+            inner: Intern::new(self.inner.iter().filter(|i| *i != &e).copied().collect()),
+        }
+    }
+
     /// operation: `v.contains(e)`
     pub fn contains(self, e: T) -> Boolean {
         self.inner.contains(&e).into()

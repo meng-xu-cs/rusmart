@@ -86,6 +86,8 @@ pub enum Intrinsic {
     SetLength { t: TypeRef, set: Expr },
     /// `Set::insert`
     SetInsert { t: TypeRef, set: Expr, item: Expr },
+    /// `Set::remove`
+    SetRemove { t: TypeRef, set: Expr, item: Expr },
     /// `Set::contains`
     SetContains { t: TypeRef, set: Expr, item: Expr },
     /// `Map::empty`
@@ -382,6 +384,7 @@ impl Intrinsic {
             (Q::Set, "empty") => mk0_t!(SetEmpty, ty_args, args),
             (Q::Set, "length") => mk1_t!(SetLength, ty_args, args, set),
             (Q::Set, "insert") => mk2_t!(SetInsert, ty_args, args, set, item),
+            (Q::Set, "remove") => mk2_t!(SetRemove, ty_args, args, set, item),
             (Q::Set, "contains") => mk2_t!(SetContains, ty_args, args, set, item),
             // map
             (Q::Map, "empty") => mk0_kv!(MapEmpty, ty_args, args),

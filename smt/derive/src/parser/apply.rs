@@ -176,6 +176,7 @@ impl ApplyDatabase {
         db.builtin("empty", Q::Set, fn0(set_t()));
         db.builtin("length", Q::Set, fn1(set_t(), Integer));
         db.builtin("insert", Q::Set, fn2(set_t(), t(), set_t()));
+        db.builtin("remove", Q::Set, fn2(set_t(), t(), set_t()));
         db.builtin("contains", Q::Set, fn2(set_t(), t(), Boolean));
         // map
         db.builtin("empty", Q::Map, fn0(map_kv()));
