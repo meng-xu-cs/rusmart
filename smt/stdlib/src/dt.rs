@@ -329,10 +329,10 @@ impl<K: SMT, V: SMT> Map<K, V> {
     }
 
     /// operation: `m.put(k, v)`, will override `v` if `k` already exists
-    pub fn put_unchecked(m: Self, k: K, v: V) -> Self {
+    pub fn put_unchecked(self, k: K, v: V) -> Self {
         Self {
             inner: Intern::new(
-                m.inner
+                self.inner
                     .iter()
                     .map(|(k, v)| (*k, *v))
                     .chain(std::iter::once((k, v)))
@@ -347,10 +347,10 @@ impl<K: SMT, V: SMT> Map<K, V> {
     }
 
     /// operation: `m.del(k, v)`, will delete the (`k`, `v`) pair only when `k` exists
-    pub fn del_unchecked(m: Self, k: K) -> Self {
+    pub fn del_unchecked(self, k: K) -> Self {
         Self {
             inner: Intern::new(
-                m.inner
+                self.inner
                     .iter()
                     .filter_map(|(i, v)| if i == &k { None } else { Some((*i, *v)) })
                     .collect(),

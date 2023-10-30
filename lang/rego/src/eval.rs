@@ -89,6 +89,52 @@ fn set_lt(l: Set<Value>, r: Set<Value>) -> Boolean {
     }
 }
 
+#[smt_impl]
+fn map_key_min(map: Map<Value, Value>) -> Value {
+    choose!(v in map => forall!(e in map => v.eq(e).or(v.lt(e))))
+}
+
+#[smt_type]
+enum MapCmpResult {
+    Done(Boolean),
+    Next(Map<Value, Value>, Map<Value, Value>),
+}
+
+#[smt_impl]
+fn map_lt_recursive(l: Map<Value, Value>, r: Map<Value, Value>) -> MapCmpResult {
+    if *l.length().eq(0.into()) {
+        MapCmpResult::Done(r.length().ne(0.into()))
+    } else if *r.length().eq(0.into()) {
+        MapCmpResult::Done(false.into())
+    } else {
+        let min_key_l = map_key_min(l);
+        let min_key_r = map_key_min(r);
+        if *min_key_l.lt(min_key_r) {
+            MapCmpResult::Done(true.into())
+        } else if *min_key_r.lt(min_key_l) {
+            MapCmpResult::Done(false.into())
+        } else {
+            let val_l = l.get_unchecked(min_key_l);
+            let val_r = r.get_unchecked(min_key_r);
+            if *val_l.lt(val_r) {
+                MapCmpResult::Done(true.into())
+            } else if *val_r.lt(val_l) {
+                MapCmpResult::Done(false.into())
+            } else {
+                MapCmpResult::Next(l.del_unchecked(min_key_l), r.del_unchecked(min_key_r))
+            }
+        }
+    }
+}
+
+#[smt_impl]
+fn map_lt(l: Map<Value, Value>, r: Map<Value, Value>) -> Boolean {
+    match map_lt_recursive(l, r) {
+        MapCmpResult::Done(result) => result,
+        MapCmpResult::Next(next_l, next_r) => map_lt(next_l, next_r),
+    }
+}
+
 #[smt_impl(method = lt)]
 pub fn lt(lhs: Value, rhs: Value) -> Boolean {
     match (lhs, rhs) {
@@ -124,7 +170,9 @@ pub fn lt(lhs: Value, rhs: Value) -> Boolean {
         (Value::Seq(v_lhs), Value::Seq(v_rhs)) => seq_lt(v_lhs, v_rhs),
         (Value::Seq(_), Value::Map(_) | Value::Set(_)) => true.into(),
 
-        // TODO (map)
+        // map
+        (Value::Map(v_lhs), Value::Map(v_rhs)) => map_lt(v_lhs, v_rhs),
+        (Value::Map(_), Value::Set(_)) => true.into(),
 
         // set
         (Value::Set(v_lhs), Value::Set(v_rhs)) => set_lt(v_lhs, v_rhs),
