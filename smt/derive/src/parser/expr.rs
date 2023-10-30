@@ -1415,6 +1415,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         // context for body parsing
                         let mut new_ctxt = self.fork(TypeRef::Boolean);
                         let mut var_tys = vec![];
+                        let mut var_exprs = vec![];
 
                         // parse collection expressions
                         for (var, collection) in vars {
@@ -1431,12 +1432,13 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             };
 
                             // add the variable declaration to the context of body parsing
-                            if new_ctxt.vars.insert(var, var_ty.clone()).is_some() {
+                            if new_ctxt.vars.insert(var.clone(), var_ty.clone()).is_some() {
                                 bail_on!(expr_macro, "duplicated variable binding");
                             }
 
-                            // save the variable type for choose operator
+                            // save the variable expression and its type (for choose operator)
                             var_tys.push(var_ty);
+                            var_exprs.push((var, sub_expr));
                         }
 
                         // parse the constraint
@@ -1447,28 +1449,27 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             SysMacroName::Forall => (
                                 TypeRef::Boolean,
                                 Op::IterForall {
-                                    vars,
+                                    vars: var_exprs,
                                     body: quant_body,
                                 },
                             ),
                             SysMacroName::Exists => (
                                 TypeRef::Boolean,
-                                Op::Exists {
-                                    vars,
+                                Op::IterExists {
+                                    vars: var_exprs,
                                     body: quant_body,
                                 },
                             ),
                             SysMacroName::Choose => {
-                                let rty = if vars.len() == 1 {
-                                    let (_, ty) = vars.first().unwrap();
-                                    ty.into()
+                                let rty = if var_tys.len() == 1 {
+                                    var_tys.into_iter().next().unwrap()
                                 } else {
-                                    TypeRef::Pack(vars.iter().map(|(_, t)| t.into()).collect())
+                                    TypeRef::Pack(var_tys)
                                 };
                                 (
                                     rty,
-                                    Op::Choose {
-                                        vars,
+                                    Op::IterChoose {
+                                        vars: var_exprs,
                                         body: quant_body,
                                     },
                                 )
