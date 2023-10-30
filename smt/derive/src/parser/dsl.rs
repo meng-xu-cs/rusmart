@@ -60,7 +60,7 @@ struct IterQuant {
 impl Parse for IterQuant {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Self {
-            vars: input.parse_terminated(IterVar::parse, Token![,])?,
+            vars: Punctuated::parse_separated_nonempty(input)?,
             imply_token: input.parse()?,
             body: input.parse()?,
         })
