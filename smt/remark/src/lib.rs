@@ -452,3 +452,25 @@ pub fn smt_impl(attr: Syntax, item: Syntax) -> Syntax {
 pub fn smt_spec(attr: Syntax, item: Syntax) -> Syntax {
     fail_if_error!(derive_for_func(attr, item))
 }
+
+/// Annotation over a Rust const
+#[proc_macro_attribute]
+pub fn smt_axiom(attr: Syntax, item: Syntax) -> Syntax {
+    // check attributes
+    let attr = TokenStream::from(attr);
+    if !attr.is_empty() {
+        fail_on!(attr, "unexpected");
+    }
+
+    // produce the output
+    let output = item.clone();
+
+    // ensure that the underlying item is a type
+    let target = parse_macro_input!(item as Item);
+    if !matches!(target, Item::Const(_)) {
+        fail_on!(target, "expect const");
+    }
+
+    // do nothing with the const definition
+    output
+}

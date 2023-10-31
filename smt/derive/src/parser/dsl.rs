@@ -207,12 +207,12 @@ impl Quantifier {
 }
 
 /// Represents the syntax of an axiom
-pub struct AxiomSyntax {
+pub struct Axiom {
     params: Vec<(Ident, Type)>,
     body: Expr,
 }
 
-impl AxiomSyntax {
+impl Axiom {
     /// Check whether the entire function body is `unimplemented!()`
     pub fn is_unimplemented(stmts: &[Stmt]) -> Result<bool> {
         if stmts.len() != 1 {
@@ -325,7 +325,7 @@ impl AxiomSyntax {
         }
 
         // done
-        Ok(Some(AxiomSyntax {
+        Ok(Some(Axiom {
             params,
             body: *body,
         }))

@@ -3,12 +3,12 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemMod, ItemStruct, Result, Stmt};
+use syn::{File, Ident, Item, ItemConst, ItemEnum, ItemFn, ItemMod, ItemStruct, Result, Stmt};
 use walkdir::WalkDir;
 
 use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
-use crate::parser::dsl::AxiomSyntax;
+use crate::parser::dsl::Axiom;
 use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
 use crate::parser::func::{FuncSig, ImplFuncDef, SpecFuncDef};
@@ -61,6 +61,18 @@ impl MarkedSpec {
     }
 }
 
+/// SMT-marked const as axiom
+pub struct MarkedAxiom {
+    item: ItemConst,
+}
+
+impl MarkedAxiom {
+    /// Retrieve the name of this item
+    pub fn name(&self) -> &Ident {
+        &self.item.ident
+    }
+}
+
 /// A refinement relation
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Refinement {
@@ -73,7 +85,7 @@ pub struct Context {
     types: BTreeMap<UsrTypeName, MarkedType>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
-    axioms: Vec<AxiomSyntax>,
+    axioms: Vec<MarkedAxiom>,
 }
 
 impl Context {
@@ -132,11 +144,12 @@ impl Context {
                     None => continue,
                     Some(Mark::Impl(mark)) => self.add_impl(MarkedImpl { item: syntax, mark })?,
                     Some(Mark::Spec(mark)) => self.add_spec(MarkedSpec { item: syntax, mark })?,
-                    Some(Mark::Type) => bail_on!(syntax, "invalid annotation"),
+                    _ => bail_on!(syntax, "invalid annotation"),
                 },
-                Item::Macro(syntax) => match AxiomSyntax::try_parse(syntax)? {
+                Item::Const(syntax) => match Mark::parse_attrs(&syntax.attrs)? {
                     None => continue,
-                    Some(parsed) => self.axioms.push(parsed),
+                    Some(Mark::Axiom) => self.add_axiom(MarkedAxiom { item: syntax })?,
+                    _ => bail_on!(syntax, "invalid annotation"),
                 },
                 Item::Mod(syntax) => {
                     let ItemMod {
@@ -221,6 +234,16 @@ impl Context {
         Ok(())
     }
 
+    /// Add an axiom to the context
+    fn add_axiom(&mut self, item: MarkedAxiom) -> Result<()> {
+        let name = item.name();
+        if name.to_string() != "_" {
+            bail_on!(name, "expect _");
+        }
+        self.axioms.push(item);
+        Ok(())
+    }
+
     /// Check whether the marks declared are correct or not
     fn sanity_check(&self) -> Result<()> {
         for marked in self.impls.values() {
@@ -279,7 +302,7 @@ pub struct ContextWithGenerics {
     types: BTreeMap<UsrTypeName, (Generics, MarkedType)>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
-    axioms: Vec<AxiomSyntax>,
+    axioms: Vec<MarkedAxiom>,
 }
 
 impl ContextWithGenerics {
@@ -333,7 +356,7 @@ pub struct ContextWithType {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
-    axioms: Vec<AxiomSyntax>,
+    axioms: Vec<MarkedAxiom>,
 }
 
 impl ContextWithType {
@@ -421,7 +444,6 @@ impl ContextWithType {
                 Err(e) => bail_on!(raw, "{}", e),
             }
         }
-
         trace!("databases constructed");
 
         // re-packing
@@ -454,6 +476,7 @@ impl ContextWithType {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
+            axioms,
             vc_db,
             fn_db,
         };
@@ -466,7 +489,7 @@ pub struct ContextWithSig {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
-    axioms: Vec<AxiomSyntax>,
+    axioms: Vec<MarkedAxiom>,
     /// a database for verification conditions (i.e., impl and spec mapping)
     pub vc_db: BTreeSet<Refinement>,
     /// a database for functions
@@ -500,7 +523,7 @@ impl ContextWithSig {
         for (name, (sig, stmts)) in &self.specs {
             trace!("handling spec body: {}", name);
             // check for uninterpreted function
-            let uninterpreted = AxiomSyntax::is_unimplemented(stmts)?;
+            let uninterpreted = Axiom::is_unimplemented(stmts)?;
             let body = if uninterpreted {
                 None
             } else {
@@ -514,6 +537,7 @@ impl ContextWithSig {
             types,
             impls,
             specs,
+            axioms,
             fn_db: _,
             vc_db: _,
         } = self;
@@ -537,6 +561,7 @@ impl ContextWithSig {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
+            axioms,
         })
     }
 }
@@ -547,6 +572,7 @@ pub struct ContextWithFunc {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, ImplFuncDef>,
     specs: BTreeMap<UsrFuncName, SpecFuncDef>,
+    axioms: Vec<MarkedAxiom>,
 }
 
 #[cfg(test)]

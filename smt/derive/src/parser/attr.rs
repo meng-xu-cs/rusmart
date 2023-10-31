@@ -11,6 +11,7 @@ enum Annotation {
     Type,
     Impl,
     Spec,
+    Axiom,
 }
 
 /// Annotation value
@@ -26,6 +27,7 @@ impl Annotation {
             "smt_type" => Some(Self::Type),
             "smt_impl" => Some(Self::Impl),
             "smt_spec" => Some(Self::Spec),
+            "smt_axiom" => Some(Self::Axiom),
             _ => None,
         }
     }
@@ -52,6 +54,7 @@ pub enum Mark {
     Type,
     Impl(ImplMark),
     Spec(SpecMark),
+    Axiom,
 }
 
 impl Mark {
@@ -153,6 +156,7 @@ impl Mark {
                     method: None,
                     impls: BTreeSet::new(),
                 }),
+                Some(Annotation::Axiom) => Self::Axiom,
             },
             Meta::List(MetaList {
                 path,
@@ -160,7 +164,9 @@ impl Mark {
                 tokens,
             }) => match Annotation::parse_path(path) {
                 None => return Ok(None),
-                Some(Annotation::Type) => bail_on!(attr, "unexpected list"),
+                Some(Annotation::Type) | Some(Annotation::Axiom) => {
+                    bail_on!(attr, "unexpected list")
+                }
                 Some(Annotation::Impl) => {
                     if !matches!(delimiter, MacroDelimiter::Paren(_)) {
                         bail_on!(attr, "not a parenthesis-enclosed list");
