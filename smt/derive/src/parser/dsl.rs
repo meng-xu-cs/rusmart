@@ -2,11 +2,11 @@ use proc_macro2::TokenTree;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
-    parse2, Expr, ExprClosure, ExprMacro, Ident, Macro, MacroDelimiter, Pat, PatType, Result,
-    ReturnType, Stmt, Token,
+    parse2, Expr, ExprClosure, ExprMacro, Ident, ItemMacro, Macro, MacroDelimiter, Pat, PatIdent,
+    PatType, Result, ReturnType, Stmt, Token, Type,
 };
 
-use crate::parser::err::{bail_if_exists, bail_if_non_empty, bail_on};
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on};
 use crate::parser::expr::CtxtForExpr;
 use crate::parser::name::{ReservedIdent, VarName};
 use crate::parser::ty::TypeTag;
@@ -163,7 +163,7 @@ impl Quantifier {
                 Self::Typed {
                     name,
                     vars: param_decls,
-                    body: body.as_ref().clone(),
+                    body: *body,
                 }
             }
             Some(_) => {
@@ -206,10 +206,13 @@ impl Quantifier {
     }
 }
 
-/// Utility holder for axiom
-pub struct Axiom;
+/// Represents the syntax of an axiom
+pub struct AxiomSyntax {
+    params: Vec<(Ident, Type)>,
+    body: Expr,
+}
 
-impl Axiom {
+impl AxiomSyntax {
     /// Check whether the entire function body is `unimplemented!()`
     pub fn is_unimplemented(stmts: &[Stmt]) -> Result<bool> {
         if stmts.len() != 1 {
@@ -238,5 +241,93 @@ impl Axiom {
 
         // done
         Ok(true)
+    }
+
+    /// Extract the axiom AST from the macro
+    pub fn try_parse(item: ItemMacro) -> Result<Option<Self>> {
+        let ItemMacro {
+            attrs: _,
+            ident,
+            mac,
+            semi_token,
+        } = item;
+
+        let Macro {
+            path,
+            bang_token: _,
+            delimiter,
+            tokens,
+        } = mac;
+        if !path.is_ident("axiom") {
+            return Ok(None);
+        }
+
+        // more rigorous checking
+        if !matches!(delimiter, MacroDelimiter::Paren(_)) {
+            bail_on!(&path, "invalid delimiter");
+        }
+        bail_if_exists!(ident);
+        bail_if_missing!(semi_token, &path, "expect ;");
+
+        // convert
+        let closure = parse2::<ExprClosure>(tokens)?;
+        let ExprClosure {
+            attrs: _,
+            lifetimes,
+            constness,
+            movability,
+            asyncness,
+            capture,
+            or1_token: _,
+            inputs,
+            or2_token: _,
+            output,
+            body,
+        } = closure;
+        bail_if_exists!(lifetimes);
+        bail_if_exists!(constness);
+        bail_if_exists!(movability);
+        bail_if_exists!(asyncness);
+        bail_if_exists!(capture);
+
+        // expect no return type
+        match output {
+            ReturnType::Default => (),
+            ReturnType::Type(_, rty) => bail_on!(rty, "unexpected return type"),
+        };
+
+        // parse the patterns
+        let mut params = vec![];
+        for input in inputs {
+            match input {
+                Pat::Type(PatType {
+                    attrs: _,
+                    pat,
+                    colon_token: _,
+                    ty,
+                }) => match *pat {
+                    Pat::Ident(PatIdent {
+                        attrs: _,
+                        by_ref,
+                        mutability,
+                        ident,
+                        subpat,
+                    }) => {
+                        bail_if_exists!(by_ref);
+                        bail_if_exists!(mutability);
+                        bail_if_exists!(subpat.map(|(_, t)| t));
+                        params.push((ident, *ty));
+                    }
+                    n => bail_on!(&n, "not an identifier"),
+                },
+                p => bail_on!(&p, "not a parameter declaration"),
+            }
+        }
+
+        // done
+        Ok(Some(AxiomSyntax {
+            params,
+            body: *body,
+        }))
     }
 }

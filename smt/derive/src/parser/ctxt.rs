@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 
 use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
-use crate::parser::dsl::Axiom;
+use crate::parser::dsl::AxiomSyntax;
 use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
 use crate::parser::func::{FuncSig, ImplFuncDef, SpecFuncDef};
@@ -73,6 +73,7 @@ pub struct Context {
     types: BTreeMap<UsrTypeName, MarkedType>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
+    axioms: Vec<AxiomSyntax>,
 }
 
 impl Context {
@@ -82,6 +83,7 @@ impl Context {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
             specs: BTreeMap::new(),
+            axioms: vec![],
         };
 
         // scan over the code base
@@ -131,6 +133,10 @@ impl Context {
                     Some(Mark::Impl(mark)) => self.add_impl(MarkedImpl { item: syntax, mark })?,
                     Some(Mark::Spec(mark)) => self.add_spec(MarkedSpec { item: syntax, mark })?,
                     Some(Mark::Type) => bail_on!(syntax, "invalid annotation"),
+                },
+                Item::Macro(syntax) => match AxiomSyntax::try_parse(syntax)? {
+                    None => continue,
+                    Some(parsed) => self.axioms.push(parsed),
                 },
                 Item::Mod(syntax) => {
                     let ItemMod {
@@ -248,6 +254,7 @@ impl Context {
             types,
             impls: self.impls,
             specs: self.specs,
+            axioms: self.axioms,
         })
     }
 
@@ -257,6 +264,7 @@ impl Context {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
             specs: BTreeMap::new(),
+            axioms: vec![],
         };
 
         let file: File = syn::parse2(stream)?;
@@ -271,6 +279,7 @@ pub struct ContextWithGenerics {
     types: BTreeMap<UsrTypeName, (Generics, MarkedType)>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
+    axioms: Vec<AxiomSyntax>,
 }
 
 impl ContextWithGenerics {
@@ -295,6 +304,7 @@ impl ContextWithGenerics {
             types,
             impls,
             specs,
+            axioms,
         } = self;
 
         let new_types = types
@@ -313,6 +323,7 @@ impl ContextWithGenerics {
             types: new_types,
             impls,
             specs,
+            axioms,
         })
     }
 }
@@ -322,6 +333,7 @@ pub struct ContextWithType {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
+    axioms: Vec<AxiomSyntax>,
 }
 
 impl ContextWithType {
@@ -417,6 +429,7 @@ impl ContextWithType {
             types,
             impls,
             specs,
+            axioms,
         } = self;
 
         let unpacked_impls: BTreeMap<_, _> = impls
@@ -453,6 +466,7 @@ pub struct ContextWithSig {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
+    axioms: Vec<AxiomSyntax>,
     /// a database for verification conditions (i.e., impl and spec mapping)
     pub vc_db: BTreeSet<Refinement>,
     /// a database for functions
@@ -486,7 +500,7 @@ impl ContextWithSig {
         for (name, (sig, stmts)) in &self.specs {
             trace!("handling spec body: {}", name);
             // check for uninterpreted function
-            let uninterpreted = Axiom::is_unimplemented(stmts)?;
+            let uninterpreted = AxiomSyntax::is_unimplemented(stmts)?;
             let body = if uninterpreted {
                 None
             } else {
