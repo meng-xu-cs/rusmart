@@ -93,6 +93,12 @@ impl Boolean {
             inner: self.inner ^ rhs.inner,
         }
     }
+
+    pub fn implies(self, rhs: Self) -> Self {
+        Self {
+            inner: !self.inner | rhs.inner,
+        }
+    }
 }
 
 impl SMT for Boolean {}

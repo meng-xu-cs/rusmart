@@ -1,6 +1,6 @@
 use rusmart_smt_remark::{smt_impl, smt_spec, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Map, Rational, Seq, Set, Text, SMT};
-use rusmart_smt_stdlib::{choose, forall};
+use rusmart_smt_stdlib::{axiom, choose, forall};
 
 /// A term *in its valid state* is defined by the following ADT
 #[smt_type]
@@ -187,10 +187,18 @@ pub fn lt(lhs: Value, rhs: Value) -> Boolean {
 
 #[smt_spec(impls = [lt])]
 pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
-    false.into()
+    unimplemented!()
 }
 
-#[smt_spec(impls = [seq_lt])]
-pub fn spec_seq_lt(_lhs: Seq<Value>, _rhs: Seq<Value>) -> Boolean {
-    forall!(|k: Integer| Integer::ge(k, Integer::from(0)))
-}
+// strict total ordering
+// rule 1: irreflexive
+axiom!(|v: Value| spec_lt(v, v).not());
+// rule 2: asymmetric
+axiom!(|v1: Value, v2: Value| spec_lt(v1, v2).implies(spec_lt(v2, v1).not()));
+// rule 3: transitive
+axiom!(
+    |v1: Value, v2: Value, v3: Value| (spec_lt(v1, v2).and(spec_lt(v2, v3)))
+        .implies(spec_lt(v1, v3))
+);
+// rule 4: connected
+axiom!(|v1: Value, v2: Value| (v1.ne(v2)).implies(spec_lt(v1, v2).or(spec_lt(v2, v1))));

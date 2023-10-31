@@ -332,7 +332,8 @@ impl Expr {
                 Intrinsic::BoolNot { val } => val.visit(ty, pre, post)?,
                 Intrinsic::BoolAnd { lhs, rhs }
                 | Intrinsic::BoolOr { lhs, rhs }
-                | Intrinsic::BoolXor { lhs, rhs } => {
+                | Intrinsic::BoolXor { lhs, rhs }
+                | Intrinsic::BoolImplies { lhs, rhs } => {
                     lhs.visit(ty, pre, post)?;
                     rhs.visit(ty, pre, post)?;
                 }

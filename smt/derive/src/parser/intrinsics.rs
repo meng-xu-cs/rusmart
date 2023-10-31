@@ -22,6 +22,8 @@ pub enum Intrinsic {
     BoolOr { lhs: Expr, rhs: Expr },
     /// `Boolean::xor`
     BoolXor { lhs: Expr, rhs: Expr },
+    /// `Boolean::implies`
+    BoolImplies { lhs: Expr, rhs: Expr },
     /// `Integer::from`
     IntVal(i128),
     /// `Integer::lt`
@@ -356,6 +358,7 @@ impl Intrinsic {
             (Q::Boolean, "and") => mk2!(BoolAnd, ty_args, args),
             (Q::Boolean, "or") => mk2!(BoolOr, ty_args, args),
             (Q::Boolean, "xor") => mk2!(BoolXor, ty_args, args),
+            (Q::Boolean, "implies") => mk2!(BoolImplies, ty_args, args),
             // integer
             (Q::Integer, "add") => mk2!(IntAdd, ty_args, args),
             (Q::Integer, "sub") => mk2!(IntSub, ty_args, args),

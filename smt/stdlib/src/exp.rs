@@ -4,7 +4,9 @@ pub use itertools::iproduct;
 #[macro_export]
 macro_rules! forall {
     (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $constraint:expr) => {
-        (|$v0 : $t0 $(, $vn : $tn)*| $constraint)(<$t0>::default() $(, <$tn>::default())*)
+        (|$v0 : $t0 $(, $vn : $tn)*| -> $crate::dt::Boolean $constraint)(
+            <$t0>::default() $(, <$tn>::default())*
+        )
     };
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
         $crate::dt::Boolean::from(
@@ -18,8 +20,10 @@ macro_rules! forall {
 /// Operator: exists
 #[macro_export]
 macro_rules! exists {
-    (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $e:expr) => {
-        (|$v0 : $t0 $(, $vn : $tn)*| $e)(<$t0>::default() $(, <$tn>::default())*)
+    (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $constraint:expr) => {
+        (|$v0 : $t0 $(, $vn : $tn)*| -> $crate::dt::Boolean $constraint)(
+            <$t0>::default() $(, <$tn>::default())*
+        )
     };
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
         $crate::dt::Boolean::from(
@@ -49,5 +53,13 @@ macro_rules! choose {
             }
             panic!("no valid choice");
         }) ()
+    };
+}
+
+/// Axiom-based definition of an uninterpreted function
+#[macro_export]
+macro_rules! axiom {
+    (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $constraint:expr) => {
+        const _: fn($t0 $(, $tn)*) -> Boolean = |$v0 $(, $vn)*| $constraint;
     };
 }

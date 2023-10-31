@@ -141,6 +141,7 @@ impl ApplyDatabase {
         db.builtin("and", Q::Boolean, fn2_arith(Boolean));
         db.builtin("or", Q::Boolean, fn2_arith(Boolean));
         db.builtin("xor", Q::Boolean, fn2_arith(Boolean));
+        db.builtin("implies", Q::Boolean, fn2_arith(Boolean));
         // integer
         db.builtin("add", Q::Integer, fn2_arith(Integer));
         db.builtin("sub", Q::Integer, fn2_arith(Integer));
