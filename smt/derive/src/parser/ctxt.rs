@@ -3,12 +3,12 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemStruct, Result, Stmt};
+use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemMod, ItemStruct, Result, Stmt};
 use walkdir::WalkDir;
 
 use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
-use crate::parser::err::{bail_on, bail_on_with_note};
+use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
 use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::generics::Generics;
@@ -110,10 +110,10 @@ impl Context {
         Ok(ctxt)
     }
 
-    /// Process a single input file
-    fn process_file(&mut self, file: File) -> Result<()> {
+    /// Process a list of items extracted from a file or mod
+    fn process_items(&mut self, items: Vec<Item>) -> Result<()> {
         // identify items marked with smt-related attributes
-        for item in file.items {
+        for item in items {
             match item {
                 Item::Enum(syntax) => match Mark::parse_attrs(&syntax.attrs)? {
                     None => continue,
@@ -131,12 +131,39 @@ impl Context {
                     Some(Mark::Spec(mark)) => self.add_spec(MarkedSpec { item: syntax, mark })?,
                     Some(Mark::Type) => bail_on!(syntax, "invalid annotation"),
                 },
+                Item::Mod(syntax) => {
+                    let ItemMod {
+                        attrs: _,
+                        vis: _,
+                        unsafety,
+                        mod_token: _,
+                        ident: _,
+                        content,
+                        semi,
+                    } = syntax;
+                    bail_if_exists!(unsafety);
+                    match content {
+                        None => (),
+                        Some((_, items)) => {
+                            bail_if_exists!(semi);
+                            self.process_items(items)?
+                        }
+                    }
+                }
                 _ => (),
             }
         }
-
-        // processing completed
         Ok(())
+    }
+
+    /// Process a single input file
+    fn process_file(&mut self, file: File) -> Result<()> {
+        let File {
+            shebang: _,
+            attrs: _,
+            items,
+        } = file;
+        self.process_items(items)
     }
 
     /// Add a type to the context
