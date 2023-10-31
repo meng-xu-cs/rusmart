@@ -55,11 +55,3 @@ macro_rules! choose {
         }) ()
     };
 }
-
-/// Axiom-based definition of an uninterpreted function
-#[macro_export]
-macro_rules! axiom {
-    (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $constraint:expr) => {
-        const _: fn($t0 $(, $tn)*) -> Boolean = |$v0 $(, $vn)*| $constraint;
-    };
-}

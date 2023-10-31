@@ -8,10 +8,9 @@ use walkdir::WalkDir;
 
 use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
-use crate::parser::dsl::Axiom;
 use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
-use crate::parser::func::{FuncSig, ImplFuncDef, SpecFuncDef};
+use crate::parser::func::{Axiom, FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
@@ -237,7 +236,7 @@ impl Context {
     /// Add an axiom to the context
     fn add_axiom(&mut self, item: MarkedAxiom) -> Result<()> {
         let name = item.name();
-        if name.to_string() != "_" {
+        if *name != "_" {
             bail_on!(name, "expect _");
         }
         self.axioms.push(item);
@@ -399,6 +398,15 @@ impl ContextWithType {
             sig_specs.insert(name.clone(), (parsed, sig.clone()));
         }
 
+        // axiom
+        let mut unpacked_axioms = vec![];
+        for (i, ast) in self.axioms.iter().enumerate() {
+            trace!("handling axiom sig: {}", i);
+            let (sig, body) = FuncSig::unpack_axiom(&self, &ast.item)?;
+            trace!("axiom sig analyzed: {}", i);
+            unpacked_axioms.push((sig, body));
+        }
+
         // populate the databases
         let mut vc_db = BTreeSet::new();
         let mut fn_db = ApplyDatabase::with_intrinsics();
@@ -451,7 +459,7 @@ impl ContextWithType {
             types,
             impls,
             specs,
-            axioms,
+            axioms: _,
         } = self;
 
         let unpacked_impls: BTreeMap<_, _> = impls
@@ -476,7 +484,7 @@ impl ContextWithType {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
-            axioms,
+            axioms: unpacked_axioms,
             vc_db,
             fn_db,
         };
@@ -489,7 +497,7 @@ pub struct ContextWithSig {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
-    axioms: Vec<MarkedAxiom>,
+    axioms: Vec<(FuncSig, Vec<Stmt>)>,
     /// a database for verification conditions (i.e., impl and spec mapping)
     pub vc_db: BTreeSet<Refinement>,
     /// a database for functions
@@ -533,6 +541,16 @@ impl ContextWithSig {
             body_specs.insert(name.clone(), body);
         }
 
+        // axiom
+        let mut parsed_axioms = vec![];
+        for (i, (sig, stmts)) in self.axioms.iter().enumerate() {
+            trace!("handling axiom body: {}", i);
+            let body = ExprParserRoot::new(&self, Kind::Spec, sig).parse(stmts)?;
+            trace!("axiom body analyzed: {}", i);
+            parsed_axioms.push(body);
+        }
+
+        // repacking
         let Self {
             types,
             impls,
@@ -556,12 +574,17 @@ impl ContextWithSig {
                 (name, SpecFuncDef { head: sig, body })
             })
             .collect();
+        let unpack_axioms = axioms
+            .into_iter()
+            .zip(parsed_axioms)
+            .map(|((sig, _), body)| Axiom { head: sig, body })
+            .collect();
 
         Ok(ContextWithFunc {
             types,
             impls: unpacked_impls,
             specs: unpacked_specs,
-            axioms,
+            axioms: unpack_axioms,
         })
     }
 }
@@ -572,7 +595,7 @@ pub struct ContextWithFunc {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, ImplFuncDef>,
     specs: BTreeMap<UsrFuncName, SpecFuncDef>,
-    axioms: Vec<MarkedAxiom>,
+    axioms: Vec<Axiom>,
 }
 
 #[cfg(test)]
