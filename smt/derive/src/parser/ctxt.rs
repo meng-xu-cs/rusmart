@@ -8,9 +8,10 @@ use walkdir::WalkDir;
 
 use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
+use crate::parser::dsl::Axiom;
 use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
-use crate::parser::func::{FuncDef, FuncSig};
+use crate::parser::func::{FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
@@ -484,7 +485,13 @@ impl ContextWithSig {
         let mut body_specs = BTreeMap::new();
         for (name, (sig, stmts)) in &self.specs {
             trace!("handling spec body: {}", name);
-            let body = ExprParserRoot::new(&self, Kind::Spec, sig).parse(stmts)?;
+            // check for uninterpreted function
+            let uninterpreted = Axiom::is_unimplemented(stmts)?;
+            let body = if uninterpreted {
+                None
+            } else {
+                Some(ExprParserRoot::new(&self, Kind::Spec, sig).parse(stmts)?)
+            };
             trace!("spec body analyzed: {}", name);
             body_specs.insert(name.clone(), body);
         }
@@ -501,14 +508,14 @@ impl ContextWithSig {
             .into_iter()
             .map(|(name, (sig, _))| {
                 let body = body_impls.remove(&name).unwrap();
-                (name, FuncDef { head: sig, body })
+                (name, ImplFuncDef { head: sig, body })
             })
             .collect();
         let unpacked_specs = specs
             .into_iter()
             .map(|(name, (sig, _))| {
                 let body = body_specs.remove(&name).unwrap();
-                (name, FuncDef { head: sig, body })
+                (name, SpecFuncDef { head: sig, body })
             })
             .collect();
 
@@ -524,8 +531,8 @@ impl ContextWithSig {
 #[allow(dead_code)]
 pub struct ContextWithFunc {
     types: BTreeMap<UsrTypeName, TypeDef>,
-    impls: BTreeMap<UsrFuncName, FuncDef>,
-    specs: BTreeMap<UsrFuncName, FuncDef>,
+    impls: BTreeMap<UsrFuncName, ImplFuncDef>,
+    specs: BTreeMap<UsrFuncName, SpecFuncDef>,
 }
 
 #[cfg(test)]

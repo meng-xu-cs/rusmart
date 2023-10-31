@@ -190,15 +190,15 @@ pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
     unimplemented!()
 }
 
-// strict total ordering
-// rule 1: irreflexive
+// strict total orders
+// - rule 1: irreflexive
 axiom!(|v: Value| spec_lt(v, v).not());
-// rule 2: asymmetric
+// - rule 2: asymmetric
 axiom!(|v1: Value, v2: Value| spec_lt(v1, v2).implies(spec_lt(v2, v1).not()));
-// rule 3: transitive
+// - rule 3: transitive
 axiom!(
     |v1: Value, v2: Value, v3: Value| (spec_lt(v1, v2).and(spec_lt(v2, v3)))
         .implies(spec_lt(v1, v3))
 );
-// rule 4: connected
+// - rule 4: connected
 axiom!(|v1: Value, v2: Value| (v1.ne(v2)).implies(spec_lt(v1, v2).or(spec_lt(v2, v1))));

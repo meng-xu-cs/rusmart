@@ -3,10 +3,10 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
     parse2, Expr, ExprClosure, ExprMacro, Ident, Macro, MacroDelimiter, Pat, PatType, Result,
-    ReturnType, Token,
+    ReturnType, Stmt, Token,
 };
 
-use crate::parser::err::{bail_if_exists, bail_on};
+use crate::parser::err::{bail_if_exists, bail_if_non_empty, bail_on};
 use crate::parser::expr::CtxtForExpr;
 use crate::parser::name::{ReservedIdent, VarName};
 use crate::parser::ty::TypeTag;
@@ -203,5 +203,40 @@ impl Quantifier {
             }
         };
         Ok(parsed)
+    }
+}
+
+/// Utility holder for axiom
+pub struct Axiom;
+
+impl Axiom {
+    /// Check whether the entire function body is `unimplemented!()`
+    pub fn is_unimplemented(stmts: &[Stmt]) -> Result<bool> {
+        if stmts.len() != 1 {
+            return Ok(false);
+        }
+        let mac = match stmts.first().unwrap() {
+            Stmt::Expr(Expr::Macro(ExprMacro { attrs: _, mac }), None) => mac,
+            _ => return Ok(false),
+        };
+
+        let Macro {
+            path,
+            bang_token: _,
+            delimiter,
+            tokens,
+        } = mac;
+        if !path.is_ident("unimplemented") {
+            return Ok(false);
+        }
+
+        // more rigorous checking
+        if !matches!(delimiter, MacroDelimiter::Paren(_)) {
+            bail_on!(mac, "invalid delimiter");
+        }
+        bail_if_non_empty!(tokens);
+
+        // done
+        Ok(true)
     }
 }

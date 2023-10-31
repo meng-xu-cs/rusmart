@@ -218,10 +218,16 @@ impl FuncSig {
     }
 }
 
-/// Function definition
-pub struct FuncDef {
+/// Function definition for impl
+pub struct ImplFuncDef {
     pub head: FuncSig,
     pub body: Expr,
+}
+
+/// Function definition for spec
+pub struct SpecFuncDef {
+    pub head: FuncSig,
+    pub body: Option<Expr>,
 }
 
 #[cfg(test)]
