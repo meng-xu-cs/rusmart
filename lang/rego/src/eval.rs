@@ -202,11 +202,8 @@ const _: fn(Value, Value) -> Boolean = |v1, v2| spec_lt(v1, v2).implies(spec_lt(
 
 // - rule 3: transitive
 #[smt_axiom]
-const _: fn(Value, Value, Value) -> Boolean = |v1, v2, v3| {
-    spec_lt(v1, v2)
-        .and(spec_lt(v2, v3))
-        .implies(spec_lt(v1, v3))
-};
+const _: fn(Value, Value, Value) -> Boolean =
+    |v1, v2, v3| (spec_lt(v1, v2).and(spec_lt(v2, v3))).implies(spec_lt(v1, v3));
 
 // - rule 4: connected
 #[smt_axiom]

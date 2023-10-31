@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use syn::{
     Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprField, ExprIf, ExprMatch, ExprMethodCall,
-    ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit, Member, Pat, PatTuple, Result,
-    Stmt, UnOp,
+    ExprParen, ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit, Member, Pat,
+    PatTuple, Result, Stmt, UnOp,
 };
 
 use crate::parser::adt::{ADTBranch, MatchAnalyzer, MatchOrganizer};
@@ -104,6 +104,8 @@ pub struct LetBinding {
 pub enum Op {
     /// `<var>`
     Var(VarName),
+    /// `(a1, a2, ...)`
+    Pack { elems: Vec<Expr> },
     /// `<tuple>(a1, a2, ...)`
     Tuple {
         name: UsrTypeName,
@@ -242,6 +244,11 @@ impl Expr {
         // run on opcode
         match inst.op.as_mut() {
             Op::Var(_) => (),
+            Op::Pack { elems } => {
+                for elem in elems {
+                    elem.visit(ty, pre, post)?;
+                }
+            }
             Op::Tuple {
                 name: _,
                 inst,
@@ -712,6 +719,33 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     }
                 }
             }
+            Exp::Tuple(expr_tuple) => {
+                let ExprTuple {
+                    attrs: _,
+                    paren_token: _,
+                    elems,
+                } = expr_tuple;
+
+                // parse the elements by tentatively marking their types as variables
+                let mut parsed_elems = vec![];
+                for elem in elems {
+                    let parsed = self
+                        .fork(TypeRef::Var(unifier.mk_var()))
+                        .convert_expr(unifier, elem)?;
+                    parsed_elems.push(parsed);
+                }
+
+                // construct the tuple type
+                let ty_pack = parsed_elems.iter().map(|e| e.ty().clone()).collect();
+
+                // unify the return type
+                ti_unify!(unifier, &TypeRef::Pack(ty_pack), &self.exp_ty, target);
+
+                // done
+                Op::Pack {
+                    elems: parsed_elems,
+                }
+            }
             Exp::Struct(expr_struct) => {
                 let ExprStruct {
                     attrs: _,
@@ -845,6 +879,14 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
 
                 // return the constructed opcode
                 op
+            }
+            Exp::Paren(expr_paren) => {
+                let ExprParen {
+                    attrs: _,
+                    paren_token: _,
+                    expr,
+                } = expr_paren;
+                return self.convert_expr(unifier, expr);
             }
             Exp::Block(expr_block) => {
                 let ExprBlock {
