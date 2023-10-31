@@ -173,7 +173,7 @@ impl UsrFuncName {
     pub fn intrinsic(name: &str) -> Self {
         match name {
             // logical
-            "not" | "and" | "or" | "xor"
+            "not" | "and" | "or" | "xor" | "implies"
             // arithmetic
             | "add" | "sub" | "mul" | "div" | "rem"
             // comparison
