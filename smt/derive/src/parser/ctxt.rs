@@ -611,6 +611,19 @@ impl ContextWithFunc {
     pub fn refinements(&self) -> impl Iterator<Item = &Refinement> {
         self.vc_db.iter()
     }
+
+    /// Get the impl and spec pair
+    pub fn get_relation(&self, rel: &Refinement) -> (&ImplFuncDef, &SpecFuncDef) {
+        let fn_impl = self
+            .impls
+            .get(&rel.fn_impl)
+            .unwrap_or_else(|| panic!("impl fn {}", rel.fn_impl));
+        let fn_spec = self
+            .specs
+            .get(&rel.fn_spec)
+            .unwrap_or_else(|| panic!("spec fn {}", rel.fn_spec));
+        (fn_impl, fn_spec)
+    }
 }
 
 #[cfg(test)]

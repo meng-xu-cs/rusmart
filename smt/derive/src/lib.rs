@@ -4,6 +4,7 @@ use log::debug;
 use rusmart_utils::config::initialize;
 use syn::Result;
 
+use crate::ir::ctxt::IRBuilder;
 use crate::parser::ctxt::Context;
 
 #[cfg(test)]
@@ -19,8 +20,9 @@ fn pipeline(ctxt: Context) -> Result<()> {
         .parse_types()?
         .parse_func_sigs()?
         .parse_func_body()?;
-    for vc in parsed.refinements() {
-        debug!("processing verification condition {}", vc);
+    for item in parsed.refinements() {
+        debug!("processing verification condition {}", item);
+        IRBuilder::build(&parsed, item);
     }
     Ok(())
 }
