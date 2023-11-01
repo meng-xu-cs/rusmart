@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::Path;
 
@@ -75,8 +76,14 @@ impl MarkedAxiom {
 /// A refinement relation
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Refinement {
-    pub fn_impl: UsrFuncName,
-    pub fn_spec: UsrFuncName,
+    fn_impl: UsrFuncName,
+    fn_spec: UsrFuncName,
+}
+
+impl Display for Refinement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ~> {}", self.fn_impl, self.fn_spec)
+    }
 }
 
 /// Context manager for holding marked items
@@ -591,13 +598,19 @@ impl ContextWithSig {
 }
 
 /// Context manager after type, signature, and expression conversion is done
-#[allow(dead_code)]
 pub struct ContextWithFunc {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, ImplFuncDef>,
     specs: BTreeMap<UsrFuncName, SpecFuncDef>,
     axioms: Vec<Axiom>,
     vc_db: BTreeSet<Refinement>,
+}
+
+impl ContextWithFunc {
+    /// Enumerate over the verification conditions
+    pub fn refinements(&self) -> impl Iterator<Item = &Refinement> {
+        self.vc_db.iter()
+    }
 }
 
 #[cfg(test)]

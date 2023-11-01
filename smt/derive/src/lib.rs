@@ -9,14 +9,19 @@ use crate::parser::ctxt::Context;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
+mod ir;
 mod parser;
 
 /// Default pipeline after a context is constructed
 fn pipeline(ctxt: Context) -> Result<()> {
-    ctxt.parse_generics()?
+    let parsed = ctxt
+        .parse_generics()?
         .parse_types()?
         .parse_func_sigs()?
         .parse_func_body()?;
+    for vc in parsed.refinements() {
+        debug!("processing verification condition {}", vc);
+    }
     Ok(())
 }
 
