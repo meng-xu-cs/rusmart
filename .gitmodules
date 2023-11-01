@@ -1,0 +1,6 @@
+[submodule "deps/cvc5"]
+	path = deps/cvc5
+	url = https://github.com/cvc5/cvc5.git
+[submodule "deps/z3"]
+	path = deps/z3
+	url = https://github.com/Z3Prover/z3.git
