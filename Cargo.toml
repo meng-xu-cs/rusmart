@@ -2,6 +2,7 @@
 members = [
     # ordered and grouped loosely by dependency relation
     "utils",
+    "cli",
     "smt/stdlib",
     "smt/remark",
     "smt/derive",

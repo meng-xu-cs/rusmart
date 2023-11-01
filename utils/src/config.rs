@@ -1,5 +1,6 @@
 use std::env;
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use lazy_static::lazy_static;
@@ -50,6 +51,36 @@ lazy_static! {
             1 => Mode::Dev,
             2 => Mode::Debug,
             _ => Mode::Verbose,
+        }
+    };
+}
+
+/// Workspace
+pub struct Workspace {
+    /// path to project base
+    pub base: PathBuf,
+    /// path to studio directory
+    pub studio: PathBuf,
+}
+
+lazy_static! {
+    /// Directory layout
+    pub static ref WKS: Workspace = {
+        let dockerized = matches!(env::var("DOCKER"), Ok(val) if val == "1");
+
+        // grab root path
+        let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        assert!(base.pop());
+
+        // derive other paths
+        let studio = base
+                .join("studio")
+                .join(if dockerized { "docker" } else { "native" });
+
+        // done
+        Workspace {
+            base,
+            studio,
         }
     };
 }

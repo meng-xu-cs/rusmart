@@ -1,0 +1,14 @@
+[package]
+name = "rusmart-cli"
+description = "Command line interfnace for the Rusmart project"
+version = "0.1.0"
+authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
+license = "GPL-3.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.75"
+log = "0.4.20"
+structopt = "0.3.26"
+tempfile = "3.8.1"
+rusmart-utils = { path = "../utils" }
