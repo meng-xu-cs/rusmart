@@ -6,7 +6,7 @@ use rusmart_cli::cli::DepArgs;
 #[derive(StructOpt)]
 #[structopt(
     name = "semantic-smt-cli",
-    about = "A command line interface for the semantic-smt project",
+    about = "A command line interface for the Rusmart project",
     rename_all = "kebab-case"
 )]
 struct Args {
