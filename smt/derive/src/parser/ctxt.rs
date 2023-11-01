@@ -499,7 +499,7 @@ pub struct ContextWithSig {
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     axioms: Vec<(FuncSig, Vec<Stmt>)>,
     /// a database for verification conditions (i.e., impl and spec mapping)
-    pub vc_db: BTreeSet<Refinement>,
+    vc_db: BTreeSet<Refinement>,
     /// a database for functions
     pub fn_db: ApplyDatabase,
 }
@@ -557,7 +557,7 @@ impl ContextWithSig {
             specs,
             axioms,
             fn_db: _,
-            vc_db: _,
+            vc_db,
         } = self;
 
         let unpacked_impls = impls
@@ -585,6 +585,7 @@ impl ContextWithSig {
             impls: unpacked_impls,
             specs: unpacked_specs,
             axioms: unpack_axioms,
+            vc_db,
         })
     }
 }
@@ -596,6 +597,7 @@ pub struct ContextWithFunc {
     impls: BTreeMap<UsrFuncName, ImplFuncDef>,
     specs: BTreeMap<UsrFuncName, SpecFuncDef>,
     axioms: Vec<Axiom>,
+    vc_db: BTreeSet<Refinement>,
 }
 
 #[cfg(test)]
