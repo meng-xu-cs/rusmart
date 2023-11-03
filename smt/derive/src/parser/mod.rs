@@ -3,7 +3,7 @@ mod err;
 mod test;
 
 mod attr;
-mod name;
+pub mod name;
 
 mod generics;
 mod infer;

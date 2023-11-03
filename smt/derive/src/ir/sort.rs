@@ -1,8 +1,18 @@
 use crate::ir::name::name;
+use crate::parser::name::TypeParamName;
 
 name! {
-    /// Type parameter treated as uninterpreted sort
-    TypeParam
+    /// Name of a type parameter that implements the SMT trait
+    SmtSortName
+}
+
+impl SmtSortName {
+    /// Name for an uninterpreted sort
+    pub fn new(name: &TypeParamName) -> Self {
+        Self {
+            ident: name.to_string(),
+        }
+    }
 }
 
 name! {
@@ -13,8 +23,6 @@ name! {
 /// A unique and complete reference to an SMT sort
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Sort {
-    /// uninterpreted sort
-    Param(TypeParam),
     /// boolean
     Boolean,
     /// integer (unlimited precision)
@@ -33,4 +41,6 @@ pub enum Sort {
     Error,
     /// user-defined type
     User(UsrSortName, Vec<Sort>),
+    /// uninterpreted
+    Uninterpreted(SmtSortName),
 }

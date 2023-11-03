@@ -22,7 +22,10 @@ fn pipeline(ctxt: Context) -> Result<()> {
         .parse_func_body()?;
     for item in parsed.refinements() {
         debug!("processing verification condition {}", item);
-        IRBuilder::build(&parsed, item);
+        match IRBuilder::build(&parsed, item) {
+            Ok(_) => (),
+            Err(e) => panic!("[invariant] {}", e),
+        }
     }
     Ok(())
 }
