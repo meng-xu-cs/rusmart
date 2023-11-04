@@ -7,7 +7,7 @@ pub mod name;
 
 mod generics;
 pub mod infer;
-mod ty;
+pub mod ty;
 
 mod apply;
 mod func;
