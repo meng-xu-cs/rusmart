@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
-use crate::ir::sort::SmtSortName;
+use crate::ir::sort::{SmtSortName, Sort};
 use crate::parser::ctxt::{ContextWithFunc, Refinement};
 use crate::parser::infer::TypeRef;
 use crate::parser::name::TypeParamName;
@@ -59,17 +59,40 @@ impl<'a> IRBuilder<'a> {
         Ok(())
     }
 
-    /// Register a type tag to the builder and pull its dependencies into the builder as well
-    fn register_type(&mut self, ty: &TypeRef) -> Result<()> {
-        match ty {
+    /// Register a type ref to the builder and pull its dependencies into the builder if needed
+    fn register_type(&mut self, ty: &TypeRef) -> Result<Sort> {
+        let sort = match ty {
             TypeRef::Var(_) => bail!("incomplete type"),
-            TypeRef::Boolean
-            | TypeRef::Integer
-            | TypeRef::Rational
-            | TypeRef::Text
-            | TypeRef::Error => (),
-            _ => todo!(),
-        }
-        Ok(())
+            TypeRef::Boolean => Sort::Boolean,
+            TypeRef::Integer => Sort::Integer,
+            TypeRef::Rational => Sort::Rational,
+            TypeRef::Text => Sort::Text,
+            TypeRef::Cloak(sub) => {
+                // unwrap the cloak
+                self.register_type(sub.as_ref())?
+            }
+            TypeRef::Seq(sub) => Sort::Seq(self.register_type(sub.as_ref())?.into()),
+            TypeRef::Set(sub) => Sort::Set(self.register_type(sub.as_ref())?.into()),
+            TypeRef::Map(key, val) => Sort::Map(
+                self.register_type(key.as_ref())?.into(),
+                self.register_type(val.as_ref())?.into(),
+            ),
+            TypeRef::Error => Sort::Error,
+            TypeRef::User(..) => todo!(),
+            TypeRef::Pack(elems) => Sort::Pack(
+                elems
+                    .iter()
+                    .map(|e| self.register_type(e))
+                    .collect::<Result<_>>()?,
+            ),
+            TypeRef::Parameter(name) => {
+                let sort_name = self
+                    .ty_args
+                    .get(name)
+                    .ok_or_else(|| anyhow!("no such type parameter {}", name))?;
+                Sort::Uninterpreted(sort_name.clone())
+            }
+        };
+        Ok(sort)
     }
 }

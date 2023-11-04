@@ -39,6 +39,8 @@ pub enum Sort {
     Map(Box<Sort>, Box<Sort>),
     /// dynamic error type
     Error,
+    /// a tuple of types
+    Pack(Vec<Sort>),
     /// user-defined type
     User(UsrSortName, Vec<Sort>),
     /// uninterpreted
