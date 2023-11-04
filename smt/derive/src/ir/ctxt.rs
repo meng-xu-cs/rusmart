@@ -1,25 +1,33 @@
-use anyhow::{bail, Result};
 use std::collections::BTreeMap;
+
+use anyhow::{bail, Result};
 
 use crate::ir::sort::SmtSortName;
 use crate::parser::ctxt::{ContextWithFunc, Refinement};
+use crate::parser::infer::TypeRef;
 use crate::parser::name::TypeParamName;
 
 /// A context manager for building around a refinement relation
-pub struct IRBuilder {
+pub struct IRBuilder<'a> {
+    /// context provider
+    ctxt: &'a ContextWithFunc,
     /// type arguments
     ty_args: BTreeMap<TypeParamName, SmtSortName>,
 }
 
-impl IRBuilder {
-    /// Initialize it with a new refinement relation
-    pub fn build(ctxt: &ContextWithFunc, rel: &Refinement) -> Result<Self> {
-        let mut builder = Self {
+impl<'a> IRBuilder<'a> {
+    /// Create a new IR builder
+    pub fn new(ctxt: &'a ContextWithFunc) -> Self {
+        Self {
+            ctxt,
             ty_args: BTreeMap::new(),
-        };
+        }
+    }
 
+    /// Initialize it with a new refinement relation
+    pub fn build(mut self, rel: &Refinement) -> Result<()> {
         // get the pair
-        let (fn_impl, fn_spec) = ctxt.get_relation(rel);
+        let (fn_impl, fn_spec) = self.ctxt.get_relation(rel);
 
         // initialize uninterpreted sorts
         let generics_impl = &fn_impl.head.generics.params;
@@ -29,7 +37,7 @@ impl IRBuilder {
         }
         for ty_param in generics_impl {
             let sort_name = SmtSortName::new(ty_param);
-            match builder.ty_args.insert(ty_param.clone(), sort_name) {
+            match self.ty_args.insert(ty_param.clone(), sort_name) {
                 None => (),
                 Some(_) => bail!("duplicated type parameter {}", ty_param),
             }
@@ -48,6 +56,20 @@ impl IRBuilder {
         }
 
         // done
-        Ok(builder)
+        Ok(())
+    }
+
+    /// Register a type tag to the builder and pull its dependencies into the builder as well
+    fn register_type(&mut self, ty: &TypeRef) -> Result<()> {
+        match ty {
+            TypeRef::Var(_) => bail!("incomplete type"),
+            TypeRef::Boolean
+            | TypeRef::Integer
+            | TypeRef::Rational
+            | TypeRef::Text
+            | TypeRef::Error => (),
+            _ => todo!(),
+        }
+        Ok(())
     }
 }

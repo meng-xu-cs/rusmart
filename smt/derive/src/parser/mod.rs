@@ -6,7 +6,7 @@ mod attr;
 pub mod name;
 
 mod generics;
-mod infer;
+pub mod infer;
 mod ty;
 
 mod apply;

@@ -624,6 +624,13 @@ impl ContextWithFunc {
             .unwrap_or_else(|| panic!("spec fn {}", rel.fn_spec));
         (fn_impl, fn_spec)
     }
+
+    /// Get the type definition
+    pub fn get_type(&self, name: &UsrTypeName) -> &TypeDef {
+        self.types
+            .get(name)
+            .unwrap_or_else(|| panic!("type {}", name))
+    }
 }
 
 #[cfg(test)]
