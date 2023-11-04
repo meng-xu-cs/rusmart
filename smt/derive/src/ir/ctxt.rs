@@ -7,6 +7,7 @@ use crate::parser::name::TypeParamName;
 
 /// A context manager for building around a refinement relation
 pub struct IRBuilder {
+    /// type arguments
     ty_args: BTreeMap<TypeParamName, SmtSortName>,
 }
 
@@ -26,11 +27,23 @@ impl IRBuilder {
         if generics_impl != generics_spec {
             bail!("generics mismatch");
         }
-        for param_name in generics_impl {
-            let sort_name = SmtSortName::new(param_name);
-            match builder.ty_args.insert(param_name.clone(), sort_name) {
+        for ty_param in generics_impl {
+            let sort_name = SmtSortName::new(ty_param);
+            match builder.ty_args.insert(ty_param.clone(), sort_name) {
                 None => (),
-                Some(_) => bail!("duplicated type parameter {}", param_name),
+                Some(_) => bail!("duplicated type parameter {}", ty_param),
+            }
+        }
+
+        // process function parameters
+        let params_impl = &fn_impl.head.params;
+        let params_spec = &fn_impl.head.params;
+        if params_impl.len() != params_spec.len() {
+            bail!("parameter mismatch");
+        }
+        for ((_, param_impl), (_, param_spec)) in params_impl.iter().zip(params_spec) {
+            if param_impl != param_spec {
+                bail!("parameter mismatch");
             }
         }
 
