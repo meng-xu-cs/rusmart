@@ -2,7 +2,7 @@
 macro_rules! name {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
-        #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
+        #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
         pub struct $name {
             ident: String,
         }
@@ -21,3 +21,21 @@ macro_rules! name {
     };
 }
 pub(crate) use name;
+
+/// Utility macro to define an index
+macro_rules! index {
+    ($(#[$meta:meta])* $name:ident) => {
+        $(#[$meta])*
+        #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+        pub struct $name {
+            index: usize,
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.index)
+            }
+        }
+    };
+}
+pub(crate) use index;

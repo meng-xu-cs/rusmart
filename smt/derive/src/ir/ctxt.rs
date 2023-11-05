@@ -49,11 +49,11 @@ impl<'a> IRBuilder<'a> {
             }
         }
 
-        // process function parameters
+        // process function signature
         let mut ty_holder = TypeRegistryHolder::new(ctxt, ty_args, &mut ty_registry);
 
         let params_impl = &fn_impl.head.params;
-        let params_spec = &fn_impl.head.params;
+        let params_spec = &fn_spec.head.params;
         if params_impl.len() != params_spec.len() {
             bail!("parameter mismatch");
         }
@@ -63,6 +63,13 @@ impl<'a> IRBuilder<'a> {
             }
             ty_holder.resolve(&TypeRef::from(param_impl))?;
         }
+
+        if fn_impl.head.ret_ty != fn_spec.head.ret_ty {
+            bail!("return type mismatch");
+        }
+        ty_holder.resolve(&TypeRef::from(&fn_impl.head.ret_ty))?;
+
+        // process function body
 
         // done
         Ok(())

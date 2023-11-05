@@ -1,9 +1,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::{anyhow, bail, Result};
-use petgraph::graph::{DiGraph, NodeIndex};
 
-use crate::ir::name::name;
+use crate::ir::name::{index, name};
 use crate::parser::ctxt::ContextWithFunc;
 use crate::parser::infer::TypeRef;
 use crate::parser::name::{TypeParamName, UsrTypeName};
@@ -28,10 +27,9 @@ name! {
     UsrSortName
 }
 
-/// A unique identifier for user-defined sort
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct UsrSortId {
-    index: NodeIndex,
+index! {
+    /// A unique identifier for user-defined sort
+    UsrSortId
 }
 
 /// A unique and complete reference to an SMT sort
@@ -75,21 +73,18 @@ pub enum DataType {
 
 /// A registry of data types involved
 pub struct TypeRegistry {
-    /// a graph hosting dependency relations among the data types
-    dep_graph: DiGraph<(Option<UsrSortName>, Vec<Sort>), ()>,
     /// a map from user-defined type and instantiations to node indices
-    idx_named: BTreeMap<UsrSortName, BTreeMap<Vec<Sort>, NodeIndex>>,
+    idx_named: BTreeMap<UsrSortName, BTreeMap<Vec<Sort>, UsrSortId>>,
     /// a map from unnamed type tuple (still user-defined) to node indices
-    idx_tuple: BTreeMap<Vec<Sort>, NodeIndex>,
+    idx_tuple: BTreeMap<Vec<Sort>, UsrSortId>,
     /// the actual type definitions
-    defs: BTreeMap<NodeIndex, DataType>,
+    defs: BTreeMap<UsrSortId, DataType>,
 }
 
 impl TypeRegistry {
     /// Initialize an empty registry
     pub fn new() -> Self {
         Self {
-            dep_graph: DiGraph::new(),
             idx_named: BTreeMap::new(),
             idx_tuple: BTreeMap::new(),
             defs: BTreeMap::new(),
@@ -97,7 +92,7 @@ impl TypeRegistry {
     }
 
     /// Get the index given a name and instantiation
-    fn get_index(&self, name: Option<&UsrSortName>, inst: &[Sort]) -> Option<NodeIndex> {
+    fn get_index(&self, name: Option<&UsrSortName>, inst: &[Sort]) -> Option<UsrSortId> {
         let idx = match name {
             None => self.idx_tuple.get(inst)?,
             Some(n) => self.idx_named.get(n)?.get(inst)?,
@@ -106,8 +101,10 @@ impl TypeRegistry {
     }
 
     /// Register a signature to the registry
-    fn register_sig(&mut self, name: Option<UsrSortName>, inst: Vec<Sort>) -> NodeIndex {
-        let index = self.dep_graph.add_node((name.clone(), inst.clone()));
+    fn register_sig(&mut self, name: Option<UsrSortName>, inst: Vec<Sort>) -> UsrSortId {
+        let index = UsrSortId {
+            index: self.idx_tuple.len() + self.idx_named.values().map(|v| v.len()).sum::<usize>(),
+        };
         let existing = match name {
             None => self.idx_tuple.insert(inst, index),
             Some(n) => self.idx_named.entry(n).or_default().insert(inst, index),
@@ -119,7 +116,7 @@ impl TypeRegistry {
     }
 
     /// Register a definition to the registry
-    fn register_def(&mut self, index: NodeIndex, def: DataType) {
+    fn register_def(&mut self, index: UsrSortId, def: DataType) {
         let existing = self.defs.insert(index, def);
         if existing.is_some() {
             panic!("type definition already registered");
@@ -228,7 +225,7 @@ impl<'a, 'ctx: 'a> TypeRegistryHolder<'a, 'ctx> {
         // check if we have already processed the data type
         match self.registry.get_index(name.as_ref(), &args) {
             None => (),
-            Some(index) => return Ok(Sort::User(UsrSortId { index })),
+            Some(index) => return Ok(Sort::User(index)),
         }
 
         // register the signature and get the index
@@ -291,6 +288,6 @@ impl<'a, 'ctx: 'a> TypeRegistryHolder<'a, 'ctx> {
         self.registry.register_def(index, def);
 
         // return the sort
-        Ok(Sort::User(UsrSortId { index }))
+        Ok(Sort::User(index))
     }
 }
