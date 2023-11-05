@@ -6,8 +6,8 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use crate::ir::name::name;
 use crate::parser::ctxt::ContextWithFunc;
 use crate::parser::infer::TypeRef;
-use crate::parser::name::TypeParamName;
-use crate::parser::ty::TypeDef;
+use crate::parser::name::{TypeParamName, UsrTypeName};
+use crate::parser::ty::{EnumVariant, TypeBody, TypeTag};
 
 name! {
     /// Name of a type parameter that implements the SMT trait
@@ -26,6 +26,12 @@ impl SmtSortName {
 name! {
     /// Name of a user-defined sort
     UsrSortName
+}
+
+/// A unique identifier for user-defined sort
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct UsrSortId {
+    index: NodeIndex,
 }
 
 /// A unique and complete reference to an SMT sort
@@ -47,10 +53,8 @@ pub enum Sort {
     Map(Box<Sort>, Box<Sort>),
     /// dynamic error type
     Error,
-    /// a tuple of types
-    Pack(Vec<Sort>),
-    /// user-defined type
-    User(UsrSortName, Vec<Sort>),
+    /// user-defined type (including pack-defined type tuple)
+    User(UsrSortId),
     /// uninterpreted
     Uninterpreted(SmtSortName),
 }
@@ -71,21 +75,54 @@ pub enum DataType {
 
 /// A registry of data types involved
 pub struct TypeRegistry {
-    /// map from user-defined types to node indices
-    user_defined: BTreeMap<UsrSortName, BTreeMap<Vec<Sort>, NodeIndex>>,
-    /// map from packed type tuples to node indices
-    pack_defined: BTreeMap<Vec<Sort>, NodeIndex>,
-    /// a graph hosting all data types and their dependency relation
-    graph: DiGraph<DataType, ()>,
+    /// a graph hosting dependency relations among the data types
+    dep_graph: DiGraph<(Option<UsrSortName>, Vec<Sort>), ()>,
+    /// a map from user-defined type and instantiations to node indices
+    idx_named: BTreeMap<UsrSortName, BTreeMap<Vec<Sort>, NodeIndex>>,
+    /// a map from unnamed type tuple (still user-defined) to node indices
+    idx_tuple: BTreeMap<Vec<Sort>, NodeIndex>,
+    /// the actual type definitions
+    defs: BTreeMap<NodeIndex, DataType>,
 }
 
 impl TypeRegistry {
     /// Initialize an empty registry
     pub fn new() -> Self {
         Self {
-            user_defined: BTreeMap::new(),
-            pack_defined: BTreeMap::new(),
-            graph: DiGraph::new(),
+            dep_graph: DiGraph::new(),
+            idx_named: BTreeMap::new(),
+            idx_tuple: BTreeMap::new(),
+            defs: BTreeMap::new(),
+        }
+    }
+
+    /// Get the index given a name and instantiation
+    fn get_index(&self, name: Option<&UsrSortName>, inst: &[Sort]) -> Option<NodeIndex> {
+        let idx = match name {
+            None => self.idx_tuple.get(inst)?,
+            Some(n) => self.idx_named.get(n)?.get(inst)?,
+        };
+        Some(*idx)
+    }
+
+    /// Register a signature to the registry
+    fn register_sig(&mut self, name: Option<UsrSortName>, inst: Vec<Sort>) -> NodeIndex {
+        let index = self.dep_graph.add_node((name.clone(), inst.clone()));
+        let existing = match name {
+            None => self.idx_tuple.insert(inst, index),
+            Some(n) => self.idx_named.entry(n).or_default().insert(inst, index),
+        };
+        if existing.is_some() {
+            panic!("type signature already registered");
+        }
+        index
+    }
+
+    /// Register a definition to the registry
+    fn register_def(&mut self, index: NodeIndex, def: DataType) {
+        let existing = self.defs.insert(index, def);
+        if existing.is_some() {
+            panic!("type definition already registered");
         }
     }
 }
@@ -134,29 +171,8 @@ impl<'a, 'ctx: 'a> TypeRegistryHolder<'a, 'ctx> {
                 self.resolve(val.as_ref())?.into(),
             ),
             TypeRef::Error => Sort::Error,
-            TypeRef::User(name, args) => {
-                // register the type
-                let sorts: Vec<_> = args
-                    .iter()
-                    .map(|e| self.resolve(e))
-                    .collect::<Result<_>>()?;
-                let def = self.ctxt.get_type(name);
-                self.register(def, &sorts)?;
-
-                // return the sort
-                Sort::User(
-                    UsrSortName {
-                        ident: name.to_string(),
-                    },
-                    sorts,
-                )
-            }
-            TypeRef::Pack(elems) => Sort::Pack(
-                elems
-                    .iter()
-                    .map(|e| self.resolve(e))
-                    .collect::<Result<_>>()?,
-            ),
+            TypeRef::User(name, inst) => self.register(Some(name), inst)?,
+            TypeRef::Pack(elems) => self.register(None, elems)?,
             TypeRef::Parameter(name) => self
                 .ty_args
                 .get(name)
@@ -166,8 +182,115 @@ impl<'a, 'ctx: 'a> TypeRegistryHolder<'a, 'ctx> {
         Ok(sort)
     }
 
+    /// Utility for resolving a vector of type refs
+    fn resolve_ref_vec(&mut self, tys: &[TypeRef]) -> Result<Vec<Sort>> {
+        tys.iter().map(|e| self.resolve(e)).collect::<Result<_>>()
+    }
+
+    /// Utility for resolving a map of type refs
+    fn resolve_ref_map(
+        &mut self,
+        tys: &BTreeMap<String, TypeRef>,
+    ) -> Result<BTreeMap<String, Sort>> {
+        let mut fields = BTreeMap::new();
+        for (key, val) in tys {
+            fields.insert(key.clone(), self.resolve(val)?);
+        }
+        Ok(fields)
+    }
+
+    /// Utility for resolving a vector of type tags
+    fn resolve_tag_vec(&mut self, tys: &[TypeTag]) -> Result<Vec<Sort>> {
+        tys.iter()
+            .map(|e| self.resolve(&e.into()))
+            .collect::<Result<_>>()
+    }
+
+    /// Utility for resolving a vector of type refs
+    fn resolve_tag_map(
+        &mut self,
+        tys: &BTreeMap<String, TypeTag>,
+    ) -> Result<BTreeMap<String, Sort>> {
+        let mut fields = BTreeMap::new();
+        for (key, val) in tys {
+            fields.insert(key.clone(), self.resolve(&val.into())?);
+        }
+        Ok(fields)
+    }
+
     /// Register an instantiated type definition and its dependencies (if not previously registered)
-    fn register(&mut self, def: &TypeDef, args: &[Sort]) -> Result<()> {
-        Ok(())
+    fn register(&mut self, ty_name: Option<&UsrTypeName>, ty_inst: &[TypeRef]) -> Result<Sort> {
+        let name = ty_name.map(|n| UsrSortName {
+            ident: n.to_string(),
+        });
+        let args = self.resolve_ref_vec(ty_inst)?;
+
+        // check if we have already processed the data type
+        match self.registry.get_index(name.as_ref(), &args) {
+            None => (),
+            Some(index) => return Ok(Sort::User(UsrSortId { index })),
+        }
+
+        // register the signature and get the index
+        let index = self.registry.register_sig(name, args.clone());
+
+        // process the definition
+        let def = match ty_name {
+            None => {
+                // construct a tuple without conversion needed
+                DataType::Tuple(args)
+            }
+            Some(n) => {
+                let def = self.ctxt.get_type(n);
+
+                // prepare the holder for definition processing
+                let params = &def.head.params;
+                if params.len() != args.len() {
+                    bail!("generics mismatch");
+                }
+
+                let mut ty_args = BTreeMap::new();
+                for (param, arg) in params.iter().zip(args.iter()) {
+                    match ty_args.insert(param.clone(), arg.clone()) {
+                        None => (),
+                        Some(_) => bail!("duplicated type parameter {}", param),
+                    }
+                }
+
+                let mut holder = TypeRegistryHolder::new(self.ctxt, ty_args, self.registry);
+
+                // parse the definition with the newly contextualized holder
+                match &def.body {
+                    TypeBody::Tuple(tuple) => {
+                        DataType::Tuple(holder.resolve_tag_vec(&tuple.slots)?)
+                    }
+                    TypeBody::Record(record) => {
+                        DataType::Record(holder.resolve_tag_map(&record.fields)?)
+                    }
+                    TypeBody::Enum(adt) => {
+                        let mut variants = BTreeMap::new();
+                        for (key, val) in &adt.variants {
+                            let variant = match val {
+                                EnumVariant::Unit => Variant::Unit,
+                                EnumVariant::Tuple(tuple) => {
+                                    Variant::Tuple(holder.resolve_tag_vec(&tuple.slots)?)
+                                }
+                                EnumVariant::Record(record) => {
+                                    Variant::Record(holder.resolve_tag_map(&record.fields)?)
+                                }
+                            };
+                            variants.insert(key.clone(), variant);
+                        }
+                        DataType::Enum(variants)
+                    }
+                }
+            }
+        };
+
+        // register the definition
+        self.registry.register_def(index, def);
+
+        // return the sort
+        Ok(Sort::User(UsrSortId { index }))
     }
 }

@@ -24,7 +24,7 @@ impl<'a> IRBuilder<'a> {
     }
 
     /// Initialize it with a new refinement relation
-    pub fn build(mut self, rel: &Refinement) -> Result<()> {
+    pub fn build(self, rel: &Refinement) -> Result<()> {
         let Self {
             ctxt,
             mut ty_registry,
