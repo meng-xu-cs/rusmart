@@ -129,7 +129,7 @@ pub enum Op {
         inst: Vec<TypeRef>,
         slots: Vec<Expr>,
     },
-    /// `<adt>::<branch>(a1, a2, ...)`
+    /// `<adt>::<branch>{ f1: a1, f2: a2, ... }`
     EnumRecord {
         branch: ADTBranch,
         inst: Vec<TypeRef>,
