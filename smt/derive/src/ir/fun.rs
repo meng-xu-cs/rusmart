@@ -33,3 +33,13 @@ pub struct FunRegistry {
     /// the actual function definitions
     defs: BTreeMap<UsrFunId, Function>,
 }
+
+impl FunRegistry {
+    /// Initialize an empty registry
+    pub fn new() -> Self {
+        Self {
+            sigs: BTreeMap::new(),
+            defs: BTreeMap::new(),
+        }
+    }
+}

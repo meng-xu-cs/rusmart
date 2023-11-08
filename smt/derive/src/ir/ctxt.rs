@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::ir::fun::FunRegistry;
 use anyhow::{bail, Result};
 
 use crate::ir::sort::{SmtSortName, Sort, TypeRegistry, TypeRegistryHolder};
@@ -12,6 +13,8 @@ pub struct IRBuilder<'a> {
     ctxt: &'a ContextWithFunc,
     /// type registry
     ty_registry: TypeRegistry,
+    /// function registry
+    fn_registry: FunRegistry,
 }
 
 impl<'a> IRBuilder<'a> {
@@ -20,6 +23,7 @@ impl<'a> IRBuilder<'a> {
         Self {
             ctxt,
             ty_registry: TypeRegistry::new(),
+            fn_registry: FunRegistry::new(),
         }
     }
 
@@ -28,6 +32,7 @@ impl<'a> IRBuilder<'a> {
         let Self {
             ctxt,
             mut ty_registry,
+            mut fn_registry,
         } = self;
 
         // get the pair
