@@ -35,15 +35,37 @@ pub struct Variable {
     sort: Sort,
 }
 
-/// Denotes how to unpack an enum and bind variables
-pub enum UnpackBind {
+/// Denotes how to construct an enum variant
+pub enum VariantCtor {
     Unit,
-    Tuple(BTreeMap<usize, VarId>),
-    Record(BTreeMap<String, VarId>),
+    Tuple(Vec<ExpId>),
+    Record(BTreeMap<String, ExpId>),
+}
+
+/// Denotes how to destruct an enum variant and bind variables
+pub enum VariantDtor {
+    Unit,
+    Tuple(Vec<Option<VarId>>),
+    Record(BTreeMap<String, Option<VarId>>),
+}
+
+/// One atom in the match case to unpack
+pub struct MatchAtom {
+    head: ExpId,
+    sort: UsrSortId,
+    branch: String,
+    variant: VariantDtor,
 }
 
 /// One match case
 pub struct MatchCase {
+    atoms: Vec<MatchAtom>,
+    body: ExpId,
+}
+
+/// One phi case (i.e., conditional branch)
+pub struct PhiCase {
+    cond: ExpId,
     body: ExpId,
 }
 
@@ -60,29 +82,20 @@ pub enum Expression {
         sort: UsrSortId,
         fields: BTreeMap<String, ExpId>,
     },
-    /// `<adt-name>(<inst>?)::<branch>`
-    EnumUnit { sort: UsrSortId, branch: String },
-    /// `<adt-name>(<inst>?)::<branch>(v1, v2, ...)`
-    EnumTuple {
+    /// `<adt-name>(<inst>?)::<branch>(<ctor>)`
+    Enum {
         sort: UsrSortId,
         branch: String,
-        slots: Vec<ExpId>,
-    },
-    /// `<adt-name>(<inst>?)::<branch>{ f1: v1, f2: v2, ... }`
-    EnumRecord {
-        sort: UsrSortId,
-        branch: String,
-        fields: BTreeMap<String, ExpId>,
+        variant: VariantCtor,
     },
     /// `<base>.<index>`
     AccessSlot { base: ExpId, slot: usize },
     /// `<base>.<field>`
     AccessField { base: ExpId, field: String },
     /// `match (v1, v2, ...) { (a1, a2, ...) => <body1> } ...`
-    Match {
-        heads: Vec<Exp>,
-        combo: Vec<MatchCombo>,
-    },
+    Match { cases: Vec<MatchCase> },
+    /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
+    Phi { cases: Vec<PhiCase>, default: ExpId },
 }
 
 /// A builder for expressions
