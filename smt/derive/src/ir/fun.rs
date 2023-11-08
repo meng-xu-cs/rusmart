@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use crate::ir::exp::{ExpId, Expression, VarId, Variable};
 use crate::ir::name::{index, name};
 use crate::ir::sort::Sort;
+use crate::parser::ctxt::ContextWithFunc;
+use crate::parser::name::UsrFuncName;
 
 name! {
     /// Name of a user-defined function
@@ -42,4 +44,21 @@ impl FunRegistry {
             defs: BTreeMap::new(),
         }
     }
+}
+
+/// Summarizes the task of analyzing one function
+pub struct FunAnalysisTask {
+    id: UsrFunId,
+    name: UsrFuncName,
+    inst: Vec<Sort>,
+}
+
+/// A contextualized holder for the type registry
+pub struct FunRegistryHolder<'a, 'ctx: 'a> {
+    /// information provider
+    ctxt: &'ctx ContextWithFunc,
+    /// a work list of functions to be analyzed
+    worklist: Vec<FunAnalysisTask>,
+    /// function registry to be modified
+    registry: &'a mut FunRegistry,
 }
