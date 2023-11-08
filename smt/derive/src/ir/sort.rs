@@ -73,9 +73,9 @@ pub enum DataType {
 
 /// A registry of data types involved
 pub struct TypeRegistry {
-    /// a map from user-defined type and instantiations to node indices
+    /// a map from user-defined type and instantiations to sort id
     idx_named: BTreeMap<UsrSortName, BTreeMap<Vec<Sort>, UsrSortId>>,
-    /// a map from unnamed type tuple (still user-defined) to node indices
+    /// a map from unnamed type tuple (still user-defined) to sort id
     idx_tuple: BTreeMap<Vec<Sort>, UsrSortId>,
     /// the actual type definitions
     defs: BTreeMap<UsrSortId, DataType>,

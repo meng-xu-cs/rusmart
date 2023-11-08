@@ -28,8 +28,8 @@ pub struct Function {
 
 /// A registry of functions involved
 pub struct FunRegistry {
-    /// a map from user-defined functions and instantiations to node indices
-    idx_named: BTreeMap<UsrFunName, BTreeMap<Vec<Sort>, UsrFunId>>,
+    /// a map from user-defined functions and instantiations to function id
+    sigs: BTreeMap<UsrFunName, BTreeMap<Vec<Sort>, UsrFunId>>,
     /// the actual function definitions
     defs: BTreeMap<UsrFunId, Function>,
 }
