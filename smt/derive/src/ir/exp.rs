@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
+use crate::ir::fun::UsrFunId;
+use crate::ir::intrinsics::Intrinsic;
 use crate::ir::name::index;
 use crate::ir::sort::{Sort, UsrSortId};
-use crate::parser::name::VarName;
 
 index! {
     /// Index of a variable
@@ -96,18 +97,39 @@ pub enum Expression {
     Match { cases: Vec<MatchCase> },
     /// `if (<c1>) { <v1> } else if (<c2>) { <v2> } ... else { <default> }`
     Phi { cases: Vec<PhiCase>, default: ExpId },
-}
-
-/// A builder for expressions
-pub struct ExprBuilder {
-    /// a map from variable id to variables
-    vars: BTreeMap<VarId, Variable>,
-    /// a map from expression id to expressions
-    exps: BTreeMap<ExpId, Expression>,
-}
-
-pub struct Func {
-    var_params: BTreeMap<VarName, Sort>,
-    var_axioms: Vec<(Vec<VarName>, Vec<Predicate>)>,
-    body: Exp,
+    /// `forall!(|<v>: <t>| {<expr>})`
+    Forall {
+        vars: BTreeMap<VarId, Sort>,
+        body: ExpId,
+    },
+    /// `exists!(|<v>: <t>| {<expr>})`
+    Exists {
+        vars: BTreeMap<VarId, Sort>,
+        body: ExpId,
+    },
+    /// `choose!(|<v>: <t>| {<expr>})`
+    Choose {
+        vars: BTreeMap<VarId, Sort>,
+        body: ExpId,
+        rets: Vec<VarId>,
+    },
+    /// `forall!(<v> in <c> ... => <expr>)`
+    IterForall {
+        vars: BTreeMap<VarId, ExpId>,
+        body: ExpId,
+    },
+    /// `exists!(<v> in <c> ... => <expr>)`
+    IterExists {
+        vars: BTreeMap<VarId, ExpId>,
+        body: ExpId,
+    },
+    /// `choose!(<v> in <c> ... => <expr>)`
+    IterChoose {
+        vars: BTreeMap<VarId, ExpId>,
+        body: ExpId,
+    },
+    /// `<class>::<method>(<a1>, <a2>, ...)`
+    Intrinsic(Intrinsic),
+    /// `<function>(<a1>, <a2>, ...)`
+    Procedure { callee: UsrFunId, args: Vec<ExpId> },
 }
