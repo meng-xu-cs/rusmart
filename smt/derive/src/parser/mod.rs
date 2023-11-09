@@ -10,7 +10,7 @@ pub mod infer;
 pub mod ty;
 
 mod apply;
-mod func;
+pub mod func;
 
 mod pat;
 mod path;

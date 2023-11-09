@@ -76,8 +76,8 @@ impl MarkedAxiom {
 /// A refinement relation
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Refinement {
-    fn_impl: UsrFuncName,
-    fn_spec: UsrFuncName,
+    pub fn_impl: UsrFuncName,
+    pub fn_spec: UsrFuncName,
 }
 
 impl Display for Refinement {
@@ -612,17 +612,18 @@ impl ContextWithFunc {
         self.vc_db.iter()
     }
 
-    /// Get the impl and spec pair
-    pub fn get_relation(&self, rel: &Refinement) -> (&ImplFuncDef, &SpecFuncDef) {
-        let fn_impl = self
-            .impls
-            .get(&rel.fn_impl)
-            .unwrap_or_else(|| panic!("impl fn {}", rel.fn_impl));
-        let fn_spec = self
-            .specs
-            .get(&rel.fn_spec)
-            .unwrap_or_else(|| panic!("spec fn {}", rel.fn_spec));
-        (fn_impl, fn_spec)
+    /// Get the impl function
+    pub fn get_impl(&self, name: &UsrFuncName) -> &ImplFuncDef {
+        self.impls
+            .get(name)
+            .unwrap_or_else(|| panic!("impl fn {}", name))
+    }
+
+    /// Get the spec function
+    pub fn get_spec(&self, name: &UsrFuncName) -> &SpecFuncDef {
+        self.specs
+            .get(name)
+            .unwrap_or_else(|| panic!("spec fn {}", name))
     }
 
     /// Get the type definition

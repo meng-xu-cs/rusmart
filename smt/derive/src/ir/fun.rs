@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 
+use anyhow::Result;
+
+use crate::ir::ctxt::IRBuilder;
 use crate::ir::exp::{ExpId, Expression, VarId, Variable};
 use crate::ir::name::{index, name};
 use crate::ir::sort::Sort;
-use crate::parser::ctxt::ContextWithFunc;
+use crate::parser::func::{FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::name::UsrFuncName;
 
 name! {
@@ -44,21 +47,65 @@ impl FunRegistry {
             defs: BTreeMap::new(),
         }
     }
+
+    /// Get the index given a name and instantiation
+    fn get_index(&self, name: &UsrFunName, inst: &[Sort]) -> Option<UsrFunId> {
+        self.sigs.get(name)?.get(inst).copied()
+    }
+
+    /// Register a signature to the registry
+    fn register_sig(&mut self, name: UsrFunName, inst: Vec<Sort>) -> UsrFunId {
+        let idx = UsrFunId {
+            index: self.sigs.values().map(|v| v.len()).sum::<usize>(),
+        };
+        let existing = self.sigs.entry(name).or_default().insert(inst, idx);
+        if existing.is_some() {
+            panic!("function signature already registered");
+        }
+        idx
+    }
+
+    /// Register a definition to the registry
+    fn register_def(&mut self, idx: UsrFunId, def: Function) {
+        let existing = self.defs.insert(idx, def);
+        if existing.is_some() {
+            panic!("function definition already registered");
+        }
+    }
 }
 
-/// Summarizes the task of analyzing one function
-pub struct FunAnalysisTask {
-    id: UsrFunId,
-    name: UsrFuncName,
-    inst: Vec<Sort>,
-}
+impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
+    /// Process the impl function
+    pub fn process_impl(&mut self, name: &UsrFuncName) -> Result<()> {
+        // unpack the def
+        let ImplFuncDef {
+            head:
+                FuncSig {
+                    generics,
+                    params,
+                    ret_ty,
+                },
+            body,
+        } = self.ctxt.get_impl(name);
 
-/// A contextualized holder for the type registry
-pub struct FunRegistryHolder<'a, 'ctx: 'a> {
-    /// information provider
-    ctxt: &'ctx ContextWithFunc,
-    /// a work list of functions to be analyzed
-    worklist: Vec<FunAnalysisTask>,
-    /// function registry to be modified
-    registry: &'a mut FunRegistry,
+        // done
+        Ok(())
+    }
+
+    /// Process the spec function
+    pub fn process_spec(&mut self, name: &UsrFuncName) -> Result<()> {
+        // unpack the def
+        let SpecFuncDef {
+            head:
+                FuncSig {
+                    generics,
+                    params,
+                    ret_ty,
+                },
+            body,
+        } = self.ctxt.get_spec(name);
+
+        // done
+        Ok(())
+    }
 }

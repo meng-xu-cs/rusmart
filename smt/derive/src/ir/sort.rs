@@ -102,22 +102,22 @@ impl TypeRegistry {
 
     /// Register a signature to the registry
     fn register_sig(&mut self, name: Option<UsrSortName>, inst: Vec<Sort>) -> UsrSortId {
-        let index = UsrSortId {
+        let idx = UsrSortId {
             index: self.idx_tuple.len() + self.idx_named.values().map(|v| v.len()).sum::<usize>(),
         };
         let existing = match name {
-            None => self.idx_tuple.insert(inst, index),
-            Some(n) => self.idx_named.entry(n).or_default().insert(inst, index),
+            None => self.idx_tuple.insert(inst, idx),
+            Some(n) => self.idx_named.entry(n).or_default().insert(inst, idx),
         };
         if existing.is_some() {
             panic!("type signature already registered");
         }
-        index
+        idx
     }
 
     /// Register a definition to the registry
-    fn register_def(&mut self, index: UsrSortId, def: DataType) {
-        let existing = self.defs.insert(index, def);
+    fn register_def(&mut self, idx: UsrSortId, def: DataType) {
+        let existing = self.defs.insert(idx, def);
         if existing.is_some() {
             panic!("type definition already registered");
         }
@@ -229,7 +229,7 @@ impl<'a, 'ctx: 'a> TypeRegistryHolder<'a, 'ctx> {
         }
 
         // register the signature and get the index
-        let index = self.registry.register_sig(name, args.clone());
+        let idx = self.registry.register_sig(name, args.clone());
 
         // process the definition
         let def = match ty_name {
@@ -285,9 +285,9 @@ impl<'a, 'ctx: 'a> TypeRegistryHolder<'a, 'ctx> {
         };
 
         // register the definition
-        self.registry.register_def(index, def);
+        self.registry.register_def(idx, def);
 
         // return the sort
-        Ok(Sort::User(index))
+        Ok(Sort::User(idx))
     }
 }
