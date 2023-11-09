@@ -5,6 +5,8 @@ use anyhow::{bail, Result};
 use crate::ir::fun::FunRegistry;
 use crate::ir::sort::{SmtSortName, Sort, TypeRegistry};
 use crate::parser::ctxt::{ContextWithFunc, Refinement};
+use crate::parser::generics::Generics;
+use crate::parser::infer::TypeRef;
 use crate::parser::name::TypeParamName;
 
 /// A context for intermediate representation
@@ -33,7 +35,7 @@ pub struct IRBuilder<'a, 'ctx: 'a> {
     /// context provider
     pub ctxt: &'ctx ContextWithFunc,
     /// type instantiation in the current context
-    pub ty_args: BTreeMap<TypeParamName, Sort>,
+    pub ty_inst: BTreeMap<TypeParamName, Sort>,
     /// the ir to be accumulated
     pub ir: &'a mut IRContext,
 }
@@ -42,10 +44,29 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     /// Change the analysis context
     pub fn new(
         ctxt: &'ctx ContextWithFunc,
-        ty_args: BTreeMap<TypeParamName, Sort>,
+        ty_inst: BTreeMap<TypeParamName, Sort>,
         ir: &'a mut IRContext,
     ) -> Self {
-        Self { ctxt, ty_args, ir }
+        Self { ctxt, ty_inst, ir }
+    }
+
+    /// Contextualize into a new builder
+    pub fn derive(&mut self, generics: &Generics, ty_args: Vec<Sort>) -> Result<IRBuilder> {
+        // prepare the builder for definition processing
+        let ty_params = &generics.params;
+        if ty_params.len() != ty_args.len() {
+            bail!("generics mismatch");
+        }
+
+        let mut ty_inst = BTreeMap::new();
+        for (param, arg) in ty_params.iter().zip(ty_args.iter()) {
+            match ty_inst.insert(param.clone(), arg.clone()) {
+                None => (),
+                Some(_) => bail!("duplicated type parameter {}", param),
+            }
+        }
+
+        Ok(IRBuilder::new(self.ctxt, ty_inst, self.ir))
     }
 
     /// Initialize it with a new refinement relation
@@ -63,16 +84,25 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
             bail!("generics mismatch");
         }
 
-        let mut ty_args = BTreeMap::new();
+        // type instantiation for both spec and impl
+        let mut ty_args = vec![];
+        // type arguments for IR builder context
+        let mut ty_inst = BTreeMap::new();
+
         for ty_param in generics_impl {
-            let name = SmtSortName::new(ty_param);
-            let sort = Sort::Uninterpreted(name.clone());
-            match ty_args.insert(ty_param.clone(), sort) {
+            let smt_name = SmtSortName::new(ty_param);
+            ir.undef_sorts.insert(smt_name.clone());
+
+            let smt_sort = Sort::Uninterpreted(smt_name);
+            match ty_inst.insert(ty_param.clone(), smt_sort) {
                 None => (),
                 Some(_) => bail!("duplicated type parameter {}", ty_param),
             }
-            ir.undef_sorts.insert(name);
+            ty_args.push(TypeRef::Parameter(ty_param.clone()));
         }
+
+        // initialize the builder
+        let mut builder = IRBuilder::new(ctxt, ty_inst, &mut ir);
 
         // sanity check on the refinement
         let params_impl = &fn_impl.head.params;
@@ -89,12 +119,9 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
             bail!("return type mismatch");
         }
 
-        // initialize the builder
-        let mut builder = IRBuilder::new(ctxt, ty_args, &mut ir);
-
         // process the impl and spec pair
-        builder.process_impl(&rel.fn_impl)?;
-        builder.process_spec(&rel.fn_spec)?;
+        builder.resolve_impl(&rel.fn_impl, &ty_args)?;
+        builder.resolve_spec(&rel.fn_spec, &ty_args)?;
 
         // done
         Ok(ir)

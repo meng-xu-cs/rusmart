@@ -5,7 +5,7 @@ mod test;
 mod attr;
 pub mod name;
 
-mod generics;
+pub mod generics;
 pub mod infer;
 pub mod ty;
 
