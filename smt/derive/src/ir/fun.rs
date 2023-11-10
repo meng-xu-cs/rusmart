@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 
 use crate::ir::ctxt::IRBuilder;
-use crate::ir::exp::{ExpId, Expression, VarId, Variable};
+use crate::ir::exp::{ExpBuilder, ExpId, ExpRegistry, Symbol};
 use crate::ir::name::{index, name};
 use crate::ir::sort::Sort;
 use crate::parser::func::{FuncDef, FuncSig};
@@ -22,14 +22,12 @@ index! {
 
 /// Function information
 pub struct Function {
-    /// a map from variable id to variables
-    vars: BTreeMap<VarId, Variable>,
-    /// a map from expression id to expressions
-    exps: BTreeMap<ExpId, Expression>,
     /// parameters
-    params: Vec<VarId>,
+    pub params: Vec<(Symbol, Sort)>,
+    /// return value
+    pub ret_ty: Sort,
     /// the function body
-    body: ExpId,
+    pub body: Option<(ExpRegistry, ExpId)>,
 }
 
 /// A registry of functions involved
@@ -105,19 +103,23 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         } = self.ctxt.get_func(fn_name);
 
         // prepare the builder for definition processing
-        let mut builder = self.derive(generics, ty_args)?;
+        let ty_inst = Self::derive_ty_inst(generics, ty_args)?;
+        let mut builder = IRBuilder::new(self.ctxt, &ty_inst, self.ir);
 
         // resolve type in function signatures
+        let mut resolved_params = vec![];
         for (param_name, param_ty) in params {
-            builder.resolve_type(&(param_ty.into()))?;
+            let param_sort = builder.resolve_type(&(param_ty.into()))?;
+            resolved_params.push((param_name, param_sort));
         }
-        builder.resolve_type(&(ret_ty.into()))?;
+        let resolved_ret_ty = builder.resolve_type(&(ret_ty.into()))?;
 
-        // resolve body
-        match body {
-            None => todo!("axiom"),
-            Some(exp) => {}
-        }
+        // materialize the entire function
+        let function =
+            ExpBuilder::materialize(builder, resolved_params, resolved_ret_ty, body.as_ref())?;
+
+        // register the function definition
+        self.ir.fn_registry.register_def(idx, function);
 
         // done
         Ok(idx)

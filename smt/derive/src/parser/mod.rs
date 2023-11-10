@@ -17,5 +17,5 @@ mod path;
 
 mod adt;
 mod dsl;
-mod expr;
+pub mod expr;
 mod intrinsics;

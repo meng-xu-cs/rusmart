@@ -224,7 +224,8 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                 let def = self.ctxt.get_type(n);
 
                 // prepare the builder for definition processing
-                let mut builder = self.derive(&def.head, ty_args)?;
+                let ty_inst = Self::derive_ty_inst(&def.head, ty_args)?;
+                let mut builder = IRBuilder::new(self.ctxt, &ty_inst, self.ir);
 
                 // parse the definition with the newly contextualized holder
                 match &def.body {
