@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 
 use crate::ir::fun::FunRegistry;
 use crate::ir::sort::{SmtSortName, Sort, TypeRegistry};
-use crate::parser::ctxt::{ContextWithFunc, Refinement};
+use crate::parser::ctxt::{ASTContext, Refinement};
 use crate::parser::generics::Generics;
 use crate::parser::infer::TypeRef;
 use crate::parser::name::TypeParamName;
@@ -33,7 +33,7 @@ impl IRContext {
 /// A context builder originated from a refinement relation
 pub struct IRBuilder<'a, 'ctx: 'a> {
     /// context provider
-    pub ctxt: &'ctx ContextWithFunc,
+    pub ctxt: &'ctx ASTContext,
     /// type instantiation in the current context
     pub ty_inst: BTreeMap<TypeParamName, Sort>,
     /// the ir to be accumulated
@@ -43,7 +43,7 @@ pub struct IRBuilder<'a, 'ctx: 'a> {
 impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     /// Change the analysis context
     pub fn new(
-        ctxt: &'ctx ContextWithFunc,
+        ctxt: &'ctx ASTContext,
         ty_inst: BTreeMap<TypeParamName, Sort>,
         ir: &'a mut IRContext,
     ) -> Self {
@@ -70,12 +70,12 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     }
 
     /// Initialize it with a new refinement relation
-    pub fn build(ctxt: &'ctx ContextWithFunc, rel: &'ctx Refinement) -> Result<IRContext> {
+    pub fn build(ctxt: &'ctx ASTContext, rel: &'ctx Refinement) -> Result<IRContext> {
         let mut ir = IRContext::new();
 
         // get the pair
-        let fn_impl = ctxt.get_impl(&rel.fn_impl);
-        let fn_spec = ctxt.get_spec(&rel.fn_spec);
+        let fn_impl = ctxt.get_func(&rel.fn_impl);
+        let fn_spec = ctxt.get_func(&rel.fn_spec);
 
         // assign uninterpreted sorts as type arguments for function type parameters
         let generics_impl = &fn_impl.head.generics.params;
@@ -120,8 +120,8 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         }
 
         // process the impl and spec pair
-        builder.resolve_impl(&rel.fn_impl, &ty_args)?;
-        builder.resolve_spec(&rel.fn_spec, &ty_args)?;
+        builder.resolve_func(&rel.fn_impl, &ty_args)?;
+        builder.resolve_func(&rel.fn_spec, &ty_args)?;
 
         // done
         Ok(ir)

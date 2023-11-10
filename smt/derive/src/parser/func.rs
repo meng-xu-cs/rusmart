@@ -355,6 +355,29 @@ pub struct SpecFuncDef {
     pub body: Option<Expr>,
 }
 
+/// Function definition for both impl and spec
+pub struct FuncDef {
+    pub head: FuncSig,
+    pub body: Option<Expr>,
+}
+
+impl From<ImplFuncDef> for FuncDef {
+    fn from(def: ImplFuncDef) -> Self {
+        let ImplFuncDef { head, body } = def;
+        Self {
+            head,
+            body: Some(body),
+        }
+    }
+}
+
+impl From<SpecFuncDef> for FuncDef {
+    fn from(def: SpecFuncDef) -> Self {
+        let SpecFuncDef { head, body } = def;
+        Self { head, body }
+    }
+}
+
 /// Function definition for axiom
 pub struct Axiom {
     pub head: FuncSig,

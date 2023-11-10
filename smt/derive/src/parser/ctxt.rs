@@ -11,7 +11,7 @@ use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
 use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
-use crate::parser::func::{Axiom, FuncSig, ImplFuncDef, SpecFuncDef};
+use crate::parser::func::{Axiom, FuncDef, FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::generics::Generics;
 use crate::parser::name::{UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
@@ -607,23 +607,53 @@ pub struct ContextWithFunc {
 }
 
 impl ContextWithFunc {
+    /// Finalize parsing context into AST
+    pub fn finalize(self) -> ASTContext {
+        let Self {
+            types,
+            impls,
+            specs,
+            axioms,
+            vc_db,
+        } = self;
+
+        // merge the functions
+        let num_funcs = impls.len() + specs.len();
+        let mut funcs = BTreeMap::new();
+
+        for (name, def) in impls {
+            funcs.insert(name, def.into());
+        }
+        for (name, def) in specs {
+            funcs.insert(name, def.into());
+        }
+
+        if funcs.len() != num_funcs {
+            panic!("duplicated function names");
+        }
+
+        // done
+        ASTContext {
+            types,
+            funcs,
+            axioms,
+            vc_db,
+        }
+    }
+}
+
+/// Context after AST construction
+pub struct ASTContext {
+    types: BTreeMap<UsrTypeName, TypeDef>,
+    funcs: BTreeMap<UsrFuncName, FuncDef>,
+    axioms: Vec<Axiom>,
+    vc_db: BTreeSet<Refinement>,
+}
+
+impl ASTContext {
     /// Enumerate over the verification conditions
     pub fn refinements(&self) -> impl Iterator<Item = &Refinement> {
         self.vc_db.iter()
-    }
-
-    /// Get the impl function
-    pub fn get_impl(&self, name: &UsrFuncName) -> &ImplFuncDef {
-        self.impls
-            .get(name)
-            .unwrap_or_else(|| panic!("impl fn {}", name))
-    }
-
-    /// Get the spec function
-    pub fn get_spec(&self, name: &UsrFuncName) -> &SpecFuncDef {
-        self.specs
-            .get(name)
-            .unwrap_or_else(|| panic!("spec fn {}", name))
     }
 
     /// Get the type definition
@@ -631,6 +661,13 @@ impl ContextWithFunc {
         self.types
             .get(name)
             .unwrap_or_else(|| panic!("type {}", name))
+    }
+
+    /// Get the function definition
+    pub fn get_func(&self, name: &UsrFuncName) -> &FuncDef {
+        self.funcs
+            .get(name)
+            .unwrap_or_else(|| panic!("fn {}", name))
     }
 }
 

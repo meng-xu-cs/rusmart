@@ -6,7 +6,7 @@ use crate::ir::ctxt::IRBuilder;
 use crate::ir::exp::{ExpId, Expression, VarId, Variable};
 use crate::ir::name::{index, name};
 use crate::ir::sort::Sort;
-use crate::parser::func::{FuncSig, ImplFuncDef, SpecFuncDef};
+use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::infer::TypeRef;
 use crate::parser::name::UsrFuncName;
 
@@ -76,8 +76,8 @@ impl FunRegistry {
 }
 
 impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
-    /// Resolve the impl function
-    pub fn resolve_impl(&mut self, fn_name: &UsrFuncName, ty_args: &[TypeRef]) -> Result<UsrFunId> {
+    /// Resolve the function
+    pub fn resolve_func(&mut self, fn_name: &UsrFuncName, ty_args: &[TypeRef]) -> Result<UsrFunId> {
         // derive the signature
         let name = UsrFunName {
             ident: fn_name.to_string(),
@@ -94,7 +94,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let idx = self.ir.fn_registry.register_sig(name, ty_args.clone());
 
         // unpack the def
-        let ImplFuncDef {
+        let FuncDef {
             head:
                 FuncSig {
                     generics,
@@ -102,48 +102,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                     ret_ty,
                 },
             body,
-        } = self.ctxt.get_impl(fn_name);
-
-        // prepare the builder for definition processing
-        let mut builder = self.derive(generics, ty_args)?;
-
-        // resolve type in function signatures
-        for (_, ty_tag) in params {
-            builder.resolve_type(&(ty_tag.into()))?;
-        }
-        builder.resolve_type(&(ret_ty.into()))?;
-
-        // done
-        Ok(idx)
-    }
-
-    /// Resolve the spec function
-    pub fn resolve_spec(&mut self, fn_name: &UsrFuncName, ty_args: &[TypeRef]) -> Result<UsrFunId> {
-        // derive the signature
-        let name = UsrFunName {
-            ident: fn_name.to_string(),
-        };
-        let ty_args = self.resolve_type_ref_vec(ty_args)?;
-
-        // check if we have already processed the impl function
-        match self.ir.fn_registry.get_index(&name, &ty_args) {
-            None => (),
-            Some(idx) => return Ok(idx),
-        }
-
-        // register the signature and get the index
-        let idx = self.ir.fn_registry.register_sig(name, ty_args.clone());
-
-        // unpack the def
-        let SpecFuncDef {
-            head:
-                FuncSig {
-                    generics,
-                    params,
-                    ret_ty,
-                },
-            body,
-        } = self.ctxt.get_spec(fn_name);
+        } = self.ctxt.get_func(fn_name);
 
         // prepare the builder for definition processing
         let mut builder = self.derive(generics, ty_args)?;

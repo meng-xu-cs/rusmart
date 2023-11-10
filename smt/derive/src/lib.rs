@@ -19,7 +19,8 @@ fn pipeline(ctxt: Context) -> Result<()> {
         .parse_generics()?
         .parse_types()?
         .parse_func_sigs()?
-        .parse_func_body()?;
+        .parse_func_body()?
+        .finalize();
     for item in parsed.refinements() {
         debug!("processing verification condition {}", item);
         match IRBuilder::build(&parsed, item) {
