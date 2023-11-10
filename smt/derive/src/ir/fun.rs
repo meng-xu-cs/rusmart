@@ -108,10 +108,16 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let mut builder = self.derive(generics, ty_args)?;
 
         // resolve type in function signatures
-        for (_, ty_tag) in params {
-            builder.resolve_type(&(ty_tag.into()))?;
+        for (param_name, param_ty) in params {
+            builder.resolve_type(&(param_ty.into()))?;
         }
         builder.resolve_type(&(ret_ty.into()))?;
+
+        // resolve body
+        match body {
+            None => todo!("axiom"),
+            Some(exp) => {}
+        }
 
         // done
         Ok(idx)

@@ -31,9 +31,9 @@ pub enum VarKind {
 
 /// Information about a variable
 pub struct Variable {
-    name: String,
-    kind: VarKind,
-    sort: Sort,
+    pub name: String,
+    pub kind: VarKind,
+    pub sort: Sort,
 }
 
 /// Denotes how to construct an enum variant
