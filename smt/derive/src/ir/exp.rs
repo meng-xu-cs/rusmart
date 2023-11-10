@@ -190,22 +190,24 @@ pub struct ExpBuilder<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> {
 
 impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     /// Create a new expression builder
-    pub fn new(parent: &'ir mut IRBuilder<'a, 'ctx>, registry: &'b mut ExpRegistry) -> Self {
-        Self {
+    fn new(
+        parent: &'ir mut IRBuilder<'a, 'ctx>,
+        registry: &'b mut ExpRegistry,
+        params: &[(Symbol, Sort)],
+    ) -> Result<Self> {
+        let mut namespace = BTreeMap::new();
+        for (name, sort) in params {
+            let id = registry.add_param(name.clone(), sort.clone());
+            match namespace.insert(name.clone(), id) {
+                None => (),
+                Some(_) => bail!("symbol conflict: {}", name),
+            }
+        }
+        Ok(Self {
             parent,
             registry,
-            namespace: BTreeMap::new(),
-        }
-    }
-
-    /// Add a new parameter to the namespace
-    pub fn add_param(&mut self, name: Symbol, sort: Sort) -> Result<VarId> {
-        let id = self.registry.add_param(name.clone(), sort);
-        match self.namespace.insert(name, id) {
-            None => (),
-            Some(_) => bail!("symbol conflict"),
-        }
-        Ok(id)
+            namespace,
+        })
     }
 
     /// Process an expression
@@ -235,7 +237,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Some(expr) => {
                 // initialize the registry and builder
                 let mut registry = ExpRegistry::new();
-                let mut builder = ExpBuilder::new(&mut parent, &mut registry);
+                let mut builder = ExpBuilder::new(&mut parent, &mut registry, &params)?;
 
                 // build the expression
                 let id = builder.resolve(expr, &ret_ty)?;

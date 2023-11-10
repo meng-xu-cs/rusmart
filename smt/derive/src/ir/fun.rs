@@ -103,8 +103,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         } = self.ctxt.get_func(fn_name);
 
         // prepare the builder for definition processing
-        let ty_inst = Self::derive_ty_inst(generics, ty_args)?;
-        let mut builder = IRBuilder::new(self.ctxt, &ty_inst, self.ir);
+        let mut builder = self.derive(generics, ty_args)?;
 
         // resolve type in function signatures
         let mut resolved_params = vec![];

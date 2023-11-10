@@ -35,26 +35,23 @@ pub struct IRBuilder<'a, 'ctx: 'a> {
     /// context provider
     pub ctxt: &'ctx ASTContext,
     /// type instantiation in the current context
-    pub ty_inst: &'ctx BTreeMap<TypeParamName, Sort>,
+    pub ty_inst: BTreeMap<TypeParamName, Sort>,
     /// the ir to be accumulated
     pub ir: &'a mut IRContext,
 }
 
 impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     /// Change the analysis context
-    pub fn new(
+    fn new(
         ctxt: &'ctx ASTContext,
-        ty_inst: &'ctx BTreeMap<TypeParamName, Sort>,
+        ty_inst: BTreeMap<TypeParamName, Sort>,
         ir: &'a mut IRContext,
     ) -> Self {
         Self { ctxt, ty_inst, ir }
     }
 
     /// Contextualize into a new builder
-    pub fn derive_ty_inst(
-        generics: &Generics,
-        ty_args: Vec<Sort>,
-    ) -> Result<BTreeMap<TypeParamName, Sort>> {
+    pub fn derive(&mut self, generics: &Generics, ty_args: Vec<Sort>) -> Result<IRBuilder> {
         let ty_params = &generics.params;
         if ty_params.len() != ty_args.len() {
             bail!("generics mismatch");
@@ -67,7 +64,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                 Some(_) => bail!("duplicated type parameter {}", param),
             }
         }
-        Ok(ty_inst)
+        Ok(IRBuilder::new(self.ctxt, ty_inst, self.ir))
     }
 
     /// Initialize it with a new refinement relation
@@ -103,7 +100,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         }
 
         // initialize the builder
-        let mut builder = IRBuilder::new(ctxt, &ty_inst, &mut ir);
+        let mut builder = IRBuilder::new(ctxt, ty_inst, &mut ir);
 
         // sanity check on the refinement
         let params_impl = &fn_impl.head.params;
