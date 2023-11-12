@@ -6,7 +6,7 @@ use crate::ir::ctxt::IRBuilder;
 use crate::ir::fun::{Function, UsrFunId};
 use crate::ir::intrinsics::Intrinsic;
 use crate::ir::name::{index, name};
-use crate::ir::sort::{Sort, UsrSortId};
+use crate::ir::sort::{DataType, Sort, UsrSortId};
 use crate::parser::expr::{Expr, LetBinding, Op, VarDecl};
 use crate::parser::name::VarName;
 
@@ -209,6 +209,16 @@ impl ExpRegistry {
         self.exps.insert(id, exp);
         id
     }
+
+    /// Retrieve the variable
+    fn lookup_var(&self, idx: VarId) -> &Variable {
+        self.vars.get(&idx).expect("no such var id")
+    }
+
+    /// Retrieve the expression
+    fn lookup_exp(&self, idx: ExpId) -> &Expression {
+        self.exps.get(&idx).expect("no such exp id")
+    }
 }
 
 /// A context builder originated from a refinement relation
@@ -244,10 +254,13 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Bind a variable declaration to an expression
-    fn bind(&mut self, decl: &VarDecl, exp: ExpId) -> Result<()> {
+    fn bind(&mut self, decl: &VarDecl, ety: Sort, exp: ExpId) -> Result<()> {
         match decl {
             VarDecl::One(name, ty) => {
                 let sort = self.parent.resolve_type(ty)?;
+                if sort != ety {
+                    bail!("type mismatch");
+                }
                 let sym = Symbol::from(name);
                 let vid = self.registry.add_bound(sym.clone(), sort, exp);
                 match self.namespace.insert(sym, vid) {
@@ -256,8 +269,21 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
             }
             VarDecl::Pack(elems) => {
-                for elem in elems {
-                    self.bind(elem, exp)?;
+                let tuple = match ety {
+                    Sort::User(sort_id) => {
+                        let dt = self.parent.ir.ty_registry.retrieve(sort_id);
+                        match dt {
+                            DataType::Tuple(tuple) => tuple.clone(),
+                            _ => bail!("type mismatch"),
+                        }
+                    }
+                    _ => bail!("type mismatch"),
+                };
+                if elems.len() != tuple.len() {
+                    bail!("type mismatch");
+                }
+                for (elem_decl, elem_sort) in elems.iter().zip(tuple) {
+                    self.bind(elem_decl, elem_sort, exp)?;
                 }
             }
         }
@@ -265,22 +291,30 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Process an expression
-    pub fn resolve(&mut self, expr: &Expr) -> Result<ExpId> {
-        // resolve type
-        let sort = self.parent.resolve_type(expr.ty())?;
+    pub fn resolve(&mut self, expr: &Expr, exp_ty: Sort) -> Result<ExpId> {
+        // save the namespace
+        let old_namespace = self.namespace.clone();
 
-        // parse the expression
+        // handle let bindings
         let inst = match expr {
             Expr::Unit(inst) => inst,
             Expr::Block { lets, body } => {
                 for LetBinding { decl, bind } in lets {
-                    let bind_exp = self.resolve(bind)?;
-                    self.bind(decl, bind_exp)?;
+                    let bind_ty = self.parent.resolve_type(&decl.ty())?;
+                    let bind_exp = self.resolve(bind, bind_ty.clone())?;
+                    self.bind(decl, bind_ty, bind_exp)?;
                 }
                 body
             }
         };
 
+        // resolve type and check consistency
+        let sort = self.parent.resolve_type(&inst.ty)?;
+        if exp_ty != sort {
+            bail!("type mismatch");
+        }
+
+        // parse the expression
         let expression = match inst.op.as_ref() {
             Op::Var(name) => {
                 let vid = match self.namespace.get(&name.into()) {
@@ -290,17 +324,38 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 Expression::Var(vid)
             }
             Op::Pack { elems } => {
-                let mut converted = vec![];
-                for elem in elems {
-                    converted.push(self.resolve(elem)?);
+                let tuple = match sort {
+                    Sort::User(sort_id) => {
+                        let dt = self.parent.ir.ty_registry.retrieve(sort_id);
+                        match dt {
+                            DataType::Tuple(tuple) => tuple.clone(),
+                            _ => bail!("type mismatch"),
+                        }
+                    }
+                    _ => bail!("type mismatch"),
+                };
+                if elems.len() != tuple.len() {
+                    bail!("type mismatch");
                 }
-                Expression::Pack { elems: converted }
+
+                let mut elem_exps = vec![];
+                for (elem_expr, elem_sort) in elems.iter().zip(tuple) {
+                    let elem_eid = self.resolve(elem_expr, elem_sort.clone())?;
+                    elem_exps.push(elem_eid);
+                }
+                Expression::Pack { elems: elem_exps }
             }
             _ => todo!(),
         };
 
-        // register it
-        Ok(self.registry.register(expression))
+        // register the expression
+        let eid = self.registry.register(expression);
+
+        // restore the namespace
+        self.namespace = old_namespace;
+
+        // done
+        Ok(eid)
     }
 
     /// Materialize the entire function (signature + body, if any)
@@ -319,7 +374,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut builder = ExpBuilder::new(&mut parent, &mut registry, &params)?;
 
                 // build the expression
-                let id = builder.resolve(expr)?;
+                let id = builder.resolve(expr, ret_ty.clone())?;
 
                 // done
                 Some((registry, id))
