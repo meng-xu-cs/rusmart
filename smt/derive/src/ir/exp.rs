@@ -7,12 +7,20 @@ use crate::ir::fun::{Function, UsrFunId};
 use crate::ir::intrinsics::Intrinsic;
 use crate::ir::name::{index, name};
 use crate::ir::sort::{Sort, UsrSortId};
-use crate::parser::expr::Expr;
+use crate::parser::expr::{Expr, LetBinding, Op, VarDecl};
 use crate::parser::name::VarName;
 
 name! {
     /// Name of a variable
     Symbol
+}
+
+impl From<&VarName> for Symbol {
+    fn from(name: &VarName) -> Self {
+        Self {
+            ident: name.to_string(),
+        }
+    }
 }
 
 index! {
@@ -162,7 +170,7 @@ impl ExpRegistry {
     }
 
     /// Add a new parameter to the registry
-    pub fn add_param(&mut self, name: Symbol, sort: Sort) -> VarId {
+    fn add_param(&mut self, name: Symbol, sort: Sort) -> VarId {
         let id = VarId {
             index: self.vars.len(),
         };
@@ -174,6 +182,31 @@ impl ExpRegistry {
                 sort,
             },
         );
+        id
+    }
+
+    /// Add a new let-binding to the registry
+    fn add_bound(&mut self, name: Symbol, sort: Sort, bind: ExpId) -> VarId {
+        let id = VarId {
+            index: self.vars.len(),
+        };
+        self.vars.insert(
+            id,
+            Variable {
+                name,
+                kind: VarKind::Bound { bind },
+                sort,
+            },
+        );
+        id
+    }
+
+    /// Register an expression
+    fn register(&mut self, exp: Expression) -> ExpId {
+        let id = ExpId {
+            index: self.exps.len(),
+        };
+        self.exps.insert(id, exp);
         id
     }
 }
@@ -210,9 +243,64 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         })
     }
 
+    /// Bind a variable declaration to an expression
+    fn bind(&mut self, decl: &VarDecl, exp: ExpId) -> Result<()> {
+        match decl {
+            VarDecl::One(name, ty) => {
+                let sort = self.parent.resolve_type(ty)?;
+                let sym = Symbol::from(name);
+                let vid = self.registry.add_bound(sym.clone(), sort, exp);
+                match self.namespace.insert(sym, vid) {
+                    None => (),
+                    Some(_) => bail!("naming conflict"),
+                }
+            }
+            VarDecl::Pack(elems) => {
+                for elem in elems {
+                    self.bind(elem, exp)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Process an expression
-    pub fn resolve(&mut self, expr: &Expr, exp_ty: &Sort) -> Result<ExpId> {
-        todo!()
+    pub fn resolve(&mut self, expr: &Expr) -> Result<ExpId> {
+        // resolve type
+        let sort = self.parent.resolve_type(expr.ty())?;
+
+        // parse the expression
+        let inst = match expr {
+            Expr::Unit(inst) => inst,
+            Expr::Block { lets, body } => {
+                for LetBinding { decl, bind } in lets {
+                    let bind_exp = self.resolve(bind)?;
+                    self.bind(decl, bind_exp)?;
+                }
+                body
+            }
+        };
+
+        let expression = match inst.op.as_ref() {
+            Op::Var(name) => {
+                let vid = match self.namespace.get(&name.into()) {
+                    None => bail!("no such variable"),
+                    Some(id) => *id,
+                };
+                Expression::Var(vid)
+            }
+            Op::Pack { elems } => {
+                let mut converted = vec![];
+                for elem in elems {
+                    converted.push(self.resolve(elem)?);
+                }
+                Expression::Pack { elems: converted }
+            }
+            _ => todo!(),
+        };
+
+        // register it
+        Ok(self.registry.register(expression))
     }
 
     /// Materialize the entire function (signature + body, if any)
@@ -222,16 +310,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         ret_ty: Sort,
         body: Option<&Expr>,
     ) -> Result<Function> {
-        let params: Vec<_> = params
-            .into_iter()
-            .map(|(n, t)| {
-                let s = Symbol {
-                    ident: n.to_string(),
-                };
-                (s, t)
-            })
-            .collect();
-
+        let params: Vec<_> = params.into_iter().map(|(n, t)| (n.into(), t)).collect();
         let body = match body {
             None => None,
             Some(expr) => {
@@ -240,7 +319,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut builder = ExpBuilder::new(&mut parent, &mut registry, &params)?;
 
                 // build the expression
-                let id = builder.resolve(expr, &ret_ty)?;
+                let id = builder.resolve(expr)?;
 
                 // done
                 Some((registry, id))

@@ -12,7 +12,6 @@ use crate::parser::ty::TypeTag;
 pub struct LetDecl {
     pub vars: BTreeMap<VarName, TypeRef>,
     pub decl: VarDecl,
-    pub ty: TypeRef,
 }
 
 impl LetDecl {
@@ -22,8 +21,8 @@ impl LetDecl {
         unifier: &mut TypeUnifier,
         pat: &Pat,
         ety: Option<&TypeTag>,
-    ) -> Result<(VarDecl, TypeRef)> {
-        let (decl, ty) = match pat {
+    ) -> Result<VarDecl> {
+        let decl = match pat {
             Pat::Ident(ident) => {
                 let name: VarName = pat.try_into()?;
                 let ty = match ety {
@@ -38,7 +37,7 @@ impl LetDecl {
                 if vars.insert(name.clone(), ty.clone()).is_some() {
                     bail_on!(ident, "duplicated name");
                 }
-                (VarDecl::One(name), ty)
+                VarDecl::One(name, ty)
             }
             Pat::Tuple(PatTuple {
                 attrs: _,
@@ -46,13 +45,11 @@ impl LetDecl {
                 elems,
             }) => {
                 let mut decls = vec![];
-                let mut tys = vec![];
                 match ety {
                     None => {
                         for item in elems {
-                            let (item_decl, item_ty) = Self::parse_decl(vars, unifier, item, None)?;
-                            decls.push(item_decl);
-                            tys.push(item_ty);
+                            let sub = Self::parse_decl(vars, unifier, item, None)?;
+                            decls.push(sub);
                         }
                     }
                     Some(TypeTag::Pack(pack)) => {
@@ -60,18 +57,17 @@ impl LetDecl {
                             bail_on!(elems, "pack size mismatch");
                         }
                         for (e, t) in elems.iter().zip(pack) {
-                            let (item_decl, item_ty) = Self::parse_decl(vars, unifier, e, Some(t))?;
-                            decls.push(item_decl);
-                            tys.push(item_ty);
+                            let sub = Self::parse_decl(vars, unifier, e, Some(t))?;
+                            decls.push(sub);
                         }
                     }
                     _ => bail_on!(elems, "expect a pack type"),
                 }
-                (VarDecl::Pack(decls), TypeRef::Pack(tys))
+                VarDecl::Pack(decls)
             }
             _ => bail_on!(pat, "unrecognized pattern"),
         };
-        Ok((decl, ty))
+        Ok(decl)
     }
 
     /// Parse a pattern for declarations and potentially the type
@@ -89,7 +85,7 @@ impl LetDecl {
 
         // parse them recursively
         let mut vars = BTreeMap::new();
-        let (decl, ty) = Self::parse_decl(&mut vars, unifier, pat, ty_opt.as_ref())?;
-        Ok(Self { vars, decl, ty })
+        let decl = Self::parse_decl(&mut vars, unifier, pat, ty_opt.as_ref())?;
+        Ok(Self { vars, decl })
     }
 }

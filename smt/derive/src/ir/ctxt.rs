@@ -88,7 +88,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let mut ty_inst = BTreeMap::new();
 
         for ty_param in generics_impl {
-            let smt_name = SmtSortName::new(ty_param);
+            let smt_name = SmtSortName::from(ty_param);
             ir.undef_sorts.insert(smt_name.clone());
 
             let smt_sort = Sort::Uninterpreted(smt_name);

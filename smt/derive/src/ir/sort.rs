@@ -13,9 +13,8 @@ name! {
     SmtSortName
 }
 
-impl SmtSortName {
-    /// Name for an uninterpreted sort
-    pub fn new(name: &TypeParamName) -> Self {
+impl From<&TypeParamName> for SmtSortName {
+    fn from(name: &TypeParamName) -> Self {
         Self {
             ident: name.to_string(),
         }
@@ -25,6 +24,14 @@ impl SmtSortName {
 name! {
     /// Name of a user-defined sort
     UsrSortName
+}
+
+impl From<&UsrTypeName> for UsrSortName {
+    fn from(name: &UsrTypeName) -> Self {
+        Self {
+            ident: name.to_string(),
+        }
+    }
 }
 
 index! {
@@ -122,6 +129,11 @@ impl TypeRegistry {
             panic!("type definition already registered");
         }
     }
+
+    /// Retrieve the data type definition
+    pub fn retrieve(&self, idx: UsrSortId) -> &DataType {
+        self.defs.get(&idx).expect("no such sort id")
+    }
 }
 
 /// Sort-related functions in the IR builder
@@ -200,9 +212,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         ty_name: Option<&UsrTypeName>,
         ty_args: &[TypeRef],
     ) -> Result<UsrSortId> {
-        let name = ty_name.map(|n| UsrSortName {
-            ident: n.to_string(),
-        });
+        let name = ty_name.map(|n| n.into());
         let ty_args = self.resolve_type_ref_vec(ty_args)?;
 
         // check if we have already processed the data type

@@ -88,8 +88,34 @@ pub struct PhiNode {
 /// Marks a declaration of variable(s)
 #[derive(Clone)]
 pub enum VarDecl {
-    One(VarName),
+    One(VarName, TypeRef),
     Pack(Vec<VarDecl>),
+}
+
+impl VarDecl {
+    /// Derive the type of this decl
+    pub fn ty(&self) -> TypeRef {
+        match self {
+            Self::One(_, t) => t.clone(),
+            Self::Pack(elems) => TypeRef::Pack(elems.iter().map(|d| d.ty()).collect()),
+        }
+    }
+
+    /// Visitor with ty/pre/post traversal function
+    pub fn visit<TY>(&mut self, mut ty: TY) -> anyhow::Result<()>
+    where
+        TY: FnMut(&mut TypeRef) -> anyhow::Result<()> + Copy,
+    {
+        match self {
+            Self::One(_, t) => ty(t)?,
+            Self::Pack(elems) => {
+                for decl in elems {
+                    decl.visit(ty)?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Let bindings
@@ -232,6 +258,7 @@ impl Expr {
             Expr::Unit(inst) => inst,
             Expr::Block { lets, body } => {
                 for binding in lets {
+                    binding.decl.visit(ty)?;
                     binding.bind.visit(ty, pre, post)?;
                 }
                 body
@@ -629,7 +656,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     } = binding;
 
                     // extract names and optionally, the type
-                    let LetDecl { vars, decl, ty } = LetDecl::parse(self.root, unifier, pat)?;
+                    let LetDecl { vars, decl } = LetDecl::parse(self.root, unifier, pat)?;
 
                     // extract the body
                     let body = bail_if_missing!(init, binding, "expect initializer");
@@ -641,7 +668,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     bail_if_exists!(diverge.as_ref().map(|(_, div)| div));
 
                     // parse the body with a new parser
-                    let body_expr = self.fork(ty).convert_expr(unifier, expr)?;
+                    let body_expr = self.fork(decl.ty()).convert_expr(unifier, expr)?;
 
                     // done, continue to next statement
                     for (name, ty) in vars {
