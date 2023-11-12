@@ -15,7 +15,7 @@ pub mod func;
 mod pat;
 mod path;
 
-mod adt;
+pub mod adt;
 mod dsl;
 pub mod expr;
 mod intrinsics;

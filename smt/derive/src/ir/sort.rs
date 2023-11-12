@@ -207,7 +207,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     }
 
     /// Register an instantiated type definition and its dependencies (if not previously registered)
-    fn register_type(
+    pub fn register_type(
         &mut self,
         ty_name: Option<&UsrTypeName>,
         ty_args: &[TypeRef],

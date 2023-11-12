@@ -74,8 +74,12 @@ impl FunRegistry {
 }
 
 impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
-    /// Resolve the function
-    pub fn resolve_func(&mut self, fn_name: &UsrFuncName, ty_args: &[TypeRef]) -> Result<UsrFunId> {
+    /// Register the function
+    pub fn register_func(
+        &mut self,
+        fn_name: &UsrFuncName,
+        ty_args: &[TypeRef],
+    ) -> Result<UsrFunId> {
         // derive the signature
         let name = UsrFunName {
             ident: fn_name.to_string(),

@@ -6,7 +6,8 @@ use crate::ir::ctxt::IRBuilder;
 use crate::ir::fun::{Function, UsrFunId};
 use crate::ir::intrinsics::Intrinsic;
 use crate::ir::name::{index, name};
-use crate::ir::sort::{DataType, Sort, UsrSortId};
+use crate::ir::sort::{DataType, Sort, UsrSortId, Variant};
+use crate::parser::adt::ADTBranch;
 use crate::parser::expr::{Expr, LetBinding, Op, VarDecl};
 use crate::parser::name::VarName;
 
@@ -253,6 +254,106 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         })
     }
 
+    /// Utility: retrieve a tuple data type from a sort id
+    fn expect_type_tuple(&self, sort_id: UsrSortId) -> Result<Vec<Sort>> {
+        let tuple = match self.parent.ir.ty_registry.retrieve(sort_id) {
+            DataType::Tuple(tuple) => tuple.clone(),
+            _ => bail!("type mismatch"),
+        };
+        Ok(tuple)
+    }
+
+    /// Utility: retrieve a record data type from a sort id
+    fn expect_type_record(&self, sort_id: UsrSortId) -> Result<BTreeMap<String, Sort>> {
+        let record = match self.parent.ir.ty_registry.retrieve(sort_id) {
+            DataType::Record(record) => record.clone(),
+            _ => bail!("type mismatch"),
+        };
+        Ok(record)
+    }
+
+    /// Utility: retrieve an enum-unit data type from a sort id and branch name
+    fn expect_type_enum_unit(&self, sort_id: UsrSortId, branch: &String) -> Result<()> {
+        match self.parent.ir.ty_registry.retrieve(sort_id) {
+            DataType::Enum(adt) => match adt.get(branch) {
+                Some(Variant::Unit) => (),
+                _ => bail!("type mismatch"),
+            },
+            _ => bail!("type mismatch"),
+        };
+        Ok(())
+    }
+
+    /// Utility: retrieve an enum-tuple data type from a sort id and branch name
+    fn expect_type_enum_tuple(&self, sort_id: UsrSortId, branch: &String) -> Result<Vec<Sort>> {
+        let tuple = match self.parent.ir.ty_registry.retrieve(sort_id) {
+            DataType::Enum(adt) => match adt.get(branch) {
+                Some(Variant::Tuple(tuple)) => tuple.clone(),
+                _ => bail!("type mismatch"),
+            },
+            _ => bail!("type mismatch"),
+        };
+        Ok(tuple)
+    }
+
+    /// Utility: retrieve an enum-record data type from a sort id and branch name
+    fn expect_type_enum_record(
+        &self,
+        sort_id: UsrSortId,
+        branch: &String,
+    ) -> Result<BTreeMap<String, Sort>> {
+        let record = match self.parent.ir.ty_registry.retrieve(sort_id) {
+            DataType::Enum(adt) => match adt.get(branch) {
+                Some(Variant::Record(record)) => record.clone(),
+                _ => bail!("type mismatch"),
+            },
+            _ => bail!("type mismatch"),
+        };
+        Ok(record)
+    }
+
+    /// Utility: retrieve a pack type from a sort
+    fn expect_type_pack_from_sort(&self, sort: &Sort) -> Result<Vec<Sort>> {
+        let tuple = match sort {
+            Sort::User(sort_id) => self.expect_type_tuple(*sort_id)?,
+            _ => bail!("type mismatch"),
+        };
+        Ok(tuple)
+    }
+
+    /// Utility: resolve a tuple of expressions
+    fn resolve_expr_tuple(&mut self, tuple: Vec<Sort>, slots: &[Expr]) -> Result<Vec<ExpId>> {
+        if tuple.len() != slots.len() {
+            bail!("type mismatch");
+        }
+        let mut converted = vec![];
+        for (expr, sort) in slots.iter().zip(tuple) {
+            let eid = self.resolve(expr, sort)?;
+            converted.push(eid);
+        }
+        Ok(converted)
+    }
+
+    /// Utility: resolve a record of expressions
+    fn resolve_expr_record(
+        &mut self,
+        record: BTreeMap<String, Sort>,
+        fields: &BTreeMap<String, Expr>,
+    ) -> Result<BTreeMap<String, ExpId>> {
+        if record.len() != fields.len() {
+            bail!("type mismatch");
+        }
+        let mut converted = BTreeMap::new();
+        for ((name_ref, expr), (name, sort)) in fields.iter().zip(record) {
+            if name_ref != &name {
+                bail!("type mismatch");
+            }
+            let field_eid = self.resolve(expr, sort)?;
+            converted.insert(name, field_eid);
+        }
+        Ok(converted)
+    }
+
     /// Bind a variable declaration to an expression
     fn bind(&mut self, decl: &VarDecl, ety: Sort, exp: ExpId) -> Result<()> {
         match decl {
@@ -269,16 +370,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
             }
             VarDecl::Pack(elems) => {
-                let tuple = match ety {
-                    Sort::User(sort_id) => {
-                        let dt = self.parent.ir.ty_registry.retrieve(sort_id);
-                        match dt {
-                            DataType::Tuple(tuple) => tuple.clone(),
-                            _ => bail!("type mismatch"),
-                        }
-                    }
-                    _ => bail!("type mismatch"),
-                };
+                let tuple = self.expect_type_pack_from_sort(&ety)?;
                 if elems.len() != tuple.len() {
                     bail!("type mismatch");
                 }
@@ -324,26 +416,67 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 Expression::Var(vid)
             }
             Op::Pack { elems } => {
-                let tuple = match sort {
-                    Sort::User(sort_id) => {
-                        let dt = self.parent.ir.ty_registry.retrieve(sort_id);
-                        match dt {
-                            DataType::Tuple(tuple) => tuple.clone(),
-                            _ => bail!("type mismatch"),
-                        }
-                    }
-                    _ => bail!("type mismatch"),
-                };
-                if elems.len() != tuple.len() {
-                    bail!("type mismatch");
+                let tuple = self.expect_type_pack_from_sort(&sort)?;
+                let resolved = self.resolve_expr_tuple(tuple, elems)?;
+                Expression::Pack { elems: resolved }
+            }
+            Op::Tuple { name, inst, slots } => {
+                let sort_id = self.parent.register_type(Some(name), inst)?;
+                let tuple = self.expect_type_tuple(sort_id)?;
+                let resolved = self.resolve_expr_tuple(tuple, slots)?;
+                Expression::Tuple {
+                    sort: sort_id,
+                    slots: resolved,
                 }
-
-                let mut elem_exps = vec![];
-                for (elem_expr, elem_sort) in elems.iter().zip(tuple) {
-                    let elem_eid = self.resolve(elem_expr, elem_sort.clone())?;
-                    elem_exps.push(elem_eid);
+            }
+            Op::Record { name, inst, fields } => {
+                let sort_id = self.parent.register_type(Some(name), inst)?;
+                let record = self.expect_type_record(sort_id)?;
+                let resolved = self.resolve_expr_record(record, fields)?;
+                Expression::Record {
+                    sort: sort_id,
+                    fields: resolved,
                 }
-                Expression::Pack { elems: elem_exps }
+            }
+            Op::EnumUnit {
+                branch: ADTBranch { ty_name, variant },
+                inst,
+            } => {
+                let sort_id = self.parent.register_type(Some(ty_name), inst)?;
+                self.expect_type_enum_unit(sort_id, variant)?;
+                Expression::Enum {
+                    sort: sort_id,
+                    branch: variant.clone(),
+                    variant: VariantCtor::Unit,
+                }
+            }
+            Op::EnumTuple {
+                branch: ADTBranch { ty_name, variant },
+                inst,
+                slots,
+            } => {
+                let sort_id = self.parent.register_type(Some(ty_name), inst)?;
+                let tuple = self.expect_type_enum_tuple(sort_id, variant)?;
+                let resolved = self.resolve_expr_tuple(tuple, slots)?;
+                Expression::Enum {
+                    sort: sort_id,
+                    branch: variant.clone(),
+                    variant: VariantCtor::Tuple(resolved),
+                }
+            }
+            Op::EnumRecord {
+                branch: ADTBranch { ty_name, variant },
+                inst,
+                fields,
+            } => {
+                let sort_id = self.parent.register_type(Some(ty_name), inst)?;
+                let record = self.expect_type_record(sort_id)?;
+                let resolved = self.resolve_expr_record(record, fields)?;
+                Expression::Enum {
+                    sort: sort_id,
+                    branch: variant.clone(),
+                    variant: VariantCtor::Record(resolved),
+                }
             }
             _ => todo!(),
         };
@@ -351,11 +484,22 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         // register the expression
         let eid = self.registry.register(expression);
 
+        // cross-check type consistency again
+        let derived_type = self.derive_type(eid)?;
+        if derived_type != exp_ty {
+            bail!("type mismatch");
+        }
+
         // restore the namespace
         self.namespace = old_namespace;
 
         // done
         Ok(eid)
+    }
+
+    /// Derive type of an expression
+    fn derive_type(&self, eid: ExpId) -> Result<Sort> {
+        todo!()
     }
 
     /// Materialize the entire function (signature + body, if any)

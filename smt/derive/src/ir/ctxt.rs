@@ -118,8 +118,8 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         }
 
         // process the impl and spec pair
-        builder.resolve_func(&rel.fn_impl, &ty_args)?;
-        builder.resolve_func(&rel.fn_spec, &ty_args)?;
+        builder.register_func(&rel.fn_impl, &ty_args)?;
+        builder.register_func(&rel.fn_spec, &ty_args)?;
 
         // done
         Ok(ir)
