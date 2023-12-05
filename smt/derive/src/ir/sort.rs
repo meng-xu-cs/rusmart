@@ -98,7 +98,7 @@ impl TypeRegistry {
         }
     }
 
-    /// Get the index given a name and instantiation
+    /// Get the index given an optional sort name and instantiation
     fn get_index(&self, name: Option<&UsrSortName>, inst: &[Sort]) -> Option<UsrSortId> {
         let idx = match name {
             None => self.idx_tuple.get(inst)?,

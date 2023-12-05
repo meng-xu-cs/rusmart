@@ -94,7 +94,7 @@ pub enum Expression {
     /// `<var>`
     Var(VarId),
     /// `(v1, v2, ...)`
-    Pack { elems: Vec<ExpId> },
+    Pack { sort: UsrSortId, elems: Vec<ExpId> },
     /// `<tuple-name>(<inst>?)(v1, v2. ...)`
     Tuple { sort: UsrSortId, slots: Vec<ExpId> },
     /// `<record-name>(<inst>?){ f1: v1, f2: v2, ... }`
@@ -312,15 +312,6 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         Ok(record)
     }
 
-    /// Utility: retrieve a pack type from a sort
-    fn expect_type_pack_from_sort(&self, sort: &Sort) -> Result<Vec<Sort>> {
-        let tuple = match sort {
-            Sort::User(sort_id) => self.expect_type_tuple(*sort_id)?,
-            _ => bail!("type mismatch"),
-        };
-        Ok(tuple)
-    }
-
     /// Utility: resolve a tuple of expressions
     fn resolve_expr_tuple(&mut self, tuple: Vec<Sort>, slots: &[Expr]) -> Result<Vec<ExpId>> {
         if tuple.len() != slots.len() {
@@ -370,7 +361,11 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
             }
             VarDecl::Pack(elems) => {
-                let tuple = self.expect_type_pack_from_sort(&ety)?;
+                let sort_id = match ety {
+                    Sort::User(sid) => sid,
+                    _ => bail!("type mismatch"),
+                };
+                let tuple = self.expect_type_tuple(sort_id)?;
                 if elems.len() != tuple.len() {
                     bail!("type mismatch");
                 }
@@ -416,9 +411,16 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 Expression::Var(vid)
             }
             Op::Pack { elems } => {
-                let tuple = self.expect_type_pack_from_sort(&sort)?;
+                let sort_id = match sort {
+                    Sort::User(sid) => sid,
+                    _ => bail!("type mismatch"),
+                };
+                let tuple = self.expect_type_tuple(sort_id)?;
                 let resolved = self.resolve_expr_tuple(tuple, elems)?;
-                Expression::Pack { elems: resolved }
+                Expression::Pack {
+                    sort: sort_id,
+                    elems: resolved,
+                }
             }
             Op::Tuple { name, inst, slots } => {
                 let sort_id = self.parent.register_type(Some(name), inst)?;
@@ -484,7 +486,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         // register the expression
         let eid = self.registry.register(expression);
 
-        // cross-check type consistency again
+        // cross-check type consistency again (this is a paranoid check)
         let derived_type = self.derive_type(eid)?;
         if derived_type != exp_ty {
             bail!("type mismatch");
@@ -499,7 +501,19 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
 
     /// Derive type of an expression
     fn derive_type(&self, eid: ExpId) -> Result<Sort> {
-        todo!()
+        let sort = match self.registry.lookup_exp(eid) {
+            Expression::Var(vid) => self.registry.lookup_var(*vid).sort.clone(),
+            Expression::Pack { sort, elems: _ }
+            | Expression::Tuple { sort, slots: _ }
+            | Expression::Record { sort, fields: _ }
+            | Expression::Enum {
+                sort,
+                branch: _,
+                variant: _,
+            } => Sort::User(*sort),
+            _ => todo!(),
+        };
+        Ok(sort)
     }
 
     /// Materialize the entire function (signature + body, if any)
