@@ -313,13 +313,13 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Utility: resolve a tuple of expressions
-    fn resolve_expr_tuple(&mut self, tuple: Vec<Sort>, slots: &[Expr]) -> Result<Vec<ExpId>> {
+    fn resolve_expr_tuple(&mut self, tuple: &[Sort], slots: &[Expr]) -> Result<Vec<ExpId>> {
         if tuple.len() != slots.len() {
             bail!("type mismatch");
         }
         let mut converted = vec![];
         for (expr, sort) in slots.iter().zip(tuple) {
-            let eid = self.resolve(expr, sort)?;
+            let eid = self.resolve(expr, Some(sort))?;
             converted.push(eid);
         }
         Ok(converted)
@@ -328,7 +328,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     /// Utility: resolve a record of expressions
     fn resolve_expr_record(
         &mut self,
-        record: BTreeMap<String, Sort>,
+        record: &BTreeMap<String, Sort>,
         fields: &BTreeMap<String, Expr>,
     ) -> Result<BTreeMap<String, ExpId>> {
         if record.len() != fields.len() {
@@ -336,11 +336,11 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         }
         let mut converted = BTreeMap::new();
         for ((name_ref, expr), (name, sort)) in fields.iter().zip(record) {
-            if name_ref != &name {
+            if name_ref != name {
                 bail!("type mismatch");
             }
-            let field_eid = self.resolve(expr, sort)?;
-            converted.insert(name, field_eid);
+            let field_eid = self.resolve(expr, Some(sort))?;
+            converted.insert(name.clone(), field_eid);
         }
         Ok(converted)
     }
@@ -378,7 +378,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Process an expression
-    pub fn resolve(&mut self, expr: &Expr, exp_ty: Sort) -> Result<ExpId> {
+    pub fn resolve(&mut self, expr: &Expr, exp_ty: Option<&Sort>) -> Result<ExpId> {
         // save the namespace
         let old_namespace = self.namespace.clone();
 
@@ -388,7 +388,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Expr::Block { lets, body } => {
                 for LetBinding { decl, bind } in lets {
                     let bind_ty = self.parent.resolve_type(&decl.ty())?;
-                    let bind_exp = self.resolve(bind, bind_ty.clone())?;
+                    let bind_exp = self.resolve(bind, Some(&bind_ty))?;
                     self.bind(decl, bind_ty, bind_exp)?;
                 }
                 body
@@ -397,7 +397,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
 
         // resolve type and check consistency
         let sort = self.parent.resolve_type(&inst.ty)?;
-        if exp_ty != sort {
+        if matches!(exp_ty, Some(expected) if expected != &sort) {
             bail!("type mismatch");
         }
 
@@ -411,12 +411,12 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 Expression::Var(vid)
             }
             Op::Pack { elems } => {
-                let sort_id = match sort {
-                    Sort::User(sid) => sid,
+                let sort_id = match &sort {
+                    Sort::User(sid) => *sid,
                     _ => bail!("type mismatch"),
                 };
                 let tuple = self.expect_type_tuple(sort_id)?;
-                let resolved = self.resolve_expr_tuple(tuple, elems)?;
+                let resolved = self.resolve_expr_tuple(&tuple, elems)?;
                 Expression::Pack {
                     sort: sort_id,
                     elems: resolved,
@@ -425,7 +425,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Op::Tuple { name, inst, slots } => {
                 let sort_id = self.parent.register_type(Some(name), inst)?;
                 let tuple = self.expect_type_tuple(sort_id)?;
-                let resolved = self.resolve_expr_tuple(tuple, slots)?;
+                let resolved = self.resolve_expr_tuple(&tuple, slots)?;
                 Expression::Tuple {
                     sort: sort_id,
                     slots: resolved,
@@ -434,7 +434,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Op::Record { name, inst, fields } => {
                 let sort_id = self.parent.register_type(Some(name), inst)?;
                 let record = self.expect_type_record(sort_id)?;
-                let resolved = self.resolve_expr_record(record, fields)?;
+                let resolved = self.resolve_expr_record(&record, fields)?;
                 Expression::Record {
                     sort: sort_id,
                     fields: resolved,
@@ -459,7 +459,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             } => {
                 let sort_id = self.parent.register_type(Some(ty_name), inst)?;
                 let tuple = self.expect_type_enum_tuple(sort_id, variant)?;
-                let resolved = self.resolve_expr_tuple(tuple, slots)?;
+                let resolved = self.resolve_expr_tuple(&tuple, slots)?;
                 Expression::Enum {
                     sort: sort_id,
                     branch: variant.clone(),
@@ -473,7 +473,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             } => {
                 let sort_id = self.parent.register_type(Some(ty_name), inst)?;
                 let record = self.expect_type_record(sort_id)?;
-                let resolved = self.resolve_expr_record(record, fields)?;
+                let resolved = self.resolve_expr_record(&record, fields)?;
                 Expression::Enum {
                     sort: sort_id,
                     branch: variant.clone(),
@@ -488,7 +488,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
 
         // cross-check type consistency again (this is a paranoid check)
         let derived_type = self.derive_type(eid)?;
-        if derived_type != exp_ty {
+        if derived_type != sort {
             bail!("type mismatch");
         }
 
@@ -532,7 +532,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut builder = ExpBuilder::new(&mut parent, &mut registry, &params)?;
 
                 // build the expression
-                let id = builder.resolve(expr, ret_ty.clone())?;
+                let id = builder.resolve(expr, Some(&ret_ty))?;
 
                 // done
                 Some((registry, id))
