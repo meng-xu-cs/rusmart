@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 use crate::ir::ctxt::IRBuilder;
 use crate::ir::fun::{Function, UsrFunId};
@@ -254,6 +254,14 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         })
     }
 
+    /// Utility: resolve user sort id from the sort
+    fn expect_sort_user(&self, sort: &Sort) -> Result<UsrSortId> {
+        match sort {
+            Sort::User(sid) => Ok(*sid),
+            _ => bail!("type mismatch"),
+        }
+    }
+
     /// Utility: retrieve a tuple data type from a sort id
     fn expect_type_tuple(&self, sort_id: UsrSortId) -> Result<Vec<Sort>> {
         let tuple = match self.parent.ir.ty_registry.retrieve(sort_id) {
@@ -361,10 +369,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
             }
             VarDecl::Pack(elems) => {
-                let sort_id = match ety {
-                    Sort::User(sid) => sid,
-                    _ => bail!("type mismatch"),
-                };
+                let sort_id = self.expect_sort_user(&ety)?;
                 let tuple = self.expect_type_tuple(sort_id)?;
                 if elems.len() != tuple.len() {
                     bail!("type mismatch");
@@ -480,6 +485,20 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     variant: VariantCtor::Record(resolved),
                 }
             }
+            Op::AccessSlot { base, slot } => {
+                let resolved = self.resolve(base, None)?;
+                Expression::AccessSlot {
+                    base: resolved,
+                    slot: *slot,
+                }
+            }
+            Op::AccessField { base, field } => {
+                let resolved = self.resolve(base, None)?;
+                Expression::AccessField {
+                    base: resolved,
+                    field: field.clone(),
+                }
+            }
             _ => todo!(),
         };
 
@@ -511,6 +530,22 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 branch: _,
                 variant: _,
             } => Sort::User(*sort),
+            Expression::AccessSlot { base, slot } => {
+                let base_sort = self.derive_type(*base)?;
+                let base_tuple = self.expect_type_tuple(self.expect_sort_user(&base_sort)?)?;
+                base_tuple
+                    .into_iter()
+                    .nth(*slot)
+                    .ok_or_else(|| anyhow!("type mismatch"))?
+            }
+            Expression::AccessField { base, field } => {
+                let base_sort = self.derive_type(*base)?;
+                let base_record = self.expect_type_record(self.expect_sort_user(&base_sort)?)?;
+                base_record
+                    .get(field)
+                    .ok_or_else(|| anyhow!("type mismatch"))?
+                    .clone()
+            }
             _ => todo!(),
         };
         Ok(sort)
