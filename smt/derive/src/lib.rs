@@ -23,10 +23,7 @@ fn pipeline(ctxt: Context) -> Result<()> {
         .finalize();
     for item in parsed.refinements() {
         debug!("processing verification condition {}", item);
-        match IRBuilder::build(&parsed, item) {
-            Ok(_) => (),
-            Err(e) => panic!("[invariant] {}", e),
-        }
+        IRBuilder::build(&parsed, item);
     }
     Ok(())
 }

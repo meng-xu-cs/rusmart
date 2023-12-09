@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
-
-use anyhow::{anyhow, bail, Result};
+use std::fmt::{Display, Formatter};
 
 use crate::ir::ctxt::IRBuilder;
 use crate::ir::name::{index, name};
@@ -64,6 +63,23 @@ pub enum Sort {
     Uninterpreted(SmtSortName),
 }
 
+impl Display for Sort {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Boolean => write!(f, "Boolean"),
+            Self::Integer => write!(f, "Integer"),
+            Self::Rational => write!(f, "Rational"),
+            Self::Text => write!(f, "String"),
+            Self::Seq(sub) => write!(f, "Vec<{}>", sub),
+            Self::Set(sub) => write!(f, "Set<{}>", sub),
+            Self::Map(key, val) => write!(f, "Map<{},{}>", key, val),
+            Self::Error => write!(f, "Error"),
+            Self::User(sid) => write!(f, "${}", sid),
+            Self::Uninterpreted(name) => write!(f, "#{}", name),
+        }
+    }
+}
+
 /// A helper enum to represent a variant definition in an ADT type
 pub enum Variant {
     Unit,
@@ -71,11 +87,49 @@ pub enum Variant {
     Record(BTreeMap<String, Sort>),
 }
 
+impl Display for Variant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unit => write!(f, "()"),
+            Self::Tuple(slots) => {
+                let content: Vec<_> = slots.iter().map(|e| e.to_string()).collect();
+                write!(f, "({})", content.join(","))
+            }
+            Self::Record(fields) => {
+                let content: Vec<_> = fields.iter().map(|(k, v)| format!("{}:{}", k, v)).collect();
+                write!(f, "{{{}}}", content.join(","))
+            }
+        }
+    }
+}
+
 /// Complete definition of a sort
 pub enum DataType {
     Tuple(Vec<Sort>),
     Record(BTreeMap<String, Sort>),
     Enum(BTreeMap<String, Variant>),
+}
+
+impl Display for DataType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tuple(slots) => {
+                let content: Vec<_> = slots.iter().map(|e| e.to_string()).collect();
+                write!(f, "({})", content.join(","))
+            }
+            Self::Record(fields) => {
+                let content: Vec<_> = fields.iter().map(|(k, v)| format!("{}:{}", k, v)).collect();
+                write!(f, "{{{}}}", content.join(","))
+            }
+            Self::Enum(variants) => {
+                let content: Vec<_> = variants
+                    .iter()
+                    .map(|(k, v)| format!("{}{}", k, v))
+                    .collect();
+                write!(f, "[{}]", content.join(","))
+            }
+        }
+    }
 }
 
 /// A registry of data types involved
@@ -139,71 +193,57 @@ impl TypeRegistry {
 /// Sort-related functions in the IR builder
 impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     /// Resolve a type ref to the builder and pull its dependencies into the builder if needed
-    pub fn resolve_type(&mut self, ty: &TypeRef) -> Result<Sort> {
+    pub fn resolve_type(&mut self, ty: &TypeRef) -> Sort {
         let sort = match ty {
-            TypeRef::Var(_) => bail!("incomplete type"),
+            TypeRef::Var(_) => panic!("incomplete type inference"),
             TypeRef::Boolean => Sort::Boolean,
             TypeRef::Integer => Sort::Integer,
             TypeRef::Rational => Sort::Rational,
             TypeRef::Text => Sort::Text,
             TypeRef::Cloak(sub) => {
                 // unwrap the cloak
-                self.resolve_type(sub.as_ref())?
+                self.resolve_type(sub.as_ref())
             }
-            TypeRef::Seq(sub) => Sort::Seq(self.resolve_type(sub.as_ref())?.into()),
-            TypeRef::Set(sub) => Sort::Set(self.resolve_type(sub.as_ref())?.into()),
+            TypeRef::Seq(sub) => Sort::Seq(self.resolve_type(sub.as_ref()).into()),
+            TypeRef::Set(sub) => Sort::Set(self.resolve_type(sub.as_ref()).into()),
             TypeRef::Map(key, val) => Sort::Map(
-                self.resolve_type(key.as_ref())?.into(),
-                self.resolve_type(val.as_ref())?.into(),
+                self.resolve_type(key.as_ref()).into(),
+                self.resolve_type(val.as_ref()).into(),
             ),
             TypeRef::Error => Sort::Error,
-            TypeRef::User(name, inst) => Sort::User(self.register_type(Some(name), inst)?),
-            TypeRef::Pack(elems) => Sort::User(self.register_type(None, elems)?),
+            TypeRef::User(name, inst) => Sort::User(self.register_type(Some(name), inst)),
+            TypeRef::Pack(elems) => Sort::User(self.register_type(None, elems)),
             TypeRef::Parameter(name) => self
                 .ty_inst
                 .get(name)
-                .ok_or_else(|| anyhow!("no such type parameter {}", name))?
+                .unwrap_or_else(|| panic!("no such type parameter {}", name))
                 .clone(),
         };
-        Ok(sort)
+        sort
     }
 
-    /// Utility for resolving a vector of type refs
-    pub fn resolve_type_ref_vec(&mut self, tys: &[TypeRef]) -> Result<Vec<Sort>> {
+    /// Utility: resolve a vec of type refs
+    pub fn resolve_type_ref_vec(&mut self, tys: &[TypeRef]) -> Vec<Sort> {
+        tys.iter().map(|e| self.resolve_type(e)).collect()
+    }
+
+    /// Utility: resolve a map of type refs
+    fn resolve_type_ref_map(&mut self, tys: &BTreeMap<String, TypeRef>) -> BTreeMap<String, Sort> {
         tys.iter()
-            .map(|e| self.resolve_type(e))
-            .collect::<Result<_>>()
+            .map(|(key, val)| (key.clone(), self.resolve_type(val)))
+            .collect()
     }
 
-    /// Utility for resolving a map of type refs
-    fn resolve_type_ref_map(
-        &mut self,
-        tys: &BTreeMap<String, TypeRef>,
-    ) -> Result<BTreeMap<String, Sort>> {
-        let mut fields = BTreeMap::new();
-        for (key, val) in tys {
-            fields.insert(key.clone(), self.resolve_type(val)?);
-        }
-        Ok(fields)
+    /// Utility: resolve a vec of type tags
+    fn resolve_type_tag_vec(&mut self, tys: &[TypeTag]) -> Vec<Sort> {
+        tys.iter().map(|e| self.resolve_type(&e.into())).collect()
     }
 
-    /// Utility for resolving a vector of type tags
-    fn resolve_type_tag_vec(&mut self, tys: &[TypeTag]) -> Result<Vec<Sort>> {
+    /// Utility: resolve a map of type tags
+    fn resolve_type_tag_map(&mut self, tys: &BTreeMap<String, TypeTag>) -> BTreeMap<String, Sort> {
         tys.iter()
-            .map(|e| self.resolve_type(&e.into()))
-            .collect::<Result<_>>()
-    }
-
-    /// Utility for resolving a vector of type refs
-    fn resolve_type_tag_map(
-        &mut self,
-        tys: &BTreeMap<String, TypeTag>,
-    ) -> Result<BTreeMap<String, Sort>> {
-        let mut fields = BTreeMap::new();
-        for (key, val) in tys {
-            fields.insert(key.clone(), self.resolve_type(&val.into())?);
-        }
-        Ok(fields)
+            .map(|(key, val)| (key.clone(), self.resolve_type(&val.into())))
+            .collect()
     }
 
     /// Register an instantiated type definition and its dependencies (if not previously registered)
@@ -211,14 +251,14 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         &mut self,
         ty_name: Option<&UsrTypeName>,
         ty_args: &[TypeRef],
-    ) -> Result<UsrSortId> {
+    ) -> UsrSortId {
         let name = ty_name.map(|n| n.into());
-        let ty_args = self.resolve_type_ref_vec(ty_args)?;
+        let ty_args = self.resolve_type_ref_vec(ty_args);
 
         // check if we have already processed the data type
         match self.ir.ty_registry.get_index(name.as_ref(), &ty_args) {
             None => (),
-            Some(idx) => return Ok(idx),
+            Some(idx) => return idx,
         }
 
         // register the signature and get the index
@@ -234,15 +274,15 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                 let def = self.ctxt.get_type(n);
 
                 // prepare the builder for definition processing
-                let mut builder = self.derive(&def.head, ty_args)?;
+                let mut builder = self.derive(&def.head, ty_args);
 
                 // parse the definition with the newly contextualized holder
                 match &def.body {
                     TypeBody::Tuple(tuple) => {
-                        DataType::Tuple(builder.resolve_type_tag_vec(&tuple.slots)?)
+                        DataType::Tuple(builder.resolve_type_tag_vec(&tuple.slots))
                     }
                     TypeBody::Record(record) => {
-                        DataType::Record(builder.resolve_type_tag_map(&record.fields)?)
+                        DataType::Record(builder.resolve_type_tag_map(&record.fields))
                     }
                     TypeBody::Enum(adt) => {
                         let mut variants = BTreeMap::new();
@@ -250,10 +290,10 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                             let variant = match val {
                                 EnumVariant::Unit => Variant::Unit,
                                 EnumVariant::Tuple(tuple) => {
-                                    Variant::Tuple(builder.resolve_type_tag_vec(&tuple.slots)?)
+                                    Variant::Tuple(builder.resolve_type_tag_vec(&tuple.slots))
                                 }
                                 EnumVariant::Record(record) => {
-                                    Variant::Record(builder.resolve_type_tag_map(&record.fields)?)
+                                    Variant::Record(builder.resolve_type_tag_map(&record.fields))
                                 }
                             };
                             variants.insert(key.clone(), variant);
@@ -268,6 +308,6 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         self.ir.ty_registry.register_def(idx, def);
 
         // return the sort
-        Ok(idx)
+        idx
     }
 }

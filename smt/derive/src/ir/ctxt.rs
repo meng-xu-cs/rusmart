@@ -1,7 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{bail, Result};
-
 use crate::ir::fun::FunRegistry;
 use crate::ir::sort::{SmtSortName, Sort, TypeRegistry};
 use crate::parser::ctxt::{ASTContext, Refinement};
@@ -51,24 +49,24 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     }
 
     /// Contextualize into a new builder
-    pub fn derive(&mut self, generics: &Generics, ty_args: Vec<Sort>) -> Result<IRBuilder> {
+    pub fn derive(&mut self, generics: &Generics, ty_args: Vec<Sort>) -> IRBuilder {
         let ty_params = &generics.params;
         if ty_params.len() != ty_args.len() {
-            bail!("generics mismatch");
+            panic!("generics mismatch");
         }
 
         let mut ty_inst = BTreeMap::new();
         for (param, arg) in ty_params.iter().zip(ty_args.iter()) {
             match ty_inst.insert(param.clone(), arg.clone()) {
                 None => (),
-                Some(_) => bail!("duplicated type parameter {}", param),
+                Some(_) => panic!("duplicated type parameter {}", param),
             }
         }
-        Ok(IRBuilder::new(self.ctxt, ty_inst, self.ir))
+        IRBuilder::new(self.ctxt, ty_inst, self.ir)
     }
 
     /// Initialize it with a new refinement relation
-    pub fn build(ctxt: &'ctx ASTContext, rel: &'ctx Refinement) -> Result<IRContext> {
+    pub fn build(ctxt: &'ctx ASTContext, rel: &'ctx Refinement) -> IRContext {
         let mut ir = IRContext::new();
 
         // get the pair
@@ -79,7 +77,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let generics_impl = &fn_impl.head.generics.params;
         let generics_spec = &fn_spec.head.generics.params;
         if generics_impl != generics_spec {
-            bail!("generics mismatch");
+            panic!("generics mismatch");
         }
 
         // type instantiation for both spec and impl
@@ -94,7 +92,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
             let smt_sort = Sort::Uninterpreted(smt_name);
             match ty_inst.insert(ty_param.clone(), smt_sort) {
                 None => (),
-                Some(_) => bail!("duplicated type parameter {}", ty_param),
+                Some(_) => panic!("duplicated type parameter {}", ty_param),
             }
             ty_args.push(TypeRef::Parameter(ty_param.clone()));
         }
@@ -106,22 +104,27 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let params_impl = &fn_impl.head.params;
         let params_spec = &fn_spec.head.params;
         if params_impl.len() != params_spec.len() {
-            bail!("parameter mismatch");
+            panic!("parameter mismatch");
         }
-        for ((_, param_impl), (_, param_spec)) in params_impl.iter().zip(params_spec) {
-            if param_impl != param_spec {
-                bail!("parameter mismatch");
+        for ((param_name_impl, param_type_impl), (param_name_spec, param_type_spec)) in
+            params_impl.iter().zip(params_spec)
+        {
+            if param_type_impl != param_type_spec {
+                panic!(
+                    "parameter ({} | {}) type mismatch",
+                    param_name_impl, param_name_spec
+                );
             }
         }
         if fn_impl.head.ret_ty != fn_spec.head.ret_ty {
-            bail!("return type mismatch");
+            panic!("return type mismatch");
         }
 
         // process the impl and spec pair
-        builder.register_func(&rel.fn_impl, &ty_args)?;
-        builder.register_func(&rel.fn_spec, &ty_args)?;
+        builder.register_func(&rel.fn_impl, &ty_args);
+        builder.register_func(&rel.fn_spec, &ty_args);
 
         // done
-        Ok(ir)
+        ir
     }
 }

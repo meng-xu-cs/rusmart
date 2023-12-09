@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use anyhow::Result;
-
 use crate::ir::ctxt::IRBuilder;
 use crate::ir::exp::{ExpBuilder, ExpId, ExpRegistry, Symbol};
 use crate::ir::name::{index, name};
@@ -75,21 +73,17 @@ impl FunRegistry {
 
 impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     /// Register the function
-    pub fn register_func(
-        &mut self,
-        fn_name: &UsrFuncName,
-        ty_args: &[TypeRef],
-    ) -> Result<UsrFunId> {
+    pub fn register_func(&mut self, fn_name: &UsrFuncName, ty_args: &[TypeRef]) -> UsrFunId {
         // derive the signature
         let name = UsrFunName {
             ident: fn_name.to_string(),
         };
-        let ty_args = self.resolve_type_ref_vec(ty_args)?;
+        let ty_args = self.resolve_type_ref_vec(ty_args);
 
         // check if we have already processed the impl function
         match self.ir.fn_registry.get_index(&name, &ty_args) {
             None => (),
-            Some(idx) => return Ok(idx),
+            Some(idx) => return idx,
         }
 
         // register the signature and get the index
@@ -107,24 +101,24 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         } = self.ctxt.get_func(fn_name);
 
         // prepare the builder for definition processing
-        let mut builder = self.derive(generics, ty_args)?;
+        let mut builder = self.derive(generics, ty_args);
 
         // resolve type in function signatures
         let mut resolved_params = vec![];
         for (param_name, param_ty) in params {
-            let param_sort = builder.resolve_type(&(param_ty.into()))?;
+            let param_sort = builder.resolve_type(&(param_ty.into()));
             resolved_params.push((param_name, param_sort));
         }
-        let resolved_ret_ty = builder.resolve_type(&(ret_ty.into()))?;
+        let resolved_ret_ty = builder.resolve_type(&(ret_ty.into()));
 
         // materialize the entire function
         let function =
-            ExpBuilder::materialize(builder, resolved_params, resolved_ret_ty, body.as_ref())?;
+            ExpBuilder::materialize(builder, resolved_params, resolved_ret_ty, body.as_ref());
 
         // register the function definition
         self.ir.fn_registry.register_def(idx, function);
 
         // done
-        Ok(idx)
+        idx
     }
 }
