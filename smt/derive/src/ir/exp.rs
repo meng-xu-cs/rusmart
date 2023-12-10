@@ -156,6 +156,7 @@ pub enum Expression {
     IterChoose {
         vars: BTreeMap<VarId, ExpId>,
         body: ExpId,
+        rets: Vec<VarId>,
     },
     /// `<class>::<method>(<a1>, <a2>, ...)`
     Intrinsic(Intrinsic),
@@ -496,6 +497,17 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         vid
     }
 
+    /// Add a quantified variable (i.e., free variable) by binding
+    fn bind_quant_var(&mut self, name: &VarName, sort: Sort) -> VarId {
+        let sym = Symbol::from(name);
+        let vid = self.registry.add_quant_var(sym.clone(), sort);
+        match self.namespace.insert(sym, vid) {
+            None => (),
+            Some(_) => panic!("naming conflict: {}", name),
+        }
+        vid
+    }
+
     /// Add a quantified variable (i.e., free variable)
     fn make_quant_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
         let sort = self.parent.resolve_type(&tag.into());
@@ -506,6 +518,17 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Some(_) => panic!("naming conflict: {}", name),
         }
         (vid, sort)
+    }
+
+    /// Add an axiomatized variable by binding
+    fn bind_axiom_var(&mut self, name: &VarName, sort: Sort) -> VarId {
+        let sym = Symbol::from(name);
+        let vid = self.registry.add_axiom_var(sym.clone(), sort);
+        match self.namespace.insert(sym, vid) {
+            None => (),
+            Some(_) => panic!("naming conflict: {}", name),
+        }
+        vid
     }
 
     /// Add an axiomatized variable
@@ -792,6 +815,66 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     rets: axiom_rets,
                 }
             }
+            Op::IterForall { vars, body } => {
+                let mut free_vars = BTreeMap::new();
+                for (var_name, var_host) in vars {
+                    let eid = self.resolve(var_host, None);
+                    let var_sort = match self.derive_type(eid) {
+                        Sort::Seq(_) => Sort::Integer,
+                        Sort::Set(sub) => *sub,
+                        Sort::Map(key, _) => *key,
+                        s => panic!("iterating over a non-iterable type: {}", s),
+                    };
+                    let vid = self.bind_quant_var(var_name, var_sort);
+                    free_vars.insert(vid, eid);
+                }
+                let converted_body = self.resolve(body, Some(&Sort::Boolean));
+                Expression::IterForall {
+                    vars: free_vars,
+                    body: converted_body,
+                }
+            }
+            Op::IterExists { vars, body } => {
+                let mut free_vars = BTreeMap::new();
+                for (var_name, var_host) in vars {
+                    let eid = self.resolve(var_host, None);
+                    let var_sort = match self.derive_type(eid) {
+                        Sort::Seq(_) => Sort::Integer,
+                        Sort::Set(sub) => *sub,
+                        Sort::Map(key, _) => *key,
+                        s => panic!("iterating over a non-iterable type: {}", s),
+                    };
+                    let vid = self.bind_quant_var(var_name, var_sort);
+                    free_vars.insert(vid, eid);
+                }
+                let converted_body = self.resolve(body, Some(&Sort::Boolean));
+                Expression::IterExists {
+                    vars: free_vars,
+                    body: converted_body,
+                }
+            }
+            Op::IterChoose { vars, body } => {
+                let mut axiom_vars = BTreeMap::new();
+                let mut axiom_rets = vec![];
+                for (var_name, var_host) in vars {
+                    let eid = self.resolve(var_host, None);
+                    let var_sort = match self.derive_type(eid) {
+                        Sort::Seq(_) => Sort::Integer,
+                        Sort::Set(sub) => *sub,
+                        Sort::Map(key, _) => *key,
+                        s => panic!("iterating over a non-iterable type: {}", s),
+                    };
+                    let vid = self.bind_axiom_var(var_name, var_sort);
+                    axiom_vars.insert(vid, eid);
+                    axiom_rets.push(vid);
+                }
+                let converted_body = self.resolve(body, Some(&Sort::Boolean));
+                Expression::IterChoose {
+                    vars: axiom_vars,
+                    body: converted_body,
+                    rets: axiom_rets,
+                }
+            }
             _ => todo!(),
         };
 
@@ -865,7 +948,10 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
                 case_sort
             }
-            Expression::Forall { .. } | Expression::Exists { .. } => Sort::Boolean,
+            Expression::Forall { .. }
+            | Expression::Exists { .. }
+            | Expression::IterForall { .. }
+            | Expression::IterExists { .. } => Sort::Boolean,
             Expression::Choose {
                 vars,
                 body: _,
@@ -877,6 +963,23 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                         None => panic!("invalid axiom variable to return"),
                         Some(sort) => {
                             inst.push(sort.clone());
+                        }
+                    }
+                }
+                let sid = self.parent.lookup_type(None, &inst);
+                Sort::User(sid)
+            }
+            Expression::IterChoose {
+                vars,
+                body: _,
+                rets,
+            } => {
+                let mut inst = vec![];
+                for vid in rets {
+                    match vars.get(vid) {
+                        None => panic!("invalid axiom variable to return"),
+                        Some(eid) => {
+                            inst.push(self.derive_type(*eid));
                         }
                     }
                 }
