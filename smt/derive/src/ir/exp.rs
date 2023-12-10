@@ -1318,8 +1318,63 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 Sort::User(sid)
             }
             Expression::Intrinsic(intrinsic) => match intrinsic {
-                Intrinsic::BoolVal(_) => Sort::Boolean,
-                _ => todo!(),
+                // boolean
+                Intrinsic::BoolVal(_)
+                | Intrinsic::BoolNot { .. }
+                | Intrinsic::BoolAnd { .. }
+                | Intrinsic::BoolOr { .. }
+                | Intrinsic::BoolXor { .. }
+                | Intrinsic::BoolImplies { .. } => Sort::Boolean,
+                // integer
+                Intrinsic::IntVal(_)
+                | Intrinsic::IntAdd { .. }
+                | Intrinsic::IntSub { .. }
+                | Intrinsic::IntMul { .. }
+                | Intrinsic::IntDiv { .. }
+                | Intrinsic::IntRem { .. } => Sort::Integer,
+                Intrinsic::IntLt { .. }
+                | Intrinsic::IntLe { .. }
+                | Intrinsic::IntGe { .. }
+                | Intrinsic::IntGt { .. } => Sort::Boolean,
+                // rational
+                Intrinsic::NumVal(_)
+                | Intrinsic::NumAdd { .. }
+                | Intrinsic::NumSub { .. }
+                | Intrinsic::NumMul { .. }
+                | Intrinsic::NumDiv { .. } => Sort::Rational,
+                Intrinsic::NumLt { .. }
+                | Intrinsic::NumLe { .. }
+                | Intrinsic::NumGe { .. }
+                | Intrinsic::NumGt { .. } => Sort::Boolean,
+                // string
+                Intrinsic::StrVal(_) => Sort::Text,
+                Intrinsic::StrLt { .. } | Intrinsic::StrLe { .. } => Sort::Boolean,
+                // cloak
+                Intrinsic::BoxShield { t, .. } | Intrinsic::BoxReveal { t, .. } => t.clone(),
+                // seq
+                Intrinsic::SeqEmpty { t } | Intrinsic::SeqAppend { t, .. } => {
+                    Sort::Seq(t.clone().into())
+                }
+                Intrinsic::SeqLength { .. } => Sort::Integer,
+                Intrinsic::SeqAt { t, .. } => t.clone(),
+                Intrinsic::SeqIncludes { .. } => Sort::Boolean,
+                // set
+                Intrinsic::SetEmpty { t }
+                | Intrinsic::SetInsert { t, .. }
+                | Intrinsic::SetRemove { t, .. } => Sort::Set(t.clone().into()),
+                Intrinsic::SetLength { .. } => Sort::Integer,
+                Intrinsic::SetContains { .. } => Sort::Boolean,
+                // map
+                Intrinsic::MapEmpty { k, v }
+                | Intrinsic::MapPut { k, v, .. }
+                | Intrinsic::MapDel { k, v, .. } => Sort::Map(k.clone().into(), v.clone().into()),
+                Intrinsic::MapGet { v, .. } => v.clone(),
+                Intrinsic::MapLength { .. } => Sort::Integer,
+                Intrinsic::MapContainsKey { .. } => Sort::Boolean,
+                // error
+                Intrinsic::ErrFresh | Intrinsic::ErrMerge { .. } => Sort::Error,
+                // smt
+                Intrinsic::SmtEq { .. } | Intrinsic::SmtNe { .. } => Sort::Boolean,
             },
             Expression::Procedure { callee, args: _ } => {
                 self.parent.ir.fn_registry.retrieve(*callee).ret_ty.clone()
