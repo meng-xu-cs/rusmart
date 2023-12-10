@@ -18,4 +18,4 @@ mod path;
 pub mod adt;
 mod dsl;
 pub mod expr;
-mod intrinsics;
+pub mod intrinsics;

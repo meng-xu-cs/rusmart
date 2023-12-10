@@ -7,6 +7,7 @@ use crate::ir::name::{index, name};
 use crate::ir::sort::{DataType, Sort, UsrSortId, Variant};
 use crate::parser::adt::ADTBranch;
 use crate::parser::expr::{Expr, LetBinding, Op, Unpack, VarDecl};
+use crate::parser::intrinsics::Intrinsic as Native;
 use crate::parser::name::VarName;
 use crate::parser::ty::TypeTag;
 
@@ -869,6 +870,322 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     rets: axiom_rets,
                 }
             }
+            Op::Intrinsic(native) => {
+                let intrinsic = match native {
+                    // boolean
+                    Native::BoolVal(v) => Intrinsic::BoolVal(*v),
+                    Native::BoolNot { val } => Intrinsic::BoolNot {
+                        val: self.resolve(val, Some(&Sort::Boolean)),
+                    },
+                    Native::BoolAnd { lhs, rhs } => Intrinsic::BoolAnd {
+                        lhs: self.resolve(lhs, Some(&Sort::Boolean)),
+                        rhs: self.resolve(rhs, Some(&Sort::Boolean)),
+                    },
+                    Native::BoolOr { lhs, rhs } => Intrinsic::BoolOr {
+                        lhs: self.resolve(lhs, Some(&Sort::Boolean)),
+                        rhs: self.resolve(rhs, Some(&Sort::Boolean)),
+                    },
+                    Native::BoolXor { lhs, rhs } => Intrinsic::BoolXor {
+                        lhs: self.resolve(lhs, Some(&Sort::Boolean)),
+                        rhs: self.resolve(rhs, Some(&Sort::Boolean)),
+                    },
+                    Native::BoolImplies { lhs, rhs } => Intrinsic::BoolImplies {
+                        lhs: self.resolve(lhs, Some(&Sort::Boolean)),
+                        rhs: self.resolve(rhs, Some(&Sort::Boolean)),
+                    },
+                    // integer
+                    Native::IntVal(v) => Intrinsic::IntVal(*v),
+                    Native::IntLt { lhs, rhs } => Intrinsic::IntLt {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntLe { lhs, rhs } => Intrinsic::IntLe {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntGe { lhs, rhs } => Intrinsic::IntGe {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntGt { lhs, rhs } => Intrinsic::IntGt {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntAdd { lhs, rhs } => Intrinsic::IntAdd {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntSub { lhs, rhs } => Intrinsic::IntSub {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntMul { lhs, rhs } => Intrinsic::IntMul {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntDiv { lhs, rhs } => Intrinsic::IntDiv {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    Native::IntRem { lhs, rhs } => Intrinsic::IntRem {
+                        lhs: self.resolve(lhs, Some(&Sort::Integer)),
+                        rhs: self.resolve(rhs, Some(&Sort::Integer)),
+                    },
+                    // number
+                    Native::NumVal(v) => Intrinsic::NumVal(*v),
+                    Native::NumLt { lhs, rhs } => Intrinsic::NumLt {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    Native::NumLe { lhs, rhs } => Intrinsic::NumLe {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    Native::NumGe { lhs, rhs } => Intrinsic::NumGe {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    Native::NumGt { lhs, rhs } => Intrinsic::NumGt {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    Native::NumAdd { lhs, rhs } => Intrinsic::NumAdd {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    Native::NumSub { lhs, rhs } => Intrinsic::NumSub {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    Native::NumMul { lhs, rhs } => Intrinsic::NumMul {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    Native::NumDiv { lhs, rhs } => Intrinsic::NumDiv {
+                        lhs: self.resolve(lhs, Some(&Sort::Rational)),
+                        rhs: self.resolve(rhs, Some(&Sort::Rational)),
+                    },
+                    // string
+                    Native::StrVal(v) => Intrinsic::StrVal(v.clone()),
+                    Native::StrLt { lhs, rhs } => Intrinsic::StrLt {
+                        lhs: self.resolve(lhs, Some(&Sort::Text)),
+                        rhs: self.resolve(rhs, Some(&Sort::Text)),
+                    },
+                    Native::StrLe { lhs, rhs } => Intrinsic::StrLe {
+                        lhs: self.resolve(lhs, Some(&Sort::Text)),
+                        rhs: self.resolve(rhs, Some(&Sort::Text)),
+                    },
+                    // cloak
+                    Native::BoxShield { t, val } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid = self.resolve(val, Some(&sort));
+                        Intrinsic::BoxShield { t: sort, val: eid }
+                    }
+                    Native::BoxReveal { t, val } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid = self.resolve(val, Some(&sort));
+                        Intrinsic::BoxReveal { t: sort, val: eid }
+                    }
+                    // seq
+                    Native::SeqEmpty { t } => {
+                        let sort = self.parent.resolve_type(t);
+                        Intrinsic::SeqEmpty { t: sort }
+                    }
+                    Native::SeqLength { t, seq } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid = self.resolve(seq, Some(&Sort::Seq(sort.clone().into())));
+                        Intrinsic::SeqLength { t: sort, seq: eid }
+                    }
+                    Native::SeqAppend { t, seq, item } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_seq = self.resolve(seq, Some(&Sort::Seq(sort.clone().into())));
+                        let eid_item = self.resolve(item, Some(&sort));
+                        Intrinsic::SeqAppend {
+                            t: sort,
+                            seq: eid_seq,
+                            item: eid_item,
+                        }
+                    }
+                    Native::SeqAt { t, seq, idx } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_seq = self.resolve(seq, Some(&Sort::Seq(sort.clone().into())));
+                        let eid_idx = self.resolve(idx, Some(&Sort::Integer));
+                        Intrinsic::SeqAt {
+                            t: sort,
+                            seq: eid_seq,
+                            idx: eid_idx,
+                        }
+                    }
+                    Native::SeqIncludes { t, seq, item } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_seq = self.resolve(seq, Some(&Sort::Seq(sort.clone().into())));
+                        let eid_item = self.resolve(item, Some(&sort));
+                        Intrinsic::SeqIncludes {
+                            t: sort,
+                            seq: eid_seq,
+                            item: eid_item,
+                        }
+                    }
+                    // set
+                    Native::SetEmpty { t } => {
+                        let sort = self.parent.resolve_type(t);
+                        Intrinsic::SetEmpty { t: sort }
+                    }
+                    Native::SetLength { t, set } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid = self.resolve(set, Some(&Sort::Set(sort.clone().into())));
+                        Intrinsic::SetLength { t: sort, set: eid }
+                    }
+                    Native::SetInsert { t, set, item } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_set = self.resolve(set, Some(&Sort::Set(sort.clone().into())));
+                        let eid_item = self.resolve(item, Some(&sort));
+                        Intrinsic::SetInsert {
+                            t: sort,
+                            set: eid_set,
+                            item: eid_item,
+                        }
+                    }
+                    Native::SetRemove { t, set, item } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_set = self.resolve(set, Some(&Sort::Set(sort.clone().into())));
+                        let eid_item = self.resolve(item, Some(&sort));
+                        Intrinsic::SetRemove {
+                            t: sort,
+                            set: eid_set,
+                            item: eid_item,
+                        }
+                    }
+                    Native::SetContains { t, set, item } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_set = self.resolve(set, Some(&Sort::Set(sort.clone().into())));
+                        let eid_item = self.resolve(item, Some(&sort));
+                        Intrinsic::SetContains {
+                            t: sort,
+                            set: eid_set,
+                            item: eid_item,
+                        }
+                    }
+                    // map
+                    Native::MapEmpty { k, v } => {
+                        let sort_k = self.parent.resolve_type(k);
+                        let sort_v = self.parent.resolve_type(v);
+                        Intrinsic::MapEmpty {
+                            k: sort_k,
+                            v: sort_v,
+                        }
+                    }
+                    Native::MapLength { k, v, map } => {
+                        let sort_k = self.parent.resolve_type(k);
+                        let sort_v = self.parent.resolve_type(v);
+                        let eid = self.resolve(
+                            map,
+                            Some(&Sort::Map(sort_k.clone().into(), sort_v.clone().into())),
+                        );
+                        Intrinsic::MapLength {
+                            k: sort_k,
+                            v: sort_v,
+                            map: eid,
+                        }
+                    }
+                    Native::MapPut {
+                        k,
+                        v,
+                        map,
+                        key,
+                        val,
+                    } => {
+                        let sort_k = self.parent.resolve_type(k);
+                        let sort_v = self.parent.resolve_type(v);
+                        let eid_map = self.resolve(
+                            map,
+                            Some(&Sort::Map(sort_k.clone().into(), sort_v.clone().into())),
+                        );
+                        let eid_key = self.resolve(key, Some(&sort_k));
+                        let eid_val = self.resolve(val, Some(&sort_v));
+                        Intrinsic::MapPut {
+                            k: sort_k,
+                            v: sort_v,
+                            map: eid_map,
+                            key: eid_key,
+                            val: eid_val,
+                        }
+                    }
+                    Native::MapGet { k, v, map, key } => {
+                        let sort_k = self.parent.resolve_type(k);
+                        let sort_v = self.parent.resolve_type(v);
+                        let eid_map = self.resolve(
+                            map,
+                            Some(&Sort::Map(sort_k.clone().into(), sort_v.clone().into())),
+                        );
+                        let eid_key = self.resolve(key, Some(&sort_k));
+                        Intrinsic::MapGet {
+                            k: sort_k,
+                            v: sort_v,
+                            map: eid_map,
+                            key: eid_key,
+                        }
+                    }
+                    Native::MapDel { k, v, map, key } => {
+                        let sort_k = self.parent.resolve_type(k);
+                        let sort_v = self.parent.resolve_type(v);
+                        let eid_map = self.resolve(
+                            map,
+                            Some(&Sort::Map(sort_k.clone().into(), sort_v.clone().into())),
+                        );
+                        let eid_key = self.resolve(key, Some(&sort_k));
+                        Intrinsic::MapDel {
+                            k: sort_k,
+                            v: sort_v,
+                            map: eid_map,
+                            key: eid_key,
+                        }
+                    }
+                    Native::MapContainsKey { k, v, map, key } => {
+                        let sort_k = self.parent.resolve_type(k);
+                        let sort_v = self.parent.resolve_type(v);
+                        let eid_map = self.resolve(
+                            map,
+                            Some(&Sort::Map(sort_k.clone().into(), sort_v.clone().into())),
+                        );
+                        let eid_key = self.resolve(key, Some(&sort_k));
+                        Intrinsic::MapContainsKey {
+                            k: sort_k,
+                            v: sort_v,
+                            map: eid_map,
+                            key: eid_key,
+                        }
+                    }
+                    // error
+                    Native::ErrFresh => Intrinsic::ErrFresh,
+                    Native::ErrMerge { lhs, rhs } => Intrinsic::ErrMerge {
+                        lhs: self.resolve(lhs, Some(&Sort::Error)),
+                        rhs: self.resolve(rhs, Some(&Sort::Error)),
+                    },
+                    // smt
+                    Native::SmtEq { t, lhs, rhs } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_lhs = self.resolve(lhs, Some(&sort));
+                        let eid_rhs = self.resolve(rhs, Some(&sort));
+                        Intrinsic::SmtEq {
+                            t: sort,
+                            lhs: eid_lhs,
+                            rhs: eid_rhs,
+                        }
+                    }
+                    Native::SmtNe { t, lhs, rhs } => {
+                        let sort = self.parent.resolve_type(t);
+                        let eid_lhs = self.resolve(lhs, Some(&sort));
+                        let eid_rhs = self.resolve(rhs, Some(&sort));
+                        Intrinsic::SmtNe {
+                            t: sort,
+                            lhs: eid_lhs,
+                            rhs: eid_rhs,
+                        }
+                    }
+                };
+                Expression::Intrinsic(intrinsic)
+            }
             Op::Procedure { name, inst, args } => {
                 let callee = self.parent.register_func(name, inst);
                 let params = self.parent.ir.fn_registry.retrieve(callee).params.clone();
@@ -890,7 +1207,6 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     args: converted_args,
                 }
             }
-            _ => todo!(),
         };
 
         // register the expression
@@ -1001,10 +1317,13 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let sid = self.parent.lookup_type(None, &inst);
                 Sort::User(sid)
             }
+            Expression::Intrinsic(intrinsic) => match intrinsic {
+                Intrinsic::BoolVal(_) => Sort::Boolean,
+                _ => todo!(),
+            },
             Expression::Procedure { callee, args: _ } => {
                 self.parent.ir.fn_registry.retrieve(*callee).ret_ty.clone()
             }
-            _ => todo!(),
         };
         sort
     }
