@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::ir::ctxt::IRBuilder;
 use crate::ir::exp::{ExpBuilder, ExpId, ExpRegistry, Symbol};
 use crate::ir::name::{index, name};
-use crate::ir::sort::Sort;
+use crate::ir::sort::{DataType, Sort, UsrSortId};
 use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::infer::TypeRef;
 use crate::parser::name::UsrFuncName;
@@ -68,6 +68,11 @@ impl FunRegistry {
         if existing.is_some() {
             panic!("function definition already registered");
         }
+    }
+
+    /// Retrieve the function definition
+    pub fn retrieve(&self, idx: UsrFunId) -> &Function {
+        self.defs.get(&idx).expect("no such function id")
     }
 }
 

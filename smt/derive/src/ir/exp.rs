@@ -869,6 +869,27 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     rets: axiom_rets,
                 }
             }
+            Op::Procedure { name, inst, args } => {
+                let callee = self.parent.register_func(name, inst);
+                let params = self.parent.ir.fn_registry.retrieve(callee).params.clone();
+                if params.len() != args.len() {
+                    panic!(
+                        "callee argument number mismatch: expect {} | actual {}",
+                        params.len(),
+                        args.len()
+                    );
+                }
+
+                let mut converted_args = vec![];
+                for ((_, arg_sort), arg_expr) in params.into_iter().zip(args) {
+                    let eid = self.resolve(arg_expr, Some(&arg_sort));
+                    converted_args.push(eid);
+                }
+                Expression::Procedure {
+                    callee,
+                    args: converted_args,
+                }
+            }
             _ => todo!(),
         };
 
@@ -979,6 +1000,9 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
                 let sid = self.parent.lookup_type(None, &inst);
                 Sort::User(sid)
+            }
+            Expression::Procedure { callee, args: _ } => {
+                self.parent.ir.fn_registry.retrieve(*callee).ret_ty.clone()
             }
             _ => todo!(),
         };
