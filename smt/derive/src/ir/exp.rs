@@ -683,6 +683,19 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
                 Expression::Match { cases }
             }
+            Op::Phi { nodes, default } => {
+                let converted_default = self.resolve(default, Some(&sort));
+                let mut cases = vec![];
+                for node in nodes {
+                    let cond = self.resolve(&node.cond, Some(&Sort::Boolean));
+                    let body = self.resolve(&node.body, Some(&sort));
+                    cases.push(PhiCase { cond, body });
+                }
+                Expression::Phi {
+                    cases,
+                    default: converted_default,
+                }
+            }
             _ => todo!(),
         };
 
@@ -744,6 +757,17 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     None => panic!("expect at least one match arm"),
                     Some(sort) => sort,
                 }
+            }
+            Expression::Phi { cases, default } => {
+                if cases.is_empty() {
+                    panic!("expect at least one phi case");
+                }
+                let case_sort = self.derive_type(*default);
+                for case in cases {
+                    let sort = self.derive_type(case.body);
+                    Self::check_sort(&case_sort, &sort);
+                }
+                case_sort
             }
             _ => todo!(),
         };
