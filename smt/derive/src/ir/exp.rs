@@ -8,6 +8,7 @@ use crate::ir::sort::{DataType, Sort, UsrSortId, Variant};
 use crate::parser::adt::ADTBranch;
 use crate::parser::expr::{Expr, LetBinding, Op, Unpack, VarDecl};
 use crate::parser::name::VarName;
+use crate::parser::ty::TypeTag;
 
 name! {
     /// Name of a variable
@@ -37,7 +38,7 @@ pub enum VarKind {
     /// function parameter
     Param,
     /// free variable used in a quantifier
-    Quant { decl: ExpId },
+    Quant,
     /// let-binding to an expression
     Bound { bind: ExpId },
     /// match-introduced
@@ -189,6 +190,22 @@ impl ExpRegistry {
             Variable {
                 name,
                 kind: VarKind::Param,
+                sort,
+            },
+        );
+        id
+    }
+
+    /// Add a new quantified variable (free variable) to the registry
+    fn add_quant(&mut self, name: Symbol, sort: Sort) -> VarId {
+        let id = VarId {
+            index: self.vars.len(),
+        };
+        self.vars.insert(
+            id,
+            Variable {
+                name,
+                kind: VarKind::Quant,
                 sort,
             },
         );
@@ -463,6 +480,18 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         vid
     }
 
+    /// Add a quantified variable (i.e., free variable)
+    fn make_free_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
+        let sort = self.parent.resolve_type(&tag.into());
+        let sym = Symbol::from(name);
+        let vid = self.registry.add_quant(sym.clone(), sort.clone());
+        match self.namespace.insert(sym, vid) {
+            None => (),
+            Some(_) => panic!("naming conflict: {}", name),
+        }
+        (vid, sort)
+    }
+
     /// Process an expression
     pub fn resolve(&mut self, expr: &Expr, exp_ty: Option<&Sort>) -> ExpId {
         // save the namespace
@@ -696,6 +725,42 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     default: converted_default,
                 }
             }
+            Op::Forall { vars, body } => {
+                let mut free_vars = BTreeMap::new();
+                for (var_name, var_tag) in vars {
+                    let (vid, var_sort) = self.make_free_var(var_name, var_tag);
+                    free_vars.insert(vid, var_sort);
+                }
+                let converted_body = self.resolve(body, Some(&Sort::Boolean));
+                Expression::Forall {
+                    vars: free_vars,
+                    body: converted_body,
+                }
+            }
+            Op::Exists { vars, body } => {
+                let mut free_vars = BTreeMap::new();
+                for (var_name, var_tag) in vars {
+                    let (vid, var_sort) = self.make_free_var(var_name, var_tag);
+                    free_vars.insert(vid, var_sort);
+                }
+                let converted_body = self.resolve(body, Some(&Sort::Boolean));
+                Expression::Exists {
+                    vars: free_vars,
+                    body: converted_body,
+                }
+            }
+            Op::Choose { vars, body } => {
+                let mut free_vars = BTreeMap::new();
+                for (var_name, var_tag) in vars {
+                    let (vid, var_sort) = self.make_free_var(var_name, var_tag);
+                    free_vars.insert(vid, var_sort);
+                }
+                let converted_body = self.resolve(body, Some(&Sort::Boolean));
+                Expression::Exists {
+                    vars: free_vars,
+                    body: converted_body,
+                }
+            }
             _ => todo!(),
         };
 
@@ -769,6 +834,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
                 case_sort
             }
+            Expression::Forall { .. } | Expression::Exists { .. } => Sort::Boolean,
             _ => todo!(),
         };
         sort
