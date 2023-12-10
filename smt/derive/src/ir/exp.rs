@@ -497,8 +497,8 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         vid
     }
 
-    /// Add a quantified variable (i.e., free variable) by binding
-    fn bind_quant_var(&mut self, name: &VarName, expr: ExpId) -> VarId {
+    /// Add a quantified variable (i.e., free variable) induced by iteration
+    fn iter_quant_var(&mut self, name: &VarName, expr: ExpId) -> VarId {
         let sym = Symbol::from(name);
         let sort = match self.derive_type(expr) {
             Sort::Seq(_) => Sort::Integer,
@@ -515,7 +515,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Add a quantified variable (i.e., free variable)
-    fn make_quant_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
+    fn free_quant_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
         let sort = self.parent.resolve_type(&tag.into());
         let sym = Symbol::from(name);
         let vid = self.registry.add_quant_var(sym.clone(), sort.clone());
@@ -526,8 +526,8 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
         (vid, sort)
     }
 
-    /// Add an axiomatized variable by binding
-    fn bind_axiom_var(&mut self, name: &VarName, expr: ExpId) -> VarId {
+    /// Add an axiomatized variable induced by iteration
+    fn iter_axiom_var(&mut self, name: &VarName, expr: ExpId) -> VarId {
         let sym = Symbol::from(name);
         let sort = match self.derive_type(expr) {
             Sort::Seq(_) => Sort::Integer,
@@ -544,7 +544,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Add an axiomatized variable
-    fn make_axiom_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
+    fn free_axiom_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
         let sort = self.parent.resolve_type(&tag.into());
         let sym = Symbol::from(name);
         let vid = self.registry.add_axiom_var(sym.clone(), sort.clone());
@@ -791,7 +791,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Op::Forall { vars, body } => {
                 let mut free_vars = BTreeMap::new();
                 for (var_name, var_tag) in vars {
-                    let (vid, var_sort) = self.make_quant_var(var_name, var_tag);
+                    let (vid, var_sort) = self.free_quant_var(var_name, var_tag);
                     free_vars.insert(vid, var_sort);
                 }
                 let converted_body = self.resolve(body, Some(&Sort::Boolean));
@@ -803,7 +803,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Op::Exists { vars, body } => {
                 let mut free_vars = BTreeMap::new();
                 for (var_name, var_tag) in vars {
-                    let (vid, var_sort) = self.make_quant_var(var_name, var_tag);
+                    let (vid, var_sort) = self.free_quant_var(var_name, var_tag);
                     free_vars.insert(vid, var_sort);
                 }
                 let converted_body = self.resolve(body, Some(&Sort::Boolean));
@@ -816,7 +816,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut axiom_vars = BTreeMap::new();
                 let mut axiom_rets = vec![];
                 for (var_name, var_tag) in vars {
-                    let (vid, var_sort) = self.make_axiom_var(var_name, var_tag);
+                    let (vid, var_sort) = self.free_axiom_var(var_name, var_tag);
                     axiom_vars.insert(vid, var_sort);
                     axiom_rets.push(vid);
                 }
@@ -831,7 +831,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut free_vars = BTreeMap::new();
                 for (var_name, var_host) in vars {
                     let eid = self.resolve(var_host, None);
-                    let vid = self.bind_quant_var(var_name, eid);
+                    let vid = self.iter_quant_var(var_name, eid);
                     free_vars.insert(vid, eid);
                 }
                 let converted_body = self.resolve(body, Some(&Sort::Boolean));
@@ -844,7 +844,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut free_vars = BTreeMap::new();
                 for (var_name, var_host) in vars {
                     let eid = self.resolve(var_host, None);
-                    let vid = self.bind_quant_var(var_name, eid);
+                    let vid = self.iter_quant_var(var_name, eid);
                     free_vars.insert(vid, eid);
                 }
                 let converted_body = self.resolve(body, Some(&Sort::Boolean));
@@ -858,7 +858,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut axiom_rets = vec![];
                 for (var_name, var_host) in vars {
                     let eid = self.resolve(var_host, None);
-                    let vid = self.bind_axiom_var(var_name, eid);
+                    let vid = self.iter_axiom_var(var_name, eid);
                     axiom_vars.insert(vid, eid);
                     axiom_rets.push(vid);
                 }
