@@ -6,7 +6,7 @@ use crate::ir::intrinsics::Intrinsic;
 use crate::ir::name::{index, name};
 use crate::ir::sort::{DataType, Sort, UsrSortId, Variant};
 use crate::parser::adt::ADTBranch;
-use crate::parser::expr::{Expr, LetBinding, Op, VarDecl};
+use crate::parser::expr::{Expr, LetBinding, Op, Unpack, VarDecl};
 use crate::parser::name::VarName;
 
 name! {
@@ -41,7 +41,12 @@ pub enum VarKind {
     /// let-binding to an expression
     Bound { bind: ExpId },
     /// match-introduced
-    Match { decl: ExpId, bind: ExpId },
+    Match {
+        head: ExpId,
+        sort: UsrSortId,
+        branch: String,
+        selector: EnumSelector,
+    },
     /// axiomatized (through a list of predicates)
     Axiom { decl: ExpId, pred: Vec<ExpId> },
 }
@@ -51,6 +56,12 @@ pub struct Variable {
     pub name: Symbol,
     pub kind: VarKind,
     pub sort: Sort,
+}
+
+/// Denotes how a variable gets match-bounded
+pub enum EnumSelector {
+    Tuple(usize),
+    Record(String),
 }
 
 /// Denotes how to construct an enum variant
@@ -194,6 +205,35 @@ impl ExpRegistry {
             Variable {
                 name,
                 kind: VarKind::Bound { bind },
+                sort,
+            },
+        );
+        id
+    }
+
+    /// Add a new match-binding to the registry
+    fn add_match(
+        &mut self,
+        name: Symbol,
+        sort: Sort,
+        head: ExpId,
+        sid: UsrSortId,
+        branch: String,
+        selector: EnumSelector,
+    ) -> VarId {
+        let id = VarId {
+            index: self.vars.len(),
+        };
+        self.vars.insert(
+            id,
+            Variable {
+                name,
+                kind: VarKind::Match {
+                    head,
+                    sort: sid,
+                    branch,
+                    selector,
+                },
                 sort,
             },
         );
@@ -372,7 +412,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Bind a variable declaration to an expression
-    fn bind(&mut self, decl: &VarDecl, ety: Sort, exp: ExpId) {
+    fn bind_decl(&mut self, decl: &VarDecl, ety: Sort, exp: ExpId) {
         match decl {
             VarDecl::One(name, ty) => {
                 let sort = self.parent.resolve_type(ty);
@@ -396,10 +436,31 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                     );
                 }
                 for (elem_decl, elem_sort) in elems.iter().zip(tuple) {
-                    self.bind(elem_decl, elem_sort, exp);
+                    self.bind_decl(elem_decl, elem_sort, exp);
                 }
             }
         }
+    }
+
+    /// Bind a variable match-destruction
+    fn bind_dtor(
+        &mut self,
+        name: &VarName,
+        sort: Sort,
+        head: ExpId,
+        sid: UsrSortId,
+        branch: String,
+        selector: EnumSelector,
+    ) -> VarId {
+        let sym = Symbol::from(name);
+        let vid = self
+            .registry
+            .add_match(sym.clone(), sort, head, sid, branch, selector);
+        match self.namespace.insert(sym, vid) {
+            None => (),
+            Some(_) => panic!("naming conflict: {}", name),
+        }
+        vid
     }
 
     /// Process an expression
@@ -414,7 +475,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 for LetBinding { decl, bind } in lets {
                     let bind_ty = self.parent.resolve_type(&decl.ty());
                     let bind_exp = self.resolve(bind, Some(&bind_ty));
-                    self.bind(decl, bind_ty, bind_exp);
+                    self.bind_decl(decl, bind_ty, bind_exp);
                 }
                 body
             }
@@ -521,8 +582,106 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 // resolve heads
                 let resolved_heads: Vec<_> = heads.iter().map(|e| self.resolve(e, None)).collect();
 
-                // resolve cases
-                todo!()
+                // resolve match arms
+                let mut cases = vec![];
+                for arm in combo {
+                    // process atoms
+                    if arm.variants.len() != resolved_heads.len() {
+                        panic!(
+                            "match atom number mismatch: expect {} | actual {}",
+                            resolved_heads.len(),
+                            arm.variants.len()
+                        );
+                    }
+
+                    let mut atoms = vec![];
+                    for (variant, &head) in arm.variants.iter().zip(resolved_heads.iter()) {
+                        let head_type = self.derive_type(head);
+                        let head_sid = Self::expect_sort_user(&head_type);
+                        let branch = variant.branch.variant.clone();
+                        let dtor = match &variant.unpack {
+                            Unpack::Unit => {
+                                self.expect_type_enum_unit(head_sid, &branch);
+                                VariantDtor::Unit
+                            }
+                            Unpack::Tuple(bind_slots) => {
+                                let sort_tuple = self.expect_type_enum_tuple(head_sid, &branch);
+                                for &k in bind_slots.keys() {
+                                    if k >= sort_tuple.len() {
+                                        panic!(
+                                            "type {} at branch {} does not have slot {}",
+                                            head_type, branch, k
+                                        );
+                                    }
+                                }
+                                let mut binds = vec![];
+                                for (i, s) in sort_tuple.into_iter().enumerate() {
+                                    let item = match bind_slots.get(&i) {
+                                        None => None,
+                                        Some(var_name) => {
+                                            let vid = self.bind_dtor(
+                                                var_name,
+                                                s,
+                                                head,
+                                                head_sid,
+                                                branch.clone(),
+                                                EnumSelector::Tuple(i),
+                                            );
+                                            Some(vid)
+                                        }
+                                    };
+                                    binds.push(item);
+                                }
+                                VariantDtor::Tuple(binds)
+                            }
+                            Unpack::Record(bind_fields) => {
+                                let sort_record = self.expect_type_enum_record(head_sid, &branch);
+                                for k in bind_fields.keys() {
+                                    if !sort_record.contains_key(k) {
+                                        panic!(
+                                            "type {} at branch {} does not have field {}",
+                                            head_type, branch, k
+                                        );
+                                    }
+                                }
+                                let mut binds = BTreeMap::new();
+                                for (i, s) in sort_record.into_iter() {
+                                    let item = match bind_fields.get(&i) {
+                                        None => None,
+                                        Some(var_name) => {
+                                            let vid = self.bind_dtor(
+                                                var_name,
+                                                s,
+                                                head,
+                                                head_sid,
+                                                branch.clone(),
+                                                EnumSelector::Record(i.clone()),
+                                            );
+                                            Some(vid)
+                                        }
+                                    };
+                                    binds.insert(i, item);
+                                }
+                                VariantDtor::Record(binds)
+                            }
+                        };
+
+                        let atom = MatchAtom {
+                            head,
+                            sort: head_sid,
+                            branch,
+                            variant: dtor,
+                        };
+                        atoms.push(atom);
+                    }
+
+                    // handle body
+                    let body = self.resolve(&arm.body, Some(&sort));
+
+                    // construct and register the case
+                    cases.push(MatchCase { atoms, body });
+                }
+                Expression::Match { cases }
             }
             _ => todo!(),
         };
@@ -569,6 +728,22 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                         panic!("type mismatch: no field {} in record {}", field, base_sort)
                     })
                     .clone()
+            }
+            Expression::Match { cases } => {
+                let mut case_sort = None;
+                for case in cases {
+                    let sort = self.derive_type(case.body);
+                    match &case_sort {
+                        None => {
+                            case_sort = Some(sort);
+                        }
+                        Some(s) => Self::check_sort(s, &sort),
+                    }
+                }
+                match case_sort {
+                    None => panic!("expect at least one match arm"),
+                    Some(sort) => sort,
+                }
             }
             _ => todo!(),
         };
