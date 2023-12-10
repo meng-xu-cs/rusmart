@@ -310,4 +310,22 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         // return the sort
         idx
     }
+
+    /// Lookup the user sort id given an optional sort name and instantiation
+    pub fn lookup_type(&self, name: Option<&UsrSortName>, inst: &[Sort]) -> UsrSortId {
+        match self.ir.ty_registry.get_index(name, inst) {
+            None => {
+                let inst_content = inst
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                match name {
+                    None => panic!("anonymous sort not registered ({})", inst_content),
+                    Some(n) => panic!("user-defined sort not registered {}<{}>", n, inst_content),
+                }
+            }
+            Some(sid) => sid,
+        }
+    }
 }

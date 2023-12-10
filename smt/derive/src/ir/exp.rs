@@ -39,6 +39,8 @@ pub enum VarKind {
     Param,
     /// free variable used in a quantifier
     Quant,
+    /// axiomatized (through a list of predicates)
+    Axiom,
     /// let-binding to an expression
     Bound { bind: ExpId },
     /// match-introduced
@@ -48,8 +50,6 @@ pub enum VarKind {
         branch: String,
         selector: EnumSelector,
     },
-    /// axiomatized (through a list of predicates)
-    Axiom { decl: ExpId, pred: Vec<ExpId> },
 }
 
 /// Information about a variable
@@ -197,7 +197,7 @@ impl ExpRegistry {
     }
 
     /// Add a new quantified variable (free variable) to the registry
-    fn add_quant(&mut self, name: Symbol, sort: Sort) -> VarId {
+    fn add_quant_var(&mut self, name: Symbol, sort: Sort) -> VarId {
         let id = VarId {
             index: self.vars.len(),
         };
@@ -206,6 +206,22 @@ impl ExpRegistry {
             Variable {
                 name,
                 kind: VarKind::Quant,
+                sort,
+            },
+        );
+        id
+    }
+
+    /// Add a new axiomatized variable to the registry
+    fn add_axiom_var(&mut self, name: Symbol, sort: Sort) -> VarId {
+        let id = VarId {
+            index: self.vars.len(),
+        };
+        self.vars.insert(
+            id,
+            Variable {
+                name,
+                kind: VarKind::Axiom,
                 sort,
             },
         );
@@ -481,10 +497,22 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     }
 
     /// Add a quantified variable (i.e., free variable)
-    fn make_free_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
+    fn make_quant_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
         let sort = self.parent.resolve_type(&tag.into());
         let sym = Symbol::from(name);
-        let vid = self.registry.add_quant(sym.clone(), sort.clone());
+        let vid = self.registry.add_quant_var(sym.clone(), sort.clone());
+        match self.namespace.insert(sym, vid) {
+            None => (),
+            Some(_) => panic!("naming conflict: {}", name),
+        }
+        (vid, sort)
+    }
+
+    /// Add an axiomatized variable
+    fn make_axiom_var(&mut self, name: &VarName, tag: &TypeTag) -> (VarId, Sort) {
+        let sort = self.parent.resolve_type(&tag.into());
+        let sym = Symbol::from(name);
+        let vid = self.registry.add_axiom_var(sym.clone(), sort.clone());
         match self.namespace.insert(sym, vid) {
             None => (),
             Some(_) => panic!("naming conflict: {}", name),
@@ -728,7 +756,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Op::Forall { vars, body } => {
                 let mut free_vars = BTreeMap::new();
                 for (var_name, var_tag) in vars {
-                    let (vid, var_sort) = self.make_free_var(var_name, var_tag);
+                    let (vid, var_sort) = self.make_quant_var(var_name, var_tag);
                     free_vars.insert(vid, var_sort);
                 }
                 let converted_body = self.resolve(body, Some(&Sort::Boolean));
@@ -740,7 +768,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             Op::Exists { vars, body } => {
                 let mut free_vars = BTreeMap::new();
                 for (var_name, var_tag) in vars {
-                    let (vid, var_sort) = self.make_free_var(var_name, var_tag);
+                    let (vid, var_sort) = self.make_quant_var(var_name, var_tag);
                     free_vars.insert(vid, var_sort);
                 }
                 let converted_body = self.resolve(body, Some(&Sort::Boolean));
@@ -750,15 +778,18 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 }
             }
             Op::Choose { vars, body } => {
-                let mut free_vars = BTreeMap::new();
+                let mut axiom_vars = BTreeMap::new();
+                let mut axiom_rets = vec![];
                 for (var_name, var_tag) in vars {
-                    let (vid, var_sort) = self.make_free_var(var_name, var_tag);
-                    free_vars.insert(vid, var_sort);
+                    let (vid, var_sort) = self.make_axiom_var(var_name, var_tag);
+                    axiom_vars.insert(vid, var_sort);
+                    axiom_rets.push(vid);
                 }
                 let converted_body = self.resolve(body, Some(&Sort::Boolean));
-                Expression::Exists {
-                    vars: free_vars,
+                Expression::Choose {
+                    vars: axiom_vars,
                     body: converted_body,
+                    rets: axiom_rets,
                 }
             }
             _ => todo!(),
@@ -835,6 +866,23 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 case_sort
             }
             Expression::Forall { .. } | Expression::Exists { .. } => Sort::Boolean,
+            Expression::Choose {
+                vars,
+                body: _,
+                rets,
+            } => {
+                let mut inst = vec![];
+                for vid in rets {
+                    match vars.get(vid) {
+                        None => panic!("invalid axiom variable to return"),
+                        Some(sort) => {
+                            inst.push(sort.clone());
+                        }
+                    }
+                }
+                let sid = self.parent.lookup_type(None, &inst);
+                Sort::User(sid)
+            }
             _ => todo!(),
         };
         sort
