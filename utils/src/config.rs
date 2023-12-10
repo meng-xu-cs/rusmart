@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use lazy_static::lazy_static;
-use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, Config, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 /// Name of project
 pub static PROJECT: &str = "RUSMART";
@@ -101,9 +101,15 @@ pub fn initialize() {
         Mode::Debug => LevelFilter::Debug,
         Mode::Verbose => LevelFilter::Trace,
     };
+    let mut config = ConfigBuilder::new();
+    config
+        .set_location_level(LevelFilter::Off)
+        .set_target_level(LevelFilter::Off)
+        .set_thread_level(LevelFilter::Off)
+        .set_time_level(LevelFilter::Off);
     TermLogger::init(
         level,
-        Config::default(),
+        config.build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )

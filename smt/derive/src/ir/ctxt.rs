@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use log::trace;
+
 use crate::ir::fun::FunRegistry;
 use crate::ir::sort::{SmtSortName, Sort, TypeRegistry};
 use crate::parser::ctxt::{ASTContext, Refinement};
@@ -96,6 +98,14 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
             }
             ty_args.push(TypeRef::Parameter(ty_param.clone()));
         }
+        trace!(
+            "top-level type parameters: <{}>",
+            ty_args
+                .iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
 
         // initialize the builder
         let mut builder = IRBuilder::new(ctxt, ty_inst, &mut ir);
