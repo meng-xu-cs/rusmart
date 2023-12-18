@@ -178,7 +178,7 @@ pub struct LetBinding {
 
 impl Display for LetBinding {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "let {}; {}", self.decl, self.bind)
+        write!(f, "let {} := {}", self.decl, self.bind)
     }
 }
 
@@ -296,7 +296,124 @@ impl Display for Op {
                         .format_with(",", |(k, v), p| { p(&format_args!("{}:{}", k, v)) })
                 )
             }
-            _ => todo!(),
+            Self::EnumUnit { branch, inst } => {
+                write!(f, "{}<{}>", branch, inst.iter().format(","))
+            }
+            Self::EnumTuple {
+                branch,
+                inst,
+                slots,
+            } => {
+                write!(
+                    f,
+                    "{}<{}>({})",
+                    branch,
+                    inst.iter().format(","),
+                    slots.iter().format(",")
+                )
+            }
+            Self::EnumRecord {
+                branch,
+                inst,
+                fields,
+            } => {
+                write!(
+                    f,
+                    "{}<{}>({})",
+                    branch,
+                    inst.iter().format(","),
+                    fields
+                        .iter()
+                        .format_with(",", |(k, v), p| { p(&format_args!("{}:{}", k, v)) })
+                )
+            }
+            Self::AccessSlot { base, slot } => {
+                write!(f, "{}.{}", base, slot)
+            }
+            Self::AccessField { base, field } => {
+                write!(f, "{}.{}", base, field)
+            }
+            Self::Match { heads, combo } => {
+                writeln!(f, "match ({}) {{", heads.iter().format(","))?;
+                for case in combo {
+                    writeln!(f, "  case {}", case)?;
+                }
+                write!(f, "}}")
+            }
+            Self::Phi { nodes, default } => {
+                writeln!(f, "phi {{")?;
+                for node in nodes {
+                    writeln!(f, "  {}", node)?;
+                }
+                writeln!(f, "  default => {}", default)?;
+                write!(f, "}}")
+            }
+            Self::Forall { vars, body } => {
+                write!(
+                    f,
+                    "forall [{}] {}",
+                    vars.iter()
+                        .format_with(",", |(n, t), p| p(&format_args!("{}:{}", n, t))),
+                    body
+                )
+            }
+            Self::Exists { vars, body } => {
+                write!(
+                    f,
+                    "exists [{}] {}",
+                    vars.iter()
+                        .format_with(",", |(n, t), p| p(&format_args!("{}:{}", n, t))),
+                    body
+                )
+            }
+            Self::Choose { vars, body } => {
+                write!(
+                    f,
+                    "choose [{}] {}",
+                    vars.iter()
+                        .format_with(",", |(n, t), p| p(&format_args!("{}:{}", n, t))),
+                    body
+                )
+            }
+            Self::IterForall { vars, body } => {
+                write!(
+                    f,
+                    "forall [{}] {}",
+                    vars.iter()
+                        .format_with(",", |(n, h), p| p(&format_args!("{} in {}", n, h))),
+                    body
+                )
+            }
+            Self::IterExists { vars, body } => {
+                write!(
+                    f,
+                    "exists [{}] {}",
+                    vars.iter()
+                        .format_with(",", |(n, h), p| p(&format_args!("{} in {}", n, h))),
+                    body
+                )
+            }
+            Self::IterChoose { vars, body } => {
+                write!(
+                    f,
+                    "choose [{}] {}",
+                    vars.iter()
+                        .format_with(",", |(n, h), p| p(&format_args!("{} in {}", n, h))),
+                    body
+                )
+            }
+            Self::Intrinsic(intrinsic) => {
+                todo!()
+            }
+            Self::Procedure { name, inst, args } => {
+                write!(
+                    f,
+                    "{}<{}>({})",
+                    name,
+                    inst.iter().format(","),
+                    args.iter().format(",")
+                )
+            }
         }
     }
 }
@@ -604,7 +721,10 @@ impl Display for Expr {
         match self {
             Self::Unit(inst) => inst.fmt(f),
             Self::Block { lets, body } => {
-                write!(f, "{};{}", lets.iter().format(";"), body)
+                for binding in lets {
+                    writeln!(f, "{};", binding)?;
+                }
+                write!(f, "{}", body)
             }
         }
     }
