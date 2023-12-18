@@ -1,10 +1,12 @@
+use std::fmt::{Display, Formatter};
+
 use anyhow::bail;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::{Expr as Exp, ExprLit, Lit, Result};
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
-use crate::parser::expr::Expr;
+use crate::parser::expr::{Expr, Op};
 use crate::parser::infer::TypeRef;
 use crate::parser::name::UsrFuncName;
 use crate::parser::ty::SysTypeName;
@@ -509,5 +511,64 @@ impl Intrinsic {
             bail!("expect 3 arguments");
         }
         Ok((e1, e2, e3))
+    }
+}
+
+impl Display for Intrinsic {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BoolVal(v) => write!(f, "{}", v),
+            Self::BoolNot { val } => write!(f, "!{}", val),
+            Self::BoolAnd { lhs, rhs } => write!(f, "{} & {}", lhs, rhs),
+            Self::BoolOr { lhs, rhs } => write!(f, "{} | {}", lhs, rhs),
+            Self::BoolXor { lhs, rhs } => write!(f, "{} ^ {}", lhs, rhs),
+            Self::BoolImplies { lhs, rhs } => write!(f, "{} => {}", lhs, rhs),
+            Self::IntVal(v) => write!(f, "{}", v),
+            Self::NumVal(v) => write!(f, "{}", v),
+            Self::IntLt { lhs, rhs } | Self::NumLt { lhs, rhs } | Self::StrLt { lhs, rhs } => {
+                write!(f, "{} < {}", lhs, rhs)
+            }
+            Self::IntLe { lhs, rhs } | Self::NumLe { lhs, rhs } | Self::StrLe { lhs, rhs } => {
+                write!(f, "{} <= {}", lhs, rhs)
+            }
+            Self::IntGe { lhs, rhs } | Self::NumGe { lhs, rhs } => write!(f, "{} >= {}", lhs, rhs),
+            Self::IntGt { lhs, rhs } | Self::NumGt { lhs, rhs } => write!(f, "{} > {}", lhs, rhs),
+            Self::IntAdd { lhs, rhs } | Self::NumAdd { lhs, rhs } => write!(f, "{} + {}", lhs, rhs),
+            Self::IntSub { lhs, rhs } | Self::NumSub { lhs, rhs } => write!(f, "{} - {}", lhs, rhs),
+            Self::IntMul { lhs, rhs } | Self::NumMul { lhs, rhs } => write!(f, "{} * {}", lhs, rhs),
+            Self::IntDiv { lhs, rhs } | Self::NumDiv { lhs, rhs } => write!(f, "{} / {}", lhs, rhs),
+            Self::IntRem { lhs, rhs } => write!(f, "{} % {}", lhs, rhs),
+            Self::StrVal(v) => write!(f, "{}", v),
+            Self::BoxShield { t, val } => write!(f, "&<{}>({})", t, val),
+            Self::BoxReveal { t, val } => write!(f, "*<{}>({})", t, val),
+            Self::SeqEmpty { t } => write!(f, "vec<{}>[]", t),
+            Self::SeqLength { t, seq } => write!(f, "{}.len<{}>(vec)", seq, t),
+            Self::SeqAppend { t, seq, item } => write!(f, "{}.append<{}>({})", seq, t, item),
+            Self::SeqAt { t, seq, idx } => write!(f, "{}.at<{}>({})", seq, t, idx),
+            Self::SeqIncludes { t, seq, item } => write!(f, "{}.includes<{}>({})", seq, t, item),
+            Self::SetEmpty { t } => write!(f, "set<{}>[]", t),
+            Self::SetLength { t, set } => write!(f, "{}.len<{}>(set)", set, t),
+            Self::SetInsert { t, set, item } => write!(f, "{}.insert<{}>({})", set, t, item),
+            Self::SetRemove { t, set, item } => write!(f, "{}.remove<{}>({})", set, t, item),
+            Self::SetContains { t, set, item } => write!(f, "{}.contains<{}>({})", set, t, item),
+            Self::MapEmpty { k, v } => write!(f, "map<{},{}>[]", k, v),
+            Self::MapLength { k, v, map } => write!(f, "{}.len<{},{}>(map)", map, k, v),
+            Self::MapPut {
+                k,
+                v,
+                map,
+                key,
+                val,
+            } => write!(f, "{}.put<{},{}>({},{})", map, k, v, key, val),
+            Self::MapGet { k, v, map, key } => write!(f, "{}.get<{},{}>({})", map, k, v, key),
+            Self::MapDel { k, v, map, key } => write!(f, "{}.del<{},{}>({})", map, k, v, key),
+            Self::MapContainsKey { k, v, map, key } => {
+                write!(f, "{}.contains_key<{},{}>({})", map, k, v, key)
+            }
+            Self::ErrFresh => write!(f, "error"),
+            Self::ErrMerge { lhs, rhs } => write!(f, "{} ~ {}", lhs, rhs),
+            Self::SmtEq { t: _, lhs, rhs } => write!(f, "{} == {}", lhs, rhs),
+            Self::SmtNe { t: _, lhs, rhs } => write!(f, "{} != {}", lhs, rhs),
+        }
     }
 }

@@ -402,9 +402,7 @@ impl Display for Op {
                     body
                 )
             }
-            Self::Intrinsic(intrinsic) => {
-                todo!()
-            }
+            Self::Intrinsic(intrinsic) => intrinsic.fmt(f),
             Self::Procedure { name, inst, args } => {
                 write!(
                     f,
