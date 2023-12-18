@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
 
+use itertools::Itertools;
 use syn::{
     Arm, Block, Expr as Exp, ExprBlock, ExprCall, ExprField, ExprIf, ExprMatch, ExprMethodCall,
     ExprParen, ExprStruct, ExprTuple, ExprUnary, FieldValue, Local, LocalInit, Member, Pat,
@@ -64,11 +66,37 @@ pub enum Unpack {
     Record(BTreeMap<String, VarName>),
 }
 
+impl Display for Unpack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unit => write!(f, "()"),
+            Self::Tuple(binds) => {
+                let content = binds
+                    .iter()
+                    .format_with(",", |(k, v), f| f(&format_args!("{}:{}", *k, v)));
+                write!(f, "[{}]", content)
+            }
+            Self::Record(binds) => {
+                let content = binds
+                    .iter()
+                    .format_with(",", |(k, v), f| f(&format_args!("{}:{}", k, v)));
+                write!(f, "{{{}}}", content)
+            }
+        }
+    }
+}
+
 /// Marks how a variable of an ADT type is matched
 #[derive(Clone)]
 pub struct MatchVariant {
     pub branch: ADTBranch,
     pub unpack: Unpack,
+}
+
+impl Display for MatchVariant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.branch, self.unpack)
+    }
 }
 
 /// Marks how all variables in the match head are matched
@@ -78,11 +106,23 @@ pub struct MatchCombo {
     pub body: Expr,
 }
 
+impl Display for MatchCombo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}) => {}", self.variants.iter().format(","), self.body)
+    }
+}
+
 /// Phi node, guarded by condition
 #[derive(Clone)]
 pub struct PhiNode {
     pub cond: Expr,
     pub body: Expr,
+}
+
+impl Display for PhiNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "if {} => {}", self.cond, self.body)
+    }
 }
 
 /// Marks a declaration of variable(s)
@@ -118,11 +158,28 @@ impl VarDecl {
     }
 }
 
+impl Display for VarDecl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::One(name, ty) => write!(f, "{}:{}", name, ty),
+            Self::Pack(decls) => {
+                write!(f, "({})", decls.iter().format(","))
+            }
+        }
+    }
+}
+
 /// Let bindings
 #[derive(Clone)]
 pub struct LetBinding {
     pub decl: VarDecl,
     pub bind: Expr,
+}
+
+impl Display for LetBinding {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "let {}; {}", self.decl, self.bind)
+    }
 }
 
 /// Operations
@@ -212,11 +269,49 @@ pub enum Op {
     },
 }
 
+impl Display for Op {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var(name) => name.fmt(f),
+            Self::Pack { elems } => {
+                write!(f, "({})", elems.iter().format(","))
+            }
+            Self::Tuple { name, inst, slots } => {
+                write!(
+                    f,
+                    "{}<{}>({})",
+                    name,
+                    inst.iter().format(","),
+                    slots.iter().format(",")
+                )
+            }
+            Self::Record { name, inst, fields } => {
+                write!(
+                    f,
+                    "{}<{}>({})",
+                    name,
+                    inst.iter().format(","),
+                    fields
+                        .iter()
+                        .format_with(",", |(k, v), p| { p(&format_args!("{}:{}", k, v)) })
+                )
+            }
+            _ => todo!(),
+        }
+    }
+}
+
 /// Instructions (operations with type)
 #[derive(Clone)]
 pub struct Inst {
     pub op: Box<Op>,
     pub ty: TypeRef,
+}
+
+impl Display for Inst {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.op, self.ty)
+    }
 }
 
 /// Expressions
@@ -501,6 +596,17 @@ impl Expr {
 
         // done
         Ok(())
+    }
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unit(inst) => inst.fmt(f),
+            Self::Block { lets, body } => {
+                write!(f, "{};{}", lets.iter().format(";"), body)
+            }
+        }
     }
 }
 

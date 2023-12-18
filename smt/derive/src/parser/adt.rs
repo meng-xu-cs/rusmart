@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 use syn::{ExprMatch, ExprPath, FieldPat, Member, Pat, PatOr, PatStruct, PatTupleStruct, Result};
@@ -16,6 +17,12 @@ use crate::parser::ty::EnumVariant;
 pub struct ADTBranch {
     pub ty_name: UsrTypeName,
     pub variant: String,
+}
+
+impl Display for ADTBranch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}::{}", self.ty_name, self.variant)
+    }
 }
 
 /// An atom for a specific variable in the match head
