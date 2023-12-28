@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use lazy_static::lazy_static;
-use simplelog::{ColorChoice, Config, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 /// Name of project
 pub static PROJECT: &str = "RUSMART";
