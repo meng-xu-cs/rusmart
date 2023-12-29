@@ -18,28 +18,38 @@ index! {
     UsrFunId
 }
 
-/// Function information
-pub struct Function {
+/// Function signature
+#[derive(Clone)]
+pub struct FunSig {
     /// parameters
     pub params: Vec<(Symbol, Sort)>,
     /// return value
     pub ret_ty: Sort,
-    /// the function body
-    pub body: Option<(ExpRegistry, ExpId)>,
+}
+
+/// Function definition
+pub enum FunDef {
+    /// imperatively defined function
+    Defined(ExpRegistry, ExpId),
+    /// uninterpreted and maybe axiomatized function
+    Uninterpreted,
 }
 
 /// A registry of functions involved
 pub struct FunRegistry {
     /// a map from user-defined functions and instantiations to function id
-    sigs: BTreeMap<UsrFunName, BTreeMap<Vec<Sort>, UsrFunId>>,
-    /// the actual function definitions
-    defs: BTreeMap<UsrFunId, Function>,
+    lookup: BTreeMap<UsrFunName, BTreeMap<Vec<Sort>, UsrFunId>>,
+    /// a map for function signatures
+    sigs: BTreeMap<UsrFunId, FunSig>,
+    /// a map for function definitions
+    defs: BTreeMap<UsrFunId, FunDef>,
 }
 
 impl FunRegistry {
     /// Initialize an empty registry
     pub fn new() -> Self {
         Self {
+            lookup: BTreeMap::new(),
             sigs: BTreeMap::new(),
             defs: BTreeMap::new(),
         }
@@ -47,23 +57,36 @@ impl FunRegistry {
 
     /// Get the index given a name and instantiation
     fn get_index(&self, name: &UsrFunName, inst: &[Sort]) -> Option<UsrFunId> {
-        self.sigs.get(name)?.get(inst).copied()
+        self.lookup.get(name)?.get(inst).copied()
     }
 
-    /// Register a signature to the registry
-    fn register_sig(&mut self, name: UsrFunName, inst: Vec<Sort>) -> UsrFunId {
+    /// Create a place holder in the registry with function instance information, panics if already exists
+    fn create(&mut self, name: UsrFunName, inst: Vec<Sort>) -> UsrFunId {
         let idx = UsrFunId {
-            index: self.sigs.values().map(|v| v.len()).sum::<usize>(),
+            index: self.lookup.values().map(|v| v.len()).sum::<usize>(),
         };
-        let existing = self.sigs.entry(name).or_default().insert(inst, idx);
+        let existing = self.lookup.entry(name).or_default().insert(inst, idx);
         if existing.is_some() {
-            panic!("function signature already registered");
+            panic!("function instance already registered");
         }
         idx
     }
 
+    /// Register a signature to the registry
+    fn register_sig(&mut self, idx: UsrFunId, sig: FunSig) {
+        let existing = self.sigs.insert(idx, sig);
+        if existing.is_some() {
+            panic!("function signature already registered");
+        }
+    }
+
+    /// Retrieve the function signature
+    pub fn retrieve_sig(&self, idx: UsrFunId) -> &FunSig {
+        self.sigs.get(&idx).expect("no such function id")
+    }
+
     /// Register a definition to the registry
-    fn register_def(&mut self, idx: UsrFunId, def: Function) {
+    fn register_def(&mut self, idx: UsrFunId, def: FunDef) {
         let existing = self.defs.insert(idx, def);
         if existing.is_some() {
             panic!("function definition already registered");
@@ -71,7 +94,7 @@ impl FunRegistry {
     }
 
     /// Retrieve the function definition
-    pub fn retrieve(&self, idx: UsrFunId) -> &Function {
+    pub fn retrieve_def(&self, idx: UsrFunId) -> &FunDef {
         self.defs.get(&idx).expect("no such function id")
     }
 }
@@ -91,8 +114,8 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
             Some(idx) => return idx,
         }
 
-        // register the signature and get the index
-        let idx = self.ir.fn_registry.register_sig(name, ty_args.clone());
+        // register the instance and get the index
+        let idx = self.ir.fn_registry.create(name, ty_args.clone());
 
         // unpack the def
         let FuncDef {
@@ -112,16 +135,28 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let mut resolved_params = vec![];
         for (param_name, param_ty) in params {
             let param_sort = builder.resolve_type(&(param_ty.into()));
-            resolved_params.push((param_name, param_sort));
+            resolved_params.push((param_name.into(), param_sort));
         }
         let resolved_ret_ty = builder.resolve_type(&(ret_ty.into()));
 
+        // register signature
+        let sig = FunSig {
+            params: resolved_params,
+            ret_ty: resolved_ret_ty,
+        };
+        builder.ir.fn_registry.register_sig(idx, sig.clone());
+
         // materialize the entire function
-        let function =
-            ExpBuilder::materialize(builder, resolved_params, resolved_ret_ty, body.as_ref());
+        let def = match body.as_ref() {
+            None => FunDef::Uninterpreted,
+            Some(expr) => {
+                let (exp_reg, exp_id) = ExpBuilder::materialize(builder, &sig, expr);
+                FunDef::Defined(exp_reg, exp_id)
+            }
+        };
 
         // register the function definition
-        self.ir.fn_registry.register_def(idx, function);
+        self.ir.fn_registry.register_def(idx, def);
 
         // done
         idx

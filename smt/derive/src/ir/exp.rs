@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::ir::ctxt::IRBuilder;
-use crate::ir::fun::{Function, UsrFunId};
+use crate::ir::fun::{FunSig, UsrFunId};
 use crate::ir::intrinsics::Intrinsic;
 use crate::ir::name::{index, name};
 use crate::ir::sort::{DataType, Sort, UsrSortId, Variant};
@@ -1195,7 +1195,13 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
             }
             Op::Procedure { name, inst, args } => {
                 let callee = self.parent.register_func(name, inst);
-                let params = self.parent.ir.fn_registry.retrieve(callee).params.clone();
+                let params = self
+                    .parent
+                    .ir
+                    .fn_registry
+                    .retrieve_sig(callee)
+                    .params
+                    .clone();
                 if params.len() != args.len() {
                     panic!(
                         "callee argument number mismatch: expect {} | actual {}",
@@ -1383,9 +1389,13 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 // smt
                 Intrinsic::SmtEq { .. } | Intrinsic::SmtNe { .. } => Sort::Boolean,
             },
-            Expression::Procedure { callee, args: _ } => {
-                self.parent.ir.fn_registry.retrieve(*callee).ret_ty.clone()
-            }
+            Expression::Procedure { callee, args: _ } => self
+                .parent
+                .ir
+                .fn_registry
+                .retrieve_sig(*callee)
+                .ret_ty
+                .clone(),
         };
         sort
     }
@@ -1393,29 +1403,17 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
     /// Materialize the entire function (signature + body, if any)
     pub fn materialize(
         mut parent: IRBuilder<'a, 'ctx>,
-        params: Vec<(&VarName, Sort)>,
-        ret_ty: Sort,
-        body: Option<&Expr>,
-    ) -> Function {
-        let params: Vec<_> = params.into_iter().map(|(n, t)| (n.into(), t)).collect();
-        let body = match body {
-            None => None,
-            Some(expr) => {
-                // initialize the registry and builder
-                let mut registry = ExpRegistry::new();
-                let mut builder = ExpBuilder::new(&mut parent, &mut registry, &params);
+        sig: &FunSig,
+        body: &Expr,
+    ) -> (ExpRegistry, ExpId) {
+        // initialize the registry and builder
+        let mut registry = ExpRegistry::new();
+        let mut builder = ExpBuilder::new(&mut parent, &mut registry, &sig.params);
 
-                // build the expression
-                let id = builder.resolve(expr, Some(&ret_ty));
+        // build the expression
+        let id = builder.resolve(body, Some(&sig.ret_ty));
 
-                // done
-                Some((registry, id))
-            }
-        };
-        Function {
-            params,
-            ret_ty,
-            body,
-        }
+        // done
+        (registry, id)
     }
 }

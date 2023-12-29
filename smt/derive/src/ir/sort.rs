@@ -161,8 +161,8 @@ impl TypeRegistry {
         Some(*idx)
     }
 
-    /// Register a signature to the registry
-    fn register_sig(&mut self, name: Option<UsrSortName>, inst: Vec<Sort>) -> UsrSortId {
+    /// Create a signature in the registry, panic if already registered
+    fn create(&mut self, name: Option<UsrSortName>, inst: Vec<Sort>) -> UsrSortId {
         let idx = UsrSortId {
             index: self.idx_tuple.len() + self.idx_named.values().map(|v| v.len()).sum::<usize>(),
         };
@@ -171,7 +171,7 @@ impl TypeRegistry {
             Some(n) => self.idx_named.entry(n).or_default().insert(inst, idx),
         };
         if existing.is_some() {
-            panic!("type signature already registered");
+            panic!("type instance already registered");
         }
         idx
     }
@@ -261,8 +261,8 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
             Some(idx) => return idx,
         }
 
-        // register the signature and get the index
-        let idx = self.ir.ty_registry.register_sig(name, ty_args.clone());
+        // create the instance and get the index
+        let idx = self.ir.ty_registry.create(name, ty_args.clone());
 
         // process the definition
         let def = match ty_name {
