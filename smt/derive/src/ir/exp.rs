@@ -1325,9 +1325,15 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 let mut inst = vec![];
                 for vid in rets {
                     match vars.get(vid) {
-                        None => panic!("invalid axiom variable to return"),
+                        None => panic!("invalid iterator variable to return"),
                         Some(eid) => {
-                            inst.push(self.derive_type(*eid));
+                            let vty = match self.derive_type(*eid) {
+                                Sort::Seq(_) => Sort::Integer,
+                                Sort::Set(e) => *e,
+                                Sort::Map(k, _) => *k,
+                                _ => panic!("not a collection sort"),
+                            };
+                            inst.push(vty);
                         }
                     }
                 }
