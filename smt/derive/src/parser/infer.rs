@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
-use rusmart_utils::display::format_seq;
+use itertools::Itertools;
 
 use crate::parser::name::{TypeParamName, UsrTypeName};
 use crate::parser::ty::TypeTag;
@@ -139,11 +139,12 @@ impl Display for TypeRef {
                 if args.is_empty() {
                     name.fmt(f)
                 } else {
-                    let content = format_seq(",", "<", ">", args);
-                    write!(f, "{}{}", name, content)
+                    write!(f, "{}<{}>", name, args.iter().format(","))
                 }
             }
-            Self::Pack(elems) => format_seq(",", "(", ")", elems).fmt(f),
+            Self::Pack(elems) => {
+                write!(f, "({})", elems.iter().format(","))
+            }
             Self::Parameter(name) => name.fmt(f),
         }
     }

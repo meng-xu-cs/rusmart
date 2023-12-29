@@ -1,13 +1,12 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
+use itertools::Itertools;
 use syn::{
     AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
     Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath,
     TypeTuple as TypePack, Variant,
 };
-
-use rusmart_utils::display::{format_map, format_seq};
 
 use crate::parser::ctxt::{ContextWithGenerics, MarkedType};
 use crate::parser::err::{bail_if_empty, bail_if_exists, bail_if_missing, bail_on};
@@ -386,11 +385,12 @@ impl Display for TypeTag {
                 if args.is_empty() {
                     name.fmt(f)
                 } else {
-                    let content = format_seq(",", "<", ">", args);
-                    write!(f, "{}{}", name, content)
+                    write!(f, "{}<{}>", name, args.iter().format(","))
                 }
             }
-            Self::Pack(elems) => format_seq(",", "(", ")", elems).fmt(f),
+            Self::Pack(elems) => {
+                write!(f, "({})", elems.iter().format(","))
+            }
             Self::Parameter(name) => name.fmt(f),
         }
     }
@@ -432,7 +432,7 @@ impl TypeTuple {
 
 impl Display for TypeTuple {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        format_seq(",", "(", ")", &self.slots).fmt(f)
+        write!(f, "({})", self.slots.iter().format(","))
     }
 }
 
@@ -475,7 +475,13 @@ impl TypeRecord {
 
 impl Display for TypeRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        format_map(",", "{", "}", &self.fields, ":").fmt(f)
+        write!(
+            f,
+            "{{{}}}",
+            self.fields
+                .iter()
+                .format_with(",", |(n, t), p| p(&format_args!("{}:{}", n, t))),
+        )
     }
 }
 
@@ -549,7 +555,13 @@ impl TypeEnum {
 
 impl Display for TypeEnum {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        format_map("\n", "[", "]", &self.variants, "").fmt(f)
+        write!(
+            f,
+            "[{}]",
+            self.variants
+                .iter()
+                .format_with("\n", |(n, t), p| p(&format_args!("{}{}", n, t))),
+        )
     }
 }
 

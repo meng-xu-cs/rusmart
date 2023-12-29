@@ -6,7 +6,7 @@ use syn::token::Comma;
 use syn::{Expr as Exp, ExprLit, Lit, Result};
 
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
-use crate::parser::expr::{Expr, Op};
+use crate::parser::expr::Expr;
 use crate::parser::infer::TypeRef;
 use crate::parser::name::UsrFuncName;
 use crate::parser::ty::SysTypeName;

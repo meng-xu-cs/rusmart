@@ -1,13 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
+use itertools::Itertools;
 use quote::quote_spanned;
 use syn::{
     GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, PathArguments, Result,
     TraitBound, TraitBoundModifier, TypeParam, TypeParamBound,
 };
-
-use rusmart_utils::display::format_seq;
 
 use crate::parser::ctxt::MarkedType;
 use crate::parser::err::{
@@ -183,7 +182,7 @@ impl Display for Generics {
         if self.params.is_empty() {
             f.write_str("")
         } else {
-            format_seq(",", "<", ">", &self.params).fmt(f)
+            write!(f, "<{}>", self.params.iter().format(","))
         }
     }
 }
