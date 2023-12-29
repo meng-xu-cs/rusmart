@@ -1310,8 +1310,12 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                         }
                     }
                 }
-                let sid = self.parent.lookup_type(None, &inst);
-                Sort::User(sid)
+                // unwrap the single-element tuple for choose
+                if inst.len() == 1 {
+                    inst.into_iter().next().unwrap()
+                } else {
+                    Sort::User(self.parent.lookup_type(None, &inst))
+                }
             }
             Expression::IterChoose {
                 vars,
@@ -1327,8 +1331,12 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                         }
                     }
                 }
-                let sid = self.parent.lookup_type(None, &inst);
-                Sort::User(sid)
+                // unwrap the single-element tuple for choose
+                if inst.len() == 1 {
+                    inst.into_iter().next().unwrap()
+                } else {
+                    Sort::User(self.parent.lookup_type(None, &inst))
+                }
             }
             Expression::Intrinsic(intrinsic) => match intrinsic {
                 // boolean
