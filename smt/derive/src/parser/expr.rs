@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
@@ -1313,21 +1313,28 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                 let mut heads_options = vec![];
                 for (converted, original) in heads {
                     // retrieve all variants of the ADT
-                    let (adt_name, adt_variants): (_, BTreeSet<_>) =
-                        match unifier.refresh_type(converted.ty()) {
-                            TypeRef::User(name, _) => {
-                                let adt = match self.root.get_type_def(&name) {
-                                    None => bail_on!(original, "no such type"),
-                                    Some(def) => match &def.body {
-                                        TypeBody::Enum(adt) => adt,
-                                        _ => bail_on!(original, "not an enum type"),
-                                    },
+                    let (adt_name, adt_variants) = match unifier.refresh_type(converted.ty()) {
+                        TypeRef::User(name, _) => {
+                            let adt = match self.root.get_type_def(&name) {
+                                None => bail_on!(original, "no such type"),
+                                Some(def) => match &def.body {
+                                    TypeBody::Enum(adt) => adt,
+                                    _ => bail_on!(original, "not an enum type"),
+                                },
+                            };
+                            let mut variants = BTreeMap::new();
+                            for (variant_key, variant_def) in &adt.variants {
+                                let variant_default_unpack = match variant_def {
+                                    EnumVariant::Unit => Unpack::Unit,
+                                    EnumVariant::Tuple(_) => Unpack::Tuple(BTreeMap::new()),
+                                    EnumVariant::Record(_) => Unpack::Record(BTreeMap::new()),
                                 };
-                                let variants = adt.variants.keys().cloned().collect();
-                                (name, variants)
+                                variants.insert(variant_key.clone(), variant_default_unpack);
                             }
-                            _ => bail_on!(original, "not a user-defined type"),
-                        };
+                            (name, variants)
+                        }
+                        _ => bail_on!(original, "not a user-defined type"),
+                    };
                     heads_exprs.push(converted);
                     heads_options.push((adt_name, adt_variants));
                 }

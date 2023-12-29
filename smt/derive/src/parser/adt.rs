@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
@@ -299,7 +299,7 @@ impl MatchOrganizer {
     pub fn into_organized(
         self,
         expr: &ExprMatch,
-        heads: &[(UsrTypeName, BTreeSet<String>)],
+        heads: &[(UsrTypeName, BTreeMap<String, Unpack>)],
     ) -> Result<Vec<MatchCombo>> {
         // utility enum to indicate whether a match combo is concrete or abstract
         enum MatchComboStatus {
@@ -325,7 +325,7 @@ impl MatchOrganizer {
                             if adt_name != &branch.ty_name {
                                 bail_on!(expr, "atoms and heads ADT name mismatch");
                             }
-                            if !adt_variants.contains(&branch.variant) {
+                            if !adt_variants.contains_key(&branch.variant) {
                                 bail_on!(expr, "atoms and heads ADT variant mismatch");
                             }
                         }
@@ -348,9 +348,12 @@ impl MatchOrganizer {
             let combo_as_branch: Vec<_> = combo
                 .into_iter()
                 .zip(heads.iter())
-                .map(|(variant_name, (type_name, _))| ADTBranch {
-                    ty_name: type_name.clone(),
-                    variant: variant_name.clone(),
+                .map(|((variant_name, variant_default), (type_name, _))| {
+                    let branch = ADTBranch {
+                        ty_name: type_name.clone(),
+                        variant: variant_name.clone(),
+                    };
+                    (branch, variant_default)
                 })
                 .collect();
 
@@ -360,25 +363,27 @@ impl MatchOrganizer {
                 let mut variants = vec![];
                 let mut is_matched = true;
                 let mut is_abstract = false;
-                for (combo_branch, arm_atom) in combo_as_branch.iter().zip(arm.atoms.iter()) {
-                    match arm_atom {
+                for ((combo_branch, default_unpack), arm_atom) in
+                    combo_as_branch.iter().zip(arm.atoms.iter())
+                {
+                    let combo_unpack = match arm_atom {
                         MatchAtom::Default => {
                             is_abstract = true;
+                            *default_unpack
                         }
                         MatchAtom::Binding(binding) => match binding.get(combo_branch) {
                             None => {
                                 is_matched = false;
                                 break;
                             }
-                            Some(unpack) => {
-                                let variant = MatchVariant {
-                                    branch: combo_branch.clone(),
-                                    unpack: unpack.clone(),
-                                };
-                                variants.push(variant);
-                            }
+                            Some(unpack) => unpack,
                         },
-                    }
+                    };
+                    let variant = MatchVariant {
+                        branch: combo_branch.clone(),
+                        unpack: combo_unpack.clone(),
+                    };
+                    variants.push(variant);
                 }
 
                 // check if everything matches
