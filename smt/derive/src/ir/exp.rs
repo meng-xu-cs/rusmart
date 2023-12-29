@@ -678,7 +678,7 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                 // resolve match arms
                 let mut cases = vec![];
                 for arm in combo {
-                    // process atoms
+                    // sanity check
                     if arm.variants.len() != resolved_heads.len() {
                         panic!(
                             "match atom number mismatch: expect {} | actual {}",
@@ -687,6 +687,10 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
                         );
                     }
 
+                    // snapshot arm-specific namespace
+                    let arm_namespace = self.namespace.clone();
+
+                    // process atoms
                     let mut atoms = vec![];
                     for (variant, &head) in arm.variants.iter().zip(resolved_heads.iter()) {
                         let head_type = self.derive_type(head);
@@ -773,6 +777,9 @@ impl<'b, 'ir: 'b, 'a: 'ir, 'ctx: 'a> ExpBuilder<'b, 'ir, 'a, 'ctx> {
 
                     // construct and register the case
                     cases.push(MatchCase { atoms, body });
+
+                    // restore the namespace after body is parsed
+                    self.namespace = arm_namespace;
                 }
                 Expression::Match { cases }
             }
