@@ -151,6 +151,11 @@ name! {
 }
 
 name! {
+    /// Identifier for an axiom
+    AxiomName
+}
+
+name! {
     /// Identifier for a variable
     VarName
 }

@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
 use syn::{
-    BareFnArg, Expr as Exp, ExprClosure, ExprMacro, FnArg, Ident, ItemConst, Macro, MacroDelimiter,
-    PatType, Result, ReturnType, Signature, Stmt, Type, TypeBareFn, Visibility,
+    Expr as Exp, ExprMacro, FnArg, Ident, Macro, MacroDelimiter, PatType, Result, ReturnType,
+    Signature, Stmt,
 };
 
 use crate::parser::ctxt::ContextWithType;
@@ -193,128 +193,6 @@ impl FuncSig {
             params: param_decls,
             ret_ty,
         })
-    }
-
-    /// Convert from a constant declaration
-    pub fn unpack_axiom(driver: &ContextWithType, item: &ItemConst) -> Result<(Self, Vec<Stmt>)> {
-        let ItemConst {
-            attrs: _,
-            vis,
-            const_token: _,
-            ident: _,
-            generics,
-            colon_token: _,
-            ty,
-            eq_token: _,
-            expr,
-            semi_token: _,
-        } = item;
-
-        // expect no visibility modifier
-        if !matches!(vis, Visibility::Inherited) {
-            bail_on!(vis, "unexpected");
-        }
-
-        // generics
-        let generics = Generics::from_generics(generics)?;
-        let ctxt = FuncSigParseCtxt {
-            ctxt: driver,
-            generics: &generics,
-        };
-
-        // ensure function type
-        let ty_fn = match ty.as_ref() {
-            Type::BareFn(ty_fn) => ty_fn,
-            _ => bail_on!(ty, "expect function type"),
-        };
-
-        let TypeBareFn {
-            lifetimes,
-            unsafety,
-            abi,
-            fn_token: _,
-            paren_token: _,
-            inputs,
-            variadic,
-            output,
-        } = ty_fn;
-
-        // should not appear
-        bail_if_exists!(lifetimes);
-        bail_if_exists!(unsafety);
-        bail_if_exists!(abi);
-        bail_if_exists!(variadic);
-
-        // parameter types
-        let mut param_tys = vec![];
-        for param in inputs {
-            let BareFnArg { attrs: _, name, ty } = param;
-            bail_if_exists!(name.as_ref().map(|(n, _)| n));
-            param_tys.push(TypeTag::from_type(&ctxt, ty)?);
-        }
-
-        // return type
-        let ret_ty = match output {
-            ReturnType::Default => bail_on!(ty_fn, "expect return type"),
-            ReturnType::Type(_, rty) => TypeTag::from_type(&ctxt, rty)?,
-        };
-        if !matches!(ret_ty, TypeTag::Boolean) {
-            bail_on!(output, "expect Boolean");
-        }
-
-        // unpack the closure
-        let closure = match expr.as_ref() {
-            Exp::Closure(closure) => closure,
-            _ => bail_on!(expr, "expect a closure"),
-        };
-        let ExprClosure {
-            attrs: _,
-            lifetimes,
-            constness,
-            movability,
-            asyncness,
-            capture,
-            or1_token: _,
-            inputs,
-            or2_token: _,
-            output,
-            body,
-        } = closure;
-
-        // sanity checks
-        bail_if_exists!(lifetimes);
-        bail_if_exists!(constness);
-        bail_if_exists!(movability);
-        bail_if_exists!(asyncness);
-        bail_if_exists!(capture);
-        if !matches!(output, ReturnType::Default) {
-            bail_on!(output, "unexpected");
-        }
-
-        // parameter names
-        let mut param_names = vec![];
-        for pat in inputs {
-            let name: VarName = pat.try_into()?;
-            if param_names.contains(&name) {
-                bail_on!(pat, "duplicated parameter name");
-            }
-            param_names.push(name);
-        }
-
-        if param_tys.len() != param_names.len() {
-            bail_on!(inputs, "parameter type and name number mismatch");
-        }
-
-        // create a fake body for the closure
-        let stmts = vec![Stmt::Expr(body.as_ref().clone(), None)];
-
-        // done
-        let sig = Self {
-            generics,
-            params: param_names.into_iter().zip(param_tys).collect(),
-            ret_ty,
-        };
-        Ok((sig, stmts))
     }
 
     /// Collect variables (in map) declared in the parameter list

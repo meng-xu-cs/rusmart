@@ -194,18 +194,24 @@ pub fn spec_lt(_lhs: Value, _rhs: Value) -> Boolean {
 
 // - rule 1: irreflexive
 #[smt_axiom]
-const _: fn(Value) -> Boolean = |v| spec_lt(v, v).not();
+pub fn axiom_lt_irreflexive(v: Value) -> Boolean {
+    spec_lt(v, v).not()
+}
 
 // - rule 2: asymmetric
 #[smt_axiom]
-const _: fn(Value, Value) -> Boolean = |v1, v2| spec_lt(v1, v2).implies(spec_lt(v2, v1).not());
+pub fn axiom_lt_asymmetric(v1: Value, v2: Value) -> Boolean {
+    spec_lt(v1, v2).implies(spec_lt(v2, v1).not())
+}
 
 // - rule 3: transitive
 #[smt_axiom]
-const _: fn(Value, Value, Value) -> Boolean =
-    |v1, v2, v3| (spec_lt(v1, v2).and(spec_lt(v2, v3))).implies(spec_lt(v1, v3));
+pub fn axiom_lt_transitive(v1: Value, v2: Value, v3: Value) -> Boolean {
+    (spec_lt(v1, v2).and(spec_lt(v2, v3))).implies(spec_lt(v1, v3))
+}
 
 // - rule 4: connected
 #[smt_axiom]
-const _: fn(Value, Value) -> Boolean =
-    |v1, v2| v1.ne(v2).implies(spec_lt(v1, v2).or(spec_lt(v2, v1)));
+pub fn axiom_lt_connected(v1: Value, v2: Value) -> Boolean {
+    v1.ne(v2).implies(spec_lt(v1, v2).or(spec_lt(v2, v1)))
+}

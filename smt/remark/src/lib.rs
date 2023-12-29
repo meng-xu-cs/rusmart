@@ -171,8 +171,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
     let dict = parse_dict(&attr)?;
 
     // ensure that the underlying item is a function
-    let input = item.clone();
-    let target = syn::parse::<ItemFn>(input)?;
+    let target = syn::parse::<ItemFn>(item.clone())?;
 
     // check whether we need to derive any method
     let method = match dict.get("method") {
@@ -453,24 +452,23 @@ pub fn smt_spec(attr: Syntax, item: Syntax) -> Syntax {
     fail_if_error!(derive_for_func(attr, item))
 }
 
-/// Annotation over a Rust const
-#[proc_macro_attribute]
-pub fn smt_axiom(attr: Syntax, item: Syntax) -> Syntax {
+/// Derive for axiom annotations
+fn derive_for_axiom(attr: Syntax, item: Syntax) -> Result<Syntax> {
     // check attributes
     let attr = TokenStream::from(attr);
     if !attr.is_empty() {
-        fail_on!(attr, "unexpected");
+        bail_on!(attr, "unexpected");
     }
 
-    // produce the output
-    let output = item.clone();
+    // ensure that the underlying item is a function
+    syn::parse::<ItemFn>(item.clone())?;
 
-    // ensure that the underlying item is a type
-    let target = parse_macro_input!(item as Item);
-    if !matches!(target, Item::Const(_)) {
-        fail_on!(target, "expect const");
-    }
+    // return the original stream
+    Ok(item)
+}
 
-    // do nothing with the const definition
-    output
+/// Annotation over a Rust const
+#[proc_macro_attribute]
+pub fn smt_axiom(attr: Syntax, item: Syntax) -> Syntax {
+    fail_if_error!(derive_for_axiom(attr, item))
 }

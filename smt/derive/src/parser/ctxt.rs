@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
-use syn::{File, Ident, Item, ItemConst, ItemEnum, ItemFn, ItemMod, ItemStruct, Result, Stmt};
+use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemMod, ItemStruct, Result, Stmt};
 use walkdir::WalkDir;
 
 use crate::parser::apply::{ApplyDatabase, Kind};
@@ -13,7 +13,7 @@ use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
 use crate::parser::func::{Axiom, FuncDef, FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::generics::Generics;
-use crate::parser::name::{UsrFuncName, UsrTypeName};
+use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
 
 #[cfg(test)]
@@ -63,13 +63,13 @@ impl MarkedSpec {
 
 /// SMT-marked const as axiom
 pub struct MarkedAxiom {
-    item: ItemConst,
+    item: ItemFn,
 }
 
 impl MarkedAxiom {
     /// Retrieve the name of this item
     pub fn name(&self) -> &Ident {
-        &self.item.ident
+        &self.item.sig.ident
     }
 }
 
@@ -91,7 +91,7 @@ pub struct Context {
     types: BTreeMap<UsrTypeName, MarkedType>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
-    axioms: Vec<MarkedAxiom>,
+    axioms: BTreeMap<AxiomName, MarkedAxiom>,
 }
 
 impl Context {
@@ -101,7 +101,7 @@ impl Context {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
             specs: BTreeMap::new(),
-            axioms: vec![],
+            axioms: BTreeMap::new(),
         };
 
         // scan over the code base
@@ -150,10 +150,6 @@ impl Context {
                     None => continue,
                     Some(Mark::Impl(mark)) => self.add_impl(MarkedImpl { item: syntax, mark })?,
                     Some(Mark::Spec(mark)) => self.add_spec(MarkedSpec { item: syntax, mark })?,
-                    _ => bail_on!(syntax, "invalid annotation"),
-                },
-                Item::Const(syntax) => match Mark::parse_attrs(&syntax.attrs)? {
-                    None => continue,
                     Some(Mark::Axiom) => self.add_axiom(MarkedAxiom { item: syntax })?,
                     _ => bail_on!(syntax, "invalid annotation"),
                 },
@@ -242,11 +238,17 @@ impl Context {
 
     /// Add an axiom to the context
     fn add_axiom(&mut self, item: MarkedAxiom) -> Result<()> {
-        let name = item.name();
-        if *name != "_" {
-            bail_on!(name, "expect _");
+        let name = item.name().try_into()?;
+        if let Some(prev) = self.axioms.get(&name) {
+            bail_on_with_note!(
+                prev.name(),
+                "previously defined here",
+                item.name(),
+                "duplicated axiom name"
+            );
         }
-        self.axioms.push(item);
+        trace!("axiom found: {}", name);
+        self.axioms.insert(name, item);
         Ok(())
     }
 
@@ -293,7 +295,7 @@ impl Context {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
             specs: BTreeMap::new(),
-            axioms: vec![],
+            axioms: BTreeMap::new(),
         };
 
         let file: File = syn::parse2(stream)?;
@@ -308,7 +310,7 @@ pub struct ContextWithGenerics {
     types: BTreeMap<UsrTypeName, (Generics, MarkedType)>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
-    axioms: Vec<MarkedAxiom>,
+    axioms: BTreeMap<AxiomName, MarkedAxiom>,
 }
 
 impl ContextWithGenerics {
@@ -362,7 +364,7 @@ pub struct ContextWithType {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, MarkedImpl>,
     specs: BTreeMap<UsrFuncName, MarkedSpec>,
-    axioms: Vec<MarkedAxiom>,
+    axioms: BTreeMap<AxiomName, MarkedAxiom>,
 }
 
 impl ContextWithType {
@@ -406,12 +408,20 @@ impl ContextWithType {
         }
 
         // axiom
-        let mut unpacked_axioms = vec![];
-        for (i, ast) in self.axioms.iter().enumerate() {
-            trace!("handling axiom sig: {}", i);
-            let (sig, body) = FuncSig::unpack_axiom(&self, &ast.item)?;
-            trace!("axiom sig analyzed: {}", i);
-            unpacked_axioms.push((sig, body));
+        let mut unpacked_axioms = BTreeMap::new();
+        for (name, marked) in &self.axioms {
+            let ItemFn {
+                attrs: _,
+                vis: _,
+                sig,
+                block, // handled later
+            } = &marked.item;
+
+            trace!("handling axiom sig: {}", name);
+            let sig = FuncSig::from_sig(&self, sig)?;
+            let body = block.stmts.clone();
+            trace!("axiom analyzed sig: {}", name);
+            unpacked_axioms.insert(name.clone(), (sig, body));
         }
 
         // populate the databases
@@ -504,7 +514,7 @@ pub struct ContextWithSig {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
     specs: BTreeMap<UsrFuncName, (FuncSig, Vec<Stmt>)>,
-    axioms: Vec<(FuncSig, Vec<Stmt>)>,
+    axioms: BTreeMap<AxiomName, (FuncSig, Vec<Stmt>)>,
     /// a database for verification conditions (i.e., impl and spec mapping)
     vc_db: BTreeSet<Refinement>,
     /// a database for functions
@@ -549,12 +559,12 @@ impl ContextWithSig {
         }
 
         // axiom
-        let mut parsed_axioms = vec![];
-        for (i, (sig, stmts)) in self.axioms.iter().enumerate() {
-            trace!("handling axiom body: {}", i);
+        let mut parsed_axioms = BTreeMap::new();
+        for (name, (sig, stmts)) in self.axioms.iter() {
+            trace!("handling axiom body: {}", name);
             let body = ExprParserRoot::new(&self, Kind::Spec, sig).parse(stmts)?;
-            trace!("axiom body analyzed: {}", i);
-            parsed_axioms.push(body);
+            trace!("axiom body analyzed: {}", name);
+            parsed_axioms.insert(name.clone(), body);
         }
 
         // repacking
@@ -583,8 +593,10 @@ impl ContextWithSig {
             .collect();
         let unpack_axioms = axioms
             .into_iter()
-            .zip(parsed_axioms)
-            .map(|((sig, _), body)| Axiom { head: sig, body })
+            .map(|(name, (sig, _))| {
+                let body = parsed_axioms.remove(&name).unwrap();
+                (name, Axiom { head: sig, body })
+            })
             .collect();
 
         Ok(ContextWithFunc {
@@ -602,7 +614,7 @@ pub struct ContextWithFunc {
     types: BTreeMap<UsrTypeName, TypeDef>,
     impls: BTreeMap<UsrFuncName, ImplFuncDef>,
     specs: BTreeMap<UsrFuncName, SpecFuncDef>,
-    axioms: Vec<Axiom>,
+    axioms: BTreeMap<AxiomName, Axiom>,
     vc_db: BTreeSet<Refinement>,
 }
 
@@ -646,7 +658,7 @@ impl ContextWithFunc {
 pub struct ASTContext {
     types: BTreeMap<UsrTypeName, TypeDef>,
     funcs: BTreeMap<UsrFuncName, FuncDef>,
-    axioms: Vec<Axiom>,
+    axioms: BTreeMap<AxiomName, Axiom>,
     vc_db: BTreeSet<Refinement>,
 }
 
