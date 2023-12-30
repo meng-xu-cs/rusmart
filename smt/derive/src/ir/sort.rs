@@ -188,6 +188,23 @@ impl TypeRegistry {
     pub fn retrieve(&self, idx: UsrSortId) -> &DataType {
         self.defs.get(&idx).expect("no such sort id")
     }
+
+    /// Reverse lookup the sort id to type name and instantiation
+    pub fn reverse_lookup(&self, idx: UsrSortId) -> (Option<&UsrSortName>, &[Sort]) {
+        for (name, val) in &self.idx_named {
+            for (inst, sid) in val {
+                if *sid == idx {
+                    return (Some(name), inst);
+                }
+            }
+        }
+        for (inst, sid) in &self.idx_tuple {
+            if *sid == idx {
+                return (None, inst);
+            }
+        }
+        panic!("no such sort id");
+    }
 }
 
 /// Sort-related functions in the IR builder

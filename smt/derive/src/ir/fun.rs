@@ -38,7 +38,7 @@ pub enum FunDef {
 /// A registry of functions involved
 pub struct FunRegistry {
     /// a map from user-defined functions and instantiations to function id
-    lookup: BTreeMap<UsrFunName, BTreeMap<Vec<Sort>, UsrFunId>>,
+    pub lookup: BTreeMap<UsrFunName, BTreeMap<Vec<Sort>, UsrFunId>>,
     /// a map for function signatures
     sigs: BTreeMap<UsrFunId, FunSig>,
     /// a map for function definitions

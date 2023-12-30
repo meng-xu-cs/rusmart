@@ -9,6 +9,7 @@ use crate::parser::ctxt::{ASTContext, Refinement};
 use crate::parser::generics::Generics;
 use crate::parser::infer::TypeRef;
 use crate::parser::name::{TypeParamName, UsrFuncName};
+use crate::parser::ty::TypeTag;
 
 /// A context for intermediate representation
 pub struct IRContext {
@@ -33,8 +34,38 @@ impl IRContext {
         }
     }
 
+    /// Reverse resolve a `Sort` to `TypeTag`
+    fn reverse_sort(&self, sort: &Sort) -> TypeTag {
+        match sort {
+            Sort::Boolean => TypeTag::Boolean,
+            Sort::Integer => TypeTag::Integer,
+            Sort::Rational => TypeTag::Rational,
+            Sort::Text => TypeTag::Text,
+            Sort::Seq(sub) => TypeTag::Seq(self.reverse_sort(sub).into()),
+            Sort::Set(sub) => TypeTag::Set(self.reverse_sort(sub).into()),
+            Sort::Map(key, val) => {
+                TypeTag::Map(self.reverse_sort(key).into(), self.reverse_sort(val).into())
+            }
+            Sort::Error => TypeTag::Error,
+            Sort::User(sid) => {
+                let (sort_name, sort_inst) = self.ty_registry.reverse_lookup(*sid);
+                let inst = sort_inst.iter().map(|s| self.reverse_sort(s)).collect();
+                match sort_name {
+                    None => TypeTag::Pack(inst),
+                    Some(name) => TypeTag::User(name, inst),
+                }
+            }
+            Sort::Uninterpreted(name) => TypeTag::Parameter(name),
+        }
+    }
+
     /// List registered function instances
-    fn function_instances(&self) -> Vec<(UsrFuncName, Vec<TypeRef>)> {
+    fn function_instances(&self) -> Vec<(UsrFuncName, Vec<TypeTag>)> {
+        for (name, insts) in &self.fn_registry.lookup {
+            for inst in insts.keys() {
+                todo!()
+            }
+        }
         todo!()
     }
 }
