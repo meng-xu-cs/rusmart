@@ -2,12 +2,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use log::trace;
 
+use crate::ir::axiom::AxiomRegistry;
 use crate::ir::fun::FunRegistry;
 use crate::ir::sort::{SmtSortName, Sort, TypeRegistry};
 use crate::parser::ctxt::{ASTContext, Refinement};
 use crate::parser::generics::Generics;
 use crate::parser::infer::TypeRef;
-use crate::parser::name::TypeParamName;
+use crate::parser::name::{TypeParamName, UsrFuncName};
 
 /// A context for intermediate representation
 pub struct IRContext {
@@ -17,6 +18,8 @@ pub struct IRContext {
     pub ty_registry: TypeRegistry,
     /// function registry
     pub fn_registry: FunRegistry,
+    /// axiom registry
+    pub axiom_registry: AxiomRegistry,
 }
 
 impl IRContext {
@@ -26,7 +29,13 @@ impl IRContext {
             undef_sorts: BTreeSet::new(),
             ty_registry: TypeRegistry::new(),
             fn_registry: FunRegistry::new(),
+            axiom_registry: AxiomRegistry::new(),
         }
+    }
+
+    /// List registered function instances
+    fn function_instances(&self) -> Vec<(UsrFuncName, Vec<TypeRef>)> {
+        todo!()
     }
 }
 
@@ -133,6 +142,21 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         // process the impl and spec pair
         builder.register_func(&rel.fn_impl, &ty_args);
         builder.register_func(&rel.fn_spec, &ty_args);
+
+        // pull in all relevant axioms
+        let mut fixedpoint = true;
+        loop {
+            for (name, ty_args) in ir.function_instances() {
+                for (axioms, inst) in ctxt.probe_related_axioms(&name, &ty_args) {
+                    todo!()
+                }
+            }
+
+            // exit the loop if we have reached a fixedpoint
+            if fixedpoint {
+                break;
+            }
+        }
 
         // done
         ir

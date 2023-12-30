@@ -13,6 +13,7 @@ use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
 use crate::parser::func::{Axiom, FuncDef, FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::generics::Generics;
+use crate::parser::infer::TypeRef;
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef};
 
@@ -680,6 +681,15 @@ impl ASTContext {
         self.funcs
             .get(name)
             .unwrap_or_else(|| panic!("fn {}", name))
+    }
+
+    /// Check whether this axiom is relevant
+    pub fn probe_related_axioms(
+        &self,
+        name: &UsrFuncName,
+        inst: &[TypeRef],
+    ) -> Vec<(&Axiom, Vec<Option<TypeRef>>)> {
+        todo!()
     }
 }
 
