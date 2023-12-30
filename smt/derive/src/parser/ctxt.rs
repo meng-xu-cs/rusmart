@@ -13,9 +13,8 @@ use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::ExprParserRoot;
 use crate::parser::func::{Axiom, FuncDef, FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::generics::Generics;
-use crate::parser::infer::TypeRef;
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
-use crate::parser::ty::{TypeBody, TypeDef};
+use crate::parser::ty::{TypeBody, TypeDef, TypeTag};
 
 #[cfg(test)]
 use proc_macro2::TokenStream;
@@ -687,8 +686,8 @@ impl ASTContext {
     pub fn probe_related_axioms(
         &self,
         name: &UsrFuncName,
-        inst: &[TypeRef],
-    ) -> Vec<(&Axiom, Vec<Option<TypeRef>>)> {
+        inst: &[TypeTag],
+    ) -> Vec<(&Axiom, Vec<Option<TypeTag>>)> {
         todo!()
     }
 }

@@ -1,38 +1,16 @@
 use std::collections::BTreeMap;
 
 use crate::ir::ctxt::IRBuilder;
-use crate::ir::fun::{FunSig, UsrFunId};
+use crate::ir::fun::FunSig;
+use crate::ir::index::{ExpId, UsrFunId, UsrSortId, VarId};
 use crate::ir::intrinsics::Intrinsic;
-use crate::ir::name::{index, name};
-use crate::ir::sort::{DataType, Sort, UsrSortId, Variant};
+use crate::ir::name::Symbol;
+use crate::ir::sort::{DataType, Sort, Variant};
 use crate::parser::adt::ADTBranch;
 use crate::parser::expr::{Expr, LetBinding, Op, Unpack, VarDecl};
 use crate::parser::intrinsics::Intrinsic as Native;
 use crate::parser::name::VarName;
 use crate::parser::ty::TypeTag;
-
-name! {
-    /// Name of a variable
-    Symbol
-}
-
-impl From<&VarName> for Symbol {
-    fn from(name: &VarName) -> Self {
-        Self {
-            ident: name.to_string(),
-        }
-    }
-}
-
-index! {
-    /// Index of a variable
-    VarId
-}
-
-index! {
-    /// Index of an expression
-    ExpId
-}
 
 /// The origin of a variable
 pub enum VarKind {

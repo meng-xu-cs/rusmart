@@ -1,18 +1,9 @@
 use std::collections::BTreeMap;
 
-use crate::ir::exp::{ExpId, ExpRegistry, Symbol};
-use crate::ir::name::{index, name};
+use crate::ir::exp::ExpRegistry;
+use crate::ir::index::{ExpId, UsrAxiomId};
+use crate::ir::name::{Symbol, UsrAxiomName};
 use crate::ir::sort::Sort;
-
-name! {
-    /// Name of an axiom
-    UsrAxiomName
-}
-
-index! {
-    /// A unique identifier for an axiom
-    UsrAxiomId
-}
 
 /// Axiom
 pub struct Axiom {

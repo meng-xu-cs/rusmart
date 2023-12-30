@@ -4,7 +4,8 @@ use log::trace;
 
 use crate::ir::axiom::AxiomRegistry;
 use crate::ir::fun::FunRegistry;
-use crate::ir::sort::{SmtSortName, Sort, TypeRegistry};
+use crate::ir::name::SmtSortName;
+use crate::ir::sort::{Sort, TypeRegistry};
 use crate::parser::ctxt::{ASTContext, Refinement};
 use crate::parser::generics::Generics;
 use crate::parser::infer::TypeRef;
@@ -52,10 +53,10 @@ impl IRContext {
                 let inst = sort_inst.iter().map(|s| self.reverse_sort(s)).collect();
                 match sort_name {
                     None => TypeTag::Pack(inst),
-                    Some(name) => TypeTag::User(name, inst),
+                    Some(name) => TypeTag::User(name.into(), inst),
                 }
             }
-            Sort::Uninterpreted(name) => TypeTag::Parameter(name),
+            Sort::Uninterpreted(name) => TypeTag::Parameter(name.into()),
         }
     }
 

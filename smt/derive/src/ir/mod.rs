@@ -1,6 +1,7 @@
 pub mod ctxt;
 
-mod name;
+mod index;
+pub mod name;
 
 mod sort;
 

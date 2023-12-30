@@ -10,8 +10,9 @@ use crate::parser::ctxt::Context;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
-mod ir;
 mod parser;
+
+mod ir;
 
 /// Default pipeline after a context is constructed
 fn pipeline(ctxt: Context) -> Result<()> {

@@ -1,22 +1,13 @@
 use std::collections::BTreeMap;
 
 use crate::ir::ctxt::IRBuilder;
-use crate::ir::exp::{ExpBuilder, ExpId, ExpRegistry, Symbol};
-use crate::ir::name::{index, name};
+use crate::ir::exp::{ExpBuilder, ExpRegistry};
+use crate::ir::index::{ExpId, UsrFunId};
+use crate::ir::name::{Symbol, UsrFunName};
 use crate::ir::sort::Sort;
 use crate::parser::func::{FuncDef, FuncSig};
 use crate::parser::infer::TypeRef;
 use crate::parser::name::UsrFuncName;
-
-name! {
-    /// Name of a user-defined function
-    UsrFunName
-}
-
-index! {
-    /// A unique identifier for user-defined function
-    UsrFunId
-}
 
 /// Function signature
 #[derive(Clone)]
@@ -103,9 +94,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     /// Register the function
     pub fn register_func(&mut self, fn_name: &UsrFuncName, ty_args: &[TypeRef]) -> UsrFunId {
         // derive the signature
-        let name = UsrFunName {
-            ident: fn_name.to_string(),
-        };
+        let name = fn_name.into();
         let ty_args = self.resolve_type_ref_vec(ty_args);
 
         // check if we have already processed the impl function

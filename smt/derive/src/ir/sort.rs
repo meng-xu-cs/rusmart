@@ -2,41 +2,11 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use crate::ir::ctxt::IRBuilder;
-use crate::ir::name::{index, name};
+use crate::ir::index::UsrSortId;
+use crate::ir::name::{SmtSortName, UsrSortName};
 use crate::parser::infer::TypeRef;
-use crate::parser::name::{TypeParamName, UsrTypeName};
+use crate::parser::name::UsrTypeName;
 use crate::parser::ty::{EnumVariant, TypeBody, TypeTag};
-
-name! {
-    /// Name of a type parameter that implements the SMT trait
-    SmtSortName
-}
-
-impl From<&TypeParamName> for SmtSortName {
-    fn from(name: &TypeParamName) -> Self {
-        Self {
-            ident: name.to_string(),
-        }
-    }
-}
-
-name! {
-    /// Name of a user-defined sort
-    UsrSortName
-}
-
-impl From<&UsrTypeName> for UsrSortName {
-    fn from(name: &UsrTypeName) -> Self {
-        Self {
-            ident: name.to_string(),
-        }
-    }
-}
-
-index! {
-    /// A unique identifier for user-defined sort
-    UsrSortId
-}
 
 /// A unique and complete reference to an SMT sort
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]

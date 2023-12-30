@@ -90,7 +90,7 @@ fn parse_ident_from_pat(pat: &Pat) -> Result<&Ident> {
 
 /// Utility macro to define a name
 macro_rules! name {
-    ($(#[$meta:meta])* $name:ident) => {
+    ($(#[$meta:meta])* $name:ident > $child:ty) => {
         $(#[$meta])*
         #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
         pub struct $name {
@@ -132,32 +132,45 @@ macro_rules! name {
                 parse_ident_from_pat(value)?.try_into()
             }
         }
+
+        impl From<&$child> for $name {
+            fn from(name: &$child) -> Self {
+                Self {
+                    ident: name.to_string(),
+                }
+            }
+        }
     };
 }
 
 name! {
     /// Identifier for a type parameter
     TypeParamName
+        > crate::ir::name::SmtSortName
 }
 
 name! {
     /// Identifier for a user-defined type (i.e., non-reserved)
     UsrTypeName
+        > crate::ir::name::UsrSortName
 }
 
 name! {
     /// Identifier for a user-defined function (i.e., non-reserved)
     UsrFuncName
+        > crate::ir::name::UsrFunName
 }
 
 name! {
     /// Identifier for an axiom
     AxiomName
+        > crate::ir::name::UsrAxiomName
 }
 
 name! {
     /// Identifier for a variable
     VarName
+        > crate::ir::name::Symbol
 }
 
 impl TypeParamName {

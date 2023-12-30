@@ -1,4 +1,4 @@
-use crate::ir::exp::ExpId;
+use crate::ir::index::ExpId;
 use crate::ir::sort::Sort;
 
 /// Intrinsic procedure
