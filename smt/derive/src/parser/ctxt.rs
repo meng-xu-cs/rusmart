@@ -419,10 +419,13 @@ impl ContextWithType {
             } = &marked.item;
 
             trace!("handling axiom sig: {}", name);
-            let sig = FuncSig::from_sig(&self, sig)?;
+            let head = FuncSig::from_sig(&self, sig)?;
+            if !matches!(head.ret_ty, TypeTag::Boolean) {
+                bail_on!(&sig, "expect Boolean as axiom return type");
+            }
             let body = block.stmts.clone();
             trace!("axiom analyzed sig: {}", name);
-            unpacked_axioms.insert(name.clone(), (sig, body));
+            unpacked_axioms.insert(name.clone(), (head, body));
         }
 
         // populate the databases

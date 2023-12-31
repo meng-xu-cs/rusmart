@@ -1,14 +1,16 @@
-use crate::ir::ctxt::IRBuilder;
 use std::collections::BTreeMap;
 
+use itertools::Itertools;
+
+use crate::ir::ctxt::IRBuilder;
 use crate::ir::exp::{ExpBuilder, ExpRegistry};
-use crate::ir::fun::{FunDef, FunSig};
-use crate::ir::index::{ExpId, UsrAxiomId, UsrFunId};
-use crate::ir::name::{Symbol, UsrAxiomName, UsrFunName};
+use crate::ir::fun::FunSig;
+use crate::ir::index::{ExpId, UsrAxiomId};
+use crate::ir::name::{Symbol, UsrAxiomName};
 use crate::ir::sort::Sort;
-use crate::parser::func::{Axiom, FuncDef, FuncSig};
+use crate::parser::func::{Axiom, FuncSig};
 use crate::parser::infer::TypeRef;
-use crate::parser::name::{AxiomName, UsrFuncName};
+use crate::parser::name::AxiomName;
 
 /// Axiom
 pub struct Predicate {
@@ -65,14 +67,17 @@ impl AxiomRegistry {
 
 impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
     /// Register the axiom
-    pub fn register_axiom(&mut self, name: &AxiomName, inst: &[TypeRef]) -> (bool, UsrAxiomId) {
+    pub fn register_axiom(&mut self, name: &AxiomName, inst: &[TypeRef]) -> UsrAxiomId {
         let ident = name.into();
         let ty_args = self.resolve_type_ref_vec(inst);
 
-        // check if we have already processed the axiom
-        match self.ir.axiom_registry.get_index(&ident, &ty_args) {
-            None => (),
-            Some(idx) => return (false, idx),
+        // panic if we have already processed the axiom
+        if self.ir.axiom_registry.get_index(&ident, &ty_args).is_some() {
+            panic!(
+                "axiom already processed: {}<{}>",
+                name,
+                inst.iter().format(",")
+            );
         }
 
         // register the instance and get the index
@@ -116,6 +121,6 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         self.ir.axiom_registry.register(idx, predicate);
 
         // done
-        (true, idx)
+        idx
     }
 }
