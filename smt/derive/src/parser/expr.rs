@@ -142,9 +142,9 @@ impl VarDecl {
     }
 
     /// Visitor with ty/pre/post traversal function
-    pub fn visit<TY>(&mut self, mut ty: TY) -> anyhow::Result<()>
+    pub fn visit<TY>(&mut self, ty: &mut TY) -> anyhow::Result<()>
     where
-        TY: FnMut(&mut TypeRef) -> anyhow::Result<()> + Copy,
+        TY: FnMut(&mut TypeRef) -> anyhow::Result<()>,
     {
         match self {
             Self::One(_, t) => ty(t)?,
@@ -451,14 +451,14 @@ impl Expr {
     /// Visitor with ty/pre/post traversal function
     pub fn visit<TY, PRE, POST>(
         &mut self,
-        mut ty: TY,
-        mut pre: PRE,
-        mut post: POST,
+        ty: &mut TY,
+        pre: &mut PRE,
+        post: &mut POST,
     ) -> anyhow::Result<()>
     where
-        TY: FnMut(&mut TypeRef) -> anyhow::Result<()> + Copy,
-        PRE: FnMut(&mut Self) -> anyhow::Result<()> + Copy,
-        POST: FnMut(&mut Self) -> anyhow::Result<()> + Copy,
+        TY: FnMut(&mut TypeRef) -> anyhow::Result<()>,
+        PRE: FnMut(&mut Self) -> anyhow::Result<()>,
+        POST: FnMut(&mut Self) -> anyhow::Result<()>,
     {
         // pre-order invocation
         pre(self)?;
@@ -786,16 +786,16 @@ impl<'ctx> ExprParserRoot<'ctx> {
 
         // check type completeness of the expression
         let result = parsed.visit(
-            |ty| {
+            &mut |ty| {
                 let refreshed = unifier.refresh_type(ty);
-                if !refreshed.validate() {
+                if refreshed.reverse().is_none() {
                     anyhow::bail!("incomplete type");
                 }
                 *ty = refreshed;
                 Ok(())
             },
-            |_| Ok(()),
-            |_| Ok(()),
+            &mut |_| Ok(()),
+            &mut |_| Ok(()),
         );
         match result {
             Ok(()) => (),

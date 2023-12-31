@@ -10,12 +10,13 @@ use walkdir::WalkDir;
 use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
 use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
-use crate::parser::expr::ExprParserRoot;
+use crate::parser::expr::{Expr, ExprParserRoot, Op};
 use crate::parser::func::{Axiom, FuncDef, FuncSig, ImplFuncDef, SpecFuncDef};
-use crate::parser::generics::Generics;
+use crate::parser::generics::{Generics, GenericsInstPartial};
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef, TypeTag};
 
+use crate::parser::infer::{TIError, TypeRef, TypeUnifier};
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -682,13 +683,101 @@ impl ASTContext {
             .unwrap_or_else(|| panic!("fn {}", name))
     }
 
+    /// Get the axiom definition
+    pub fn get_axiom(&self, name: &AxiomName) -> &Axiom {
+        self.axioms
+            .get(name)
+            .unwrap_or_else(|| panic!("axiom {}", name))
+    }
+
     /// Check whether this axiom is relevant
     pub fn probe_related_axioms(
         &self,
         name: &UsrFuncName,
         inst: &[TypeTag],
-    ) -> Vec<(&Axiom, Vec<Option<TypeTag>>)> {
-        todo!()
+    ) -> BTreeMap<AxiomName, BTreeSet<Vec<Option<TypeTag>>>> {
+        let mut related = BTreeMap::new();
+        for (key, axiom) in &self.axioms {
+            let mut inst_candidates = vec![];
+            let mut body = axiom.body.clone();
+            match body.visit(&mut |_| Ok(()), &mut |_| Ok(()), &mut |e| {
+                // check whether this expr involves the target procedure call
+                let op = match e {
+                    Expr::Unit(inst) => inst.op.as_ref(),
+                    Expr::Block { lets: _, body } => body.op.as_ref(),
+                };
+                if let Op::Procedure {
+                    name: proc_name,
+                    inst: proc_inst,
+                    args: _,
+                } = op
+                {
+                    if proc_name == name {
+                        inst_candidates.push(
+                            proc_inst
+                                .iter()
+                                .map(|e| e.reverse().expect("expression type complete"))
+                                .collect::<Vec<_>>(),
+                        );
+                    }
+                }
+                Ok(())
+            }) {
+                Ok(_) => (),
+                Err(e) => panic!("unexpected expression visitation error: {}", e),
+            }
+
+            // prepare type variables
+            let mut unifier = TypeUnifier::new();
+            let generics =
+                GenericsInstPartial::new_without_args(&axiom.head.generics).complete(&mut unifier);
+
+            // check relevance of their instantiations
+            let inst_ref: Vec<TypeRef> = inst.iter().map(|t| t.into()).collect();
+            for candidate in inst_candidates {
+                if candidate.len() != inst_ref.len() {
+                    panic!("number of type arguments mismatch: {}", name);
+                }
+
+                // turn the type parameters in candidate to type variables
+                let mut parametric = vec![];
+                for tag in candidate {
+                    match generics.instantiate(&tag) {
+                        None => panic!("uninstantiated axiom type: {}", tag),
+                        Some(t) => parametric.push(t),
+                    }
+                }
+
+                // check whether the type unifies
+                let mut unifies = true;
+                for (lhs, rhs) in parametric.iter().zip(inst_ref.iter()) {
+                    match unifier.unify(lhs, rhs) {
+                        Ok(None) => {
+                            unifies = false;
+                            break;
+                        }
+                        Ok(Some(_)) => (),
+                        Err(TIError::CyclicUnification) => {
+                            panic!("type unification error: cyclic type unification")
+                        }
+                    }
+                }
+                if !unifies {
+                    continue;
+                }
+
+                // save the unification result
+                let axiom_inst = parametric
+                    .iter()
+                    .map(|t| unifier.refresh_type(t).reverse())
+                    .collect();
+                related
+                    .entry(key.clone())
+                    .or_insert_with(BTreeSet::new)
+                    .insert(axiom_inst);
+            }
+        }
+        related
     }
 }
 

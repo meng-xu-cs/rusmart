@@ -61,13 +61,15 @@ impl IRContext {
     }
 
     /// List registered function instances
-    fn function_instances(&self) -> Vec<(UsrFuncName, Vec<TypeTag>)> {
+    fn reverse_function_instances(&self) -> Vec<(UsrFuncName, Vec<TypeTag>)> {
+        let mut instances = vec![];
         for (name, insts) in &self.fn_registry.lookup {
             for inst in insts.keys() {
-                todo!()
+                let tags = inst.iter().map(|e| self.reverse_sort(e)).collect();
+                instances.push((name.into(), tags));
             }
         }
-        todo!()
+        instances
     }
 }
 
@@ -178,13 +180,24 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         // pull in all relevant axioms
         let mut fixedpoint = true;
         loop {
-            for (name, ty_args) in ir.function_instances() {
-                for (axioms, inst) in ctxt.probe_related_axioms(&name, &ty_args) {
-                    todo!()
+            let mut relevant_axioms = BTreeMap::new();
+            for (func_name, func_inst) in ir.reverse_function_instances() {
+                for (axiom_name, mut axiom_insts) in
+                    ctxt.probe_related_axioms(&func_name, &func_inst)
+                {
+                    relevant_axioms
+                        .entry(axiom_name)
+                        .or_insert_with(BTreeSet::new)
+                        .append(&mut axiom_insts);
                 }
             }
 
             // exit the loop if we have reached a fixedpoint
+            for (name, insts) in relevant_axioms {
+                for inst in insts {
+                    println!("related axiom: {}", name);
+                }
+            }
             if fixedpoint {
                 break;
             }

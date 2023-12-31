@@ -133,6 +133,14 @@ macro_rules! name {
             }
         }
 
+        impl From<$child> for $name {
+            fn from(name: $child) -> Self {
+                Self {
+                    ident: name.to_string(),
+                }
+            }
+        }
+
         impl From<&$child> for $name {
             fn from(name: &$child) -> Self {
                 Self {

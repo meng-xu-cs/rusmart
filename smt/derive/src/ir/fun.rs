@@ -97,7 +97,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let name = fn_name.into();
         let ty_args = self.resolve_type_ref_vec(ty_args);
 
-        // check if we have already processed the impl function
+        // check if we have already processed the function
         match self.ir.fn_registry.get_index(&name, &ty_args) {
             None => (),
             Some(idx) => return idx,

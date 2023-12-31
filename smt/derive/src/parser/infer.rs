@@ -104,21 +104,32 @@ impl From<&TypeTag> for TypeRef {
 }
 
 impl TypeRef {
-    /// Validate whether the type is complete
-    pub fn validate(&self) -> bool {
-        match self {
-            Self::Var(_) => false,
-            Self::Boolean
-            | Self::Integer
-            | Self::Rational
-            | Self::Text
-            | Self::Error
-            | Self::Parameter(_) => true,
-            Self::Cloak(sub) | Self::Seq(sub) | Self::Set(sub) => sub.validate(),
-            Self::Map(key, val) => key.validate() && val.validate(),
-            Self::Pack(elems) => elems.iter().all(|t| t.validate()),
-            Self::User(_, args) => args.iter().all(|t| t.validate()),
-        }
+    /// Reverse the `TypeRef` to a `TypeTag`
+    pub fn reverse(&self) -> Option<TypeTag> {
+        let reversed = match self {
+            Self::Var(_) => return None,
+            Self::Boolean => TypeTag::Boolean,
+            Self::Integer => TypeTag::Integer,
+            Self::Rational => TypeTag::Rational,
+            Self::Text => TypeTag::Text,
+            Self::Error => TypeTag::Error,
+            Self::Parameter(name) => TypeTag::Parameter(name.clone()),
+            Self::Cloak(sub) => TypeTag::Cloak(sub.as_ref().reverse()?.into()),
+            Self::Seq(sub) => TypeTag::Seq(sub.as_ref().reverse()?.into()),
+            Self::Set(sub) => TypeTag::Set(sub.as_ref().reverse()?.into()),
+            Self::Map(key, val) => TypeTag::Map(
+                key.as_ref().reverse()?.into(),
+                val.as_ref().reverse()?.into(),
+            ),
+            Self::Pack(elems) => {
+                TypeTag::Pack(elems.iter().map(|t| t.reverse()).collect::<Option<_>>()?)
+            }
+            Self::User(name, args) => TypeTag::User(
+                name.clone(),
+                args.iter().map(|t| t.reverse()).collect::<Option<_>>()?,
+            ),
+        };
+        Some(reversed)
     }
 }
 

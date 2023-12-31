@@ -19,6 +19,14 @@ macro_rules! name {
             }
         }
 
+        impl From<$parent> for $name {
+            fn from(name: $parent) -> Self {
+                Self {
+                    ident: name.to_string(),
+                }
+            }
+        }
+
         impl From<&$parent> for $name {
             fn from(name: &$parent) -> Self {
                 Self {
