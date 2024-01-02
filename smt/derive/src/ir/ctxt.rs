@@ -4,6 +4,7 @@ use log::trace;
 
 use crate::ir::axiom::AxiomRegistry;
 use crate::ir::fun::FunRegistry;
+use crate::ir::mono::add_instantiation;
 use crate::ir::name::SmtSortName;
 use crate::ir::sort::{Sort, TypeRegistry};
 use crate::parser::ctxt::{ASTContext, Refinement};
@@ -178,26 +179,39 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         builder.register_func(&rel.fn_spec, &ty_args);
 
         // pull in all relevant axioms
+        let mut relevant_axioms = BTreeMap::new();
+
         let mut fixedpoint = true;
         loop {
-            let mut relevant_axioms = BTreeMap::new();
+            // consolidate all related axioms and their instantiations
+            let mut batch = BTreeMap::new();
             for (func_name, func_inst) in ir.reverse_function_instances() {
                 for (axiom_name, mut axiom_insts) in
                     ctxt.probe_related_axioms(&func_name, &func_inst)
                 {
-                    relevant_axioms
+                    batch
                         .entry(axiom_name)
                         .or_insert_with(BTreeSet::new)
                         .append(&mut axiom_insts);
                 }
             }
 
-            // exit the loop if we have reached a fixedpoint
-            for (name, insts) in relevant_axioms {
+            // self-interference and register axioms
+            for (name, insts) in batch {
+                let axiom = ctxt.get_axiom(&name);
+                let existing_insts = relevant_axioms.entry(name).or_insert_with(BTreeSet::new);
                 for inst in insts {
-                    println!("related axiom: {}", name);
+                    let additions = add_instantiation(&axiom.head.generics, existing_insts, inst);
+
+                    // register axiom under each new instantiation
+                    for mono in additions {
+                        // not reaching fixedpoint yet
+                        fixedpoint = false;
+                    }
                 }
             }
+
+            // exit the loop if we have reached a fixedpoint
             if fixedpoint {
                 break;
             }

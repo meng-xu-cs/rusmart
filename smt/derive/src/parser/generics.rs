@@ -13,7 +13,7 @@ use crate::parser::err::{
     bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
 };
 use crate::parser::expr::CtxtForExpr;
-use crate::parser::infer::{TypeRef, TypeUnifier};
+use crate::parser::infer::{TypeRef, TypeUnifier, TypeVar};
 use crate::parser::name::{ReservedIdent, TypeParamName, UsrTypeName};
 use crate::parser::ty::TypeTag;
 
@@ -193,7 +193,7 @@ pub struct GenericsInstPartial {
 }
 
 impl GenericsInstPartial {
-    /// Create an instantiation by setting
+    /// Create an instantiation by setting every type parameter to None
     pub fn new_without_args(generics: &Generics) -> Self {
         let ty_args = generics
             .params
@@ -201,7 +201,45 @@ impl GenericsInstPartial {
             .enumerate()
             .map(|(i, n)| (n.clone(), (i, None)))
             .collect();
-        GenericsInstPartial { args: ty_args }
+        Self { args: ty_args }
+    }
+
+    /// Create an instantiation by setting every type parameter to either a tag or None
+    pub fn new_with_mono(generics: &Generics, mono: &Monomorphization) -> Self {
+        // sanity check
+        if generics.params.len() != mono.args.len() {
+            panic!("type parameter / argument number mismatch");
+        }
+
+        // assign type variables
+        let mut ty_args = BTreeMap::new();
+
+        let vars = mono.unassigned_type_params();
+        for ((i, name), inst) in generics.params.iter().enumerate().zip(mono.args.iter()) {
+            if vars.contains(name) {
+                // sanity check on the base params
+                match inst {
+                    PartialInst::Unassigned(n) => {
+                        if n != name {
+                            panic!("unassigned type parameter `{}` gets remapped `{}`", name, n);
+                        }
+                    }
+                    PartialInst::Assigned(t) => {
+                        panic!("unassigned type parameter `{}` gets assigned `{}`", name, t);
+                    }
+                }
+                // check passed, mark it as a type variable
+                ty_args.insert(name.clone(), (i, None));
+            } else {
+                let tag = match inst {
+                    PartialInst::Unassigned(n) => TypeTag::Parameter(n.clone()),
+                    PartialInst::Assigned(t) => t.clone(),
+                };
+                ty_args.insert(name.clone(), (i, Some(tag)));
+            }
+        }
+
+        Self { args: ty_args }
     }
 
     /// Create an instantiation with generics and type argument (optionally parsed)
@@ -216,7 +254,7 @@ impl GenericsInstPartial {
             .enumerate()
             .map(|(i, (n, t))| (n.clone(), (i, Some(t.clone()))))
             .collect();
-        Some(GenericsInstPartial { args: ty_args })
+        Some(Self { args: ty_args })
     }
 
     /// A utility function to parse type arguments
@@ -246,7 +284,7 @@ impl GenericsInstPartial {
             }
             PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
         };
-        Ok(GenericsInstPartial { args: ty_args })
+        Ok(Self { args: ty_args })
     }
 
     /// Complete the instantiation with the help of a type unifier
@@ -333,6 +371,42 @@ impl GenericsInstFull {
             TypeTag::Parameter(name) => self.args.get(name).map(|(_, t)| t)?.clone(),
         };
         Some(updated)
+    }
+
+    /// Reversely lookup the type parameter by a type variable
+    pub fn reverse(&self, var: &TypeVar) -> Option<(&TypeParamName, usize)> {
+        for (name, (index, ty)) in &self.args {
+            if matches!(ty, TypeRef::Var(v) if v == var) {
+                return Some((name, *index));
+            }
+        }
+        None
+    }
+}
+
+/// Generic unification result for one type parameter
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub enum PartialInst {
+    Assigned(TypeTag),
+    Unassigned(TypeParamName),
+}
+
+/// Monomorphization result for the whole generics
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct Monomorphization {
+    pub args: Vec<PartialInst>,
+}
+
+impl Monomorphization {
+    /// Retrieve type parameters that are not assigned
+    pub fn unassigned_type_params(&self) -> BTreeSet<TypeParamName> {
+        self.args
+            .iter()
+            .filter_map(|inst| match inst {
+                PartialInst::Assigned(_) => None,
+                PartialInst::Unassigned(name) => Some(name.clone()),
+            })
+            .collect()
     }
 }
 

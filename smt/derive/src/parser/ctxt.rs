@@ -12,7 +12,7 @@ use crate::parser::attr::{ImplMark, Mark, SpecMark};
 use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::{Expr, ExprParserRoot, Op};
 use crate::parser::func::{Axiom, FuncDef, FuncSig, ImplFuncDef, SpecFuncDef};
-use crate::parser::generics::{Generics, GenericsInstPartial};
+use crate::parser::generics::{Generics, GenericsInstPartial, Monomorphization, PartialInst};
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef, TypeTag};
 
@@ -698,7 +698,7 @@ impl ASTContext {
         &self,
         name: &UsrFuncName,
         inst: &[TypeTag],
-    ) -> BTreeMap<AxiomName, BTreeSet<Vec<Option<TypeTag>>>> {
+    ) -> BTreeMap<AxiomName, BTreeSet<Monomorphization>> {
         let mut related = BTreeMap::new();
         for (key, axiom) in &self.axioms {
             let mut inst_candidates = vec![];
@@ -730,11 +730,6 @@ impl ASTContext {
                 Err(e) => panic!("unexpected expression visitation error: {}", e),
             }
 
-            // prepare type variables
-            let mut unifier = TypeUnifier::new();
-            let generics =
-                GenericsInstPartial::new_without_args(&axiom.head.generics).complete(&mut unifier);
-
             // check relevance of their instantiations
             let inst_ref: Vec<TypeRef> = inst.iter().map(|t| t.into()).collect();
             for candidate in inst_candidates {
@@ -742,7 +737,12 @@ impl ASTContext {
                     panic!("number of type arguments mismatch: {}", name);
                 }
 
-                // turn the type parameters in candidate to type variables
+                // prepare type variables
+                let mut unifier = TypeUnifier::new();
+                let generics = GenericsInstPartial::new_without_args(&axiom.head.generics)
+                    .complete(&mut unifier);
+
+                // refresh the candidates by replacing type parameters as type variables
                 let mut parametric = vec![];
                 for tag in candidate {
                     match generics.instantiate(&tag) {
@@ -770,14 +770,29 @@ impl ASTContext {
                 }
 
                 // save the unification result
-                let axiom_inst = parametric
-                    .iter()
-                    .map(|t| unifier.refresh_type(t).reverse())
-                    .collect();
+                let mut axiom_inst = vec![];
+                for ty in generics.vec() {
+                    let refreshed = unifier.refresh_type(&ty);
+                    let inst_mark = match refreshed.reverse() {
+                        None => {
+                            let var = match refreshed {
+                                TypeRef::Var(v) => v,
+                                _ => panic!("type parameter must be either assigned or variadic"),
+                            };
+                            let tp_name = match generics.reverse(&var) {
+                                None => panic!("unable to find the origin of type var {}", var),
+                                Some((n, _)) => n.clone(),
+                            };
+                            PartialInst::Unassigned(tp_name)
+                        }
+                        Some(tag) => PartialInst::Assigned(tag),
+                    };
+                    axiom_inst.push(inst_mark);
+                }
                 related
                     .entry(key.clone())
                     .or_insert_with(BTreeSet::new)
-                    .insert(axiom_inst);
+                    .insert(Monomorphization { args: axiom_inst });
             }
         }
         related

@@ -104,6 +104,23 @@ impl From<&TypeTag> for TypeRef {
 }
 
 impl TypeRef {
+    /// Validate whether the type is complete
+    pub fn validate(&self) -> bool {
+        match self {
+            Self::Var(_) => false,
+            Self::Boolean
+            | Self::Integer
+            | Self::Rational
+            | Self::Text
+            | Self::Error
+            | Self::Parameter(_) => true,
+            Self::Cloak(sub) | Self::Seq(sub) | Self::Set(sub) => sub.validate(),
+            Self::Map(key, val) => key.validate() && val.validate(),
+            Self::Pack(elems) => elems.iter().all(|t| t.validate()),
+            Self::User(_, args) => args.iter().all(|t| t.validate()),
+        }
+    }
+
     /// Reverse the `TypeRef` to a `TypeTag`
     pub fn reverse(&self) -> Option<TypeTag> {
         let reversed = match self {

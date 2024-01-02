@@ -788,7 +788,7 @@ impl<'ctx> ExprParserRoot<'ctx> {
         let result = parsed.visit(
             &mut |ty| {
                 let refreshed = unifier.refresh_type(ty);
-                if refreshed.reverse().is_none() {
+                if !refreshed.validate() {
                     anyhow::bail!("incomplete type");
                 }
                 *ty = refreshed;
