@@ -214,7 +214,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                     all_new_insts.extend(additions.into_iter());
                 }
                 trace!(
-                    "monomorphization yields {} new instantiations for axiom {}",
+                    "monomorphization yields {} new instantiation(s) for axiom {}",
                     all_new_insts.len(),
                     name
                 );
@@ -223,7 +223,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                 for inst in all_new_insts {
                     trace!("processing axiom {}{}", name, inst);
 
-                    // first collect unspecified types
+                    // first collect unspecified type parameters
                     for ty_arg_inst in &inst.args {
                         match ty_arg_inst {
                             PartialInst::Assigned(_) => (),
@@ -242,7 +242,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                         }
                     }
 
-                    // specialized builder just for axiom args
+                    // specialized builder just for axiom type arguments
                     let mut axiom_ty_builder = IRBuilder::new(ctxt, ty_inst.clone(), &mut ir);
 
                     // type instantiation for axiom

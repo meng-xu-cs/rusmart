@@ -2,6 +2,7 @@
 define cmdline
 Please choose one of the specific commands:
   - cloc: count total number of lines of code
+  - rego: semantics for language: rego
 endef
 export cmdline
 
@@ -10,6 +11,7 @@ help:
 
 cloc:
 	@cloc \
+		Makefile \
 		Cargo.toml \
 		rust-toolchain \
 		utils \
@@ -17,4 +19,8 @@ cloc:
 		cli \
 		lang
 
-.PHONY: help cloc
+rego:
+	@cd lang/rego && \
+		cargo run
+
+.PHONY: help cloc rego
