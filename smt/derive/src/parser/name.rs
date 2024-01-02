@@ -90,7 +90,7 @@ fn parse_ident_from_pat(pat: &Pat) -> Result<&Ident> {
 
 /// Utility macro to define a name
 macro_rules! name {
-    ($(#[$meta:meta])* $name:ident > $child:ty) => {
+    ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
         #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
         pub struct $name {
@@ -132,6 +132,9 @@ macro_rules! name {
                 parse_ident_from_pat(value)?.try_into()
             }
         }
+    };
+    ($(#[$meta:meta])* $name:ident > $child:ty) => {
+        name!($(#[$meta])* $name);
 
         impl From<$child> for $name {
             fn from(name: $child) -> Self {

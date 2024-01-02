@@ -1,6 +1,6 @@
 /// Utility macro to define a name
 macro_rules! name {
-    ($(#[$meta:meta])* $name:ident : $parent:ty) => {
+    ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
         #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
         pub struct $name {
@@ -18,6 +18,10 @@ macro_rules! name {
                 write!(f, "{}", self.ident)
             }
         }
+    };
+
+    ($(#[$meta:meta])* $name:ident : $parent:ty) => {
+        name!($(#[$meta])* $name);
 
         impl From<$parent> for $name {
             fn from(name: $parent) -> Self {
@@ -40,7 +44,28 @@ macro_rules! name {
 name! {
     /// Name of a type parameter that implements the SMT trait
     SmtSortName
-        : crate::parser::name::TypeParamName
+}
+
+impl SmtSortName {
+    /// Create an uninterpreted sort for function param
+    pub fn new_func_param(
+        func: &crate::parser::name::UsrFuncName,
+        param: &crate::parser::name::TypeParamName,
+    ) -> Self {
+        Self {
+            ident: format!("{}_{}", func, param),
+        }
+    }
+
+    /// Create an uninterpreted sort for axiom param
+    pub fn new_axiom_param(
+        axiom: &crate::parser::name::AxiomName,
+        param: &crate::parser::name::TypeParamName,
+    ) -> Self {
+        Self {
+            ident: format!("{}_{}", axiom, param),
+        }
+    }
 }
 
 name! {
