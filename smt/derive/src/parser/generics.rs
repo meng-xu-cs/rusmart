@@ -391,6 +391,15 @@ pub enum PartialInst {
     Unassigned(TypeParamName),
 }
 
+impl Display for PartialInst {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Assigned(t) => t.fmt(f),
+            Self::Unassigned(n) => n.fmt(f),
+        }
+    }
+}
+
 /// Monomorphization result for the whole generics
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Monomorphization {
@@ -407,6 +416,16 @@ impl Monomorphization {
                 PartialInst::Unassigned(name) => Some(name.clone()),
             })
             .collect()
+    }
+}
+
+impl Display for Monomorphization {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.args.is_empty() {
+            f.write_str("")
+        } else {
+            write!(f, "<{}>", self.args.iter().format(","))
+        }
     }
 }
 

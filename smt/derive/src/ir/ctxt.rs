@@ -182,8 +182,11 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
         let mut relevant_axioms = BTreeMap::new();
         let mut uninterpreted_axiom_params = BTreeMap::new();
 
-        let mut fixedpoint = true;
+        let mut fixedpoint;
         loop {
+            // always assume that we don't have more to analyze at the beginning
+            fixedpoint = true;
+
             // consolidate all related axioms and their instantiations
             let mut batch = BTreeMap::new();
             for (func_name, func_inst) in ir.reverse_function_instances() {
@@ -197,7 +200,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
                 }
             }
 
-            // self-interference and register axioms
+            // self-interference (for more mono instances) and register each axiom mono instance
             for (name, insts) in batch {
                 let axiom = ctxt.get_axiom(&name);
                 let existing_insts = relevant_axioms
@@ -206,12 +209,20 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
 
                 let mut all_new_insts = vec![];
                 for inst in insts {
+                    trace!("axiom {}{} is relevant", name, inst);
                     let additions = add_instantiation(&axiom.head.generics, existing_insts, inst);
                     all_new_insts.extend(additions.into_iter());
                 }
+                trace!(
+                    "monomorphization yields {} new instantiations for axiom {}",
+                    all_new_insts.len(),
+                    name
+                );
 
                 // register axiom under each new instantiation
                 for inst in all_new_insts {
+                    trace!("processing axiom {}{}", name, inst);
+
                     // first collect unspecified types
                     for ty_arg_inst in &inst.args {
                         match ty_arg_inst {
