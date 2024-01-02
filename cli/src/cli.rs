@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use structopt::StructOpt;
 
 use crate::dep::{DepState, Dependency};
@@ -20,37 +20,31 @@ pub enum DepAction {
     },
 }
 
-#[derive(StructOpt)]
-pub struct DepArgs {
-    /// Name of the deps
-    name: String,
-
-    /// Subcommand
-    #[structopt(subcommand)]
-    action: DepAction,
-}
-
-impl DepArgs {
+impl DepAction {
     fn run_internal<T: Dependency>(self) -> Result<()> {
-        let Self {
-            name: _,
-            action: command,
-        } = self;
         let state: DepState<T> = DepState::new()?;
-
-        match command {
+        match self {
             DepAction::Config => state.list_configurations()?,
             DepAction::Build { force } => state.build(force)?,
         }
         Ok(())
     }
+}
 
+#[derive(StructOpt)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum DepArgs {
+    /// Solver Z3
+    Z3(DepAction),
+    /// Solver CVC5
+    CVC5(DepAction),
+}
+
+impl DepArgs {
     pub fn run(self) -> Result<()> {
-        let name = self.name.as_str();
-        match name {
-            "z3" => self.run_internal::<DepZ3>(),
-            "cvc5" => self.run_internal::<DepCVC5>(),
-            _ => bail!("Invalid deps name: {}", name),
+        match self {
+            Self::Z3(action) => action.run_internal::<DepZ3>(),
+            Self::CVC5(action) => action.run_internal::<DepCVC5>(),
         }
     }
 }

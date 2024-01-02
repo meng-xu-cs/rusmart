@@ -1,7 +1,8 @@
-use std::fs;
 use std::process::Command;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
+
+use rusmart_utils::config::NUM_CPU_CORES;
 
 use crate::dep::{Artifact, Dependency};
 
@@ -29,18 +30,13 @@ impl Dependency for DepCVC5 {
 
     fn build(artifact: &Artifact) -> Result<()> {
         // config
-        let path_install = artifact.dst.join("install");
-        fs::create_dir(&path_install)?;
-
         let mut cmd = Command::new("./configure.sh");
         cmd.arg("debug")
             .arg(format!(
                 "--prefix={}",
-                path_install
-                    .to_str()
-                    .ok_or_else(|| anyhow!("<none-ascii path>"))?
+                artifact.dst.to_str().expect("ascii path")
             ))
-            .arg("--ninja")
+            .arg("--gpl")
             .arg("--auto-download")
             .current_dir(&artifact.src);
         let status = cmd.status()?;
@@ -50,15 +46,16 @@ impl Dependency for DepCVC5 {
         let path_build = artifact.src.join("build");
 
         // build
-        let mut cmd = Command::new("ninja");
-        cmd.current_dir(&path_build);
+        let mut cmd = Command::new("make");
+        cmd.arg(format!("-j{}", *NUM_CPU_CORES))
+            .current_dir(&path_build);
         let status = cmd.status()?;
         if !status.success() {
             bail!("build failed");
         }
 
         // install
-        let mut cmd = Command::new("ninja");
+        let mut cmd = Command::new("make");
         cmd.arg("install").current_dir(&path_build);
         let status = cmd.status()?;
         if !status.success() {

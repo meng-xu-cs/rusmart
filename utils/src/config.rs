@@ -83,6 +83,9 @@ lazy_static! {
             studio,
         }
     };
+
+    /// Number of CPU core
+    pub static ref NUM_CPU_CORES: usize = num_cpus::get();
 }
 
 /// initialize all configs
