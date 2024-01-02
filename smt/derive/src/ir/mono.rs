@@ -19,7 +19,7 @@ fn self_interference(
 
     let mut unifies = true;
     for (lhs, rhs) in inst_lhs.iter().zip(inst_rhs.iter()) {
-        match unifier.unify(&lhs, &rhs) {
+        match unifier.unify(lhs, rhs) {
             Ok(None) => {
                 unifies = false;
                 break;
