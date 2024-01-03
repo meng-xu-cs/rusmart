@@ -10,9 +10,9 @@ use crate::parser::ctxt::Context;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
-mod parser;
-
+mod backend;
 mod ir;
+mod parser;
 
 /// Default pipeline after a context is constructed
 fn pipeline(ctxt: Context) -> Result<()> {
@@ -24,7 +24,7 @@ fn pipeline(ctxt: Context) -> Result<()> {
         .finalize();
     for item in parsed.refinements() {
         debug!("processing verification condition {}", item);
-        IRBuilder::build(&parsed, item);
+        let ir = IRBuilder::build(&parsed, item);
     }
     Ok(())
 }
