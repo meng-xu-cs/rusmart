@@ -98,6 +98,8 @@ impl<T: BackendZ3> CodeGen for CodeGenZ3<T> {
         let mut command = Command::new(&path_bin);
         #[cfg(target_os = "macos")]
         command.env("DYLD_LIBRARY_PATH", &ARTIFACT_Z3.path_library);
+        #[cfg(not(target_os = "macos"))]
+        command.env("LD_LIBRARY_PATH", &ARTIFACT_Z3.path_library);
 
         // produce a script for local debugging
         if matches!(*MODE, Mode::Debug | Mode::Verbose) {
