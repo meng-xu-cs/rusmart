@@ -1,9 +1,9 @@
 use crate::backend::codegen::{l, ContentBuilder};
 
-/// Variable of the config holder for Z3
+/// Variable of the config holder
 const CFG: &str = "cfg";
 
-/// Variable of the context manager for Z3
+/// Variable of the context manager
 const CTX: &str = "ctx";
 
 pub struct Snippet {}

@@ -1,5 +1,6 @@
 use crate::backend::codegen::{l, ContentBuilder};
 use crate::backend::cvc5::common::BackendCVC5;
+use crate::backend::cvc5::snippet::Snippet;
 use crate::backend::error::BackendResult;
 use crate::backend::exec::Response;
 use crate::ir::ctxt::IRContext;
@@ -22,16 +23,19 @@ impl BackendCVC5 for BackendCVC5SMT {
         let mut x = ContentBuilder::new();
 
         // includes
-        l!(x, "#include <stdio.h>");
+        l!(x, "#include <iostream>");
         l!(x, "#include <cvc5/cvc5.h>");
+        l!(x, "using namespace cvc5;");
         l!(x);
 
         // main function
         l!(x, "// modeling for relation: {}", ir.desc);
         l!(x, "int main() {");
         x.scope(|x| {
+            Snippet::prologue(x);
+
             // TODO: content
-            l!(x, "printf(\"{}\");", Response::Unknown);
+            l!(x, "std::cout << \"{}\";", Response::Unknown);
 
             l!(x, "return 0;");
         });
