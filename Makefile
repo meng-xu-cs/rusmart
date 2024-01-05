@@ -3,6 +3,7 @@ define cmdline
 Please choose one of the specific commands:
   - lint: lint and format the code 
   - cloc: count total number of lines of code
+  - deps: clean build the dependencies
   - rego: semantics for language: rego
 endef
 export cmdline
@@ -23,6 +24,12 @@ cloc:
 		smt \
 		cli \
 		lang
+
+deps:
+	@cd cli && \
+		cargo run deps z3 build --force
+	@cd cli && \
+		cargo run deps cvc5 build --force
 
 rego:
 	@cd lang/rego && \
