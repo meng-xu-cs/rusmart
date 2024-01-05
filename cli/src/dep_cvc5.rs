@@ -29,6 +29,14 @@ impl Dependency for DepCVC5 {
     }
 
     fn build(artifact: &Artifact) -> Result<()> {
+        // third-party
+        let mut cmd = Command::new(artifact.src.join("contrib").join("get-glpk-cut-log"));
+        cmd.current_dir(&artifact.src);
+        let status = cmd.status()?;
+        if !status.success() {
+            bail!("contrib/get-glpk-cut-log failed");
+        }
+
         // config
         let mut cmd = Command::new("./configure.sh");
         cmd.arg("debug")
@@ -37,6 +45,7 @@ impl Dependency for DepCVC5 {
                 artifact.dst.to_str().expect("ascii path")
             ))
             .arg("--gpl")
+            .arg("--best")
             .arg("--auto-download")
             .current_dir(&artifact.src);
         let status = cmd.status()?;
