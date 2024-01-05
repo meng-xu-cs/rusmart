@@ -1,7 +1,8 @@
-use crate::backend::codegen::ContentBuilder;
+use crate::backend::codegen::{l, ContentBuilder};
 use crate::backend::error::BackendResult;
 use crate::backend::exec::Response;
 use crate::backend::z3::common::BackendZ3;
+use crate::backend::z3::snippet::Snippet;
 use crate::ir::ctxt::IRContext;
 
 /// CHC engine
@@ -22,20 +23,23 @@ impl BackendZ3 for BackendZ3CHC {
         let mut x = ContentBuilder::new();
 
         // includes
-        x.line("#include <stdio.h>");
-        x.line("#include <z3.h>");
+        l!(x, "#include <stdio.h>");
+        l!(x, "#include <z3.h>");
+        l!(x);
 
         // main function
-        x.line("int main() {");
+        l!(x, "// modeling for relation: {}", ir.desc);
+        l!(x, "int main() {");
         x.scope(|x| {
-            x.line(format!("// modeling for relation: {}", ir.desc));
+            Snippet::prologue(x);
 
             // TODO: content
-            x.line(format!("printf(\"{}\");", Response::Unknown));
+            l!(x, "printf(\"{}\");", Response::Unknown);
 
-            x.line("return 0;");
+            Snippet::epilogue(x);
+            l!(x, "return 0;");
         });
-        x.line("}");
+        l!(x, "}");
 
         // done
         Ok(x.build())

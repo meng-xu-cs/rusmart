@@ -49,3 +49,16 @@ impl ContentBuilder {
         self.buffer
     }
 }
+
+macro_rules! l {
+    ($builder:expr) => {
+        $builder.line("")
+    };
+    ($builder:expr, $item:expr) => {
+        $builder.line($item)
+    };
+    ($builder:expr, $fmt:expr, $($args:tt)*) => {
+        $builder.line(format!($fmt, $($args)*))
+    };
+}
+pub(crate) use l;

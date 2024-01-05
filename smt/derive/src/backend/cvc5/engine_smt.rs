@@ -1,4 +1,4 @@
-use crate::backend::codegen::ContentBuilder;
+use crate::backend::codegen::{l, ContentBuilder};
 use crate::backend::cvc5::common::BackendCVC5;
 use crate::backend::error::BackendResult;
 use crate::backend::exec::Response;
@@ -22,20 +22,20 @@ impl BackendCVC5 for BackendCVC5SMT {
         let mut x = ContentBuilder::new();
 
         // includes
-        x.line("#include <stdio.h>");
-        x.line("#include <cvc5/cvc5.h>");
+        l!(x, "#include <stdio.h>");
+        l!(x, "#include <cvc5/cvc5.h>");
+        l!(x);
 
         // main function
-        x.line("int main() {");
+        l!(x, "// modeling for relation: {}", ir.desc);
+        l!(x, "int main() {");
         x.scope(|x| {
-            x.line(format!("// modeling for relation: {}", ir.desc));
-
             // TODO: content
-            x.line(format!("printf(\"{}\");", Response::Unknown));
+            l!(x, "printf(\"{}\");", Response::Unknown);
 
-            x.line("return 0;");
+            l!(x, "return 0;");
         });
-        x.line("}");
+        l!(x, "}");
 
         // done
         Ok(x.build())
