@@ -1,9 +1,16 @@
-use crate::backend::codegen::{BackendResult, ContentBuilder};
+use crate::backend::codegen::ContentBuilder;
+use crate::backend::error::BackendResult;
 use crate::backend::z3::common::BackendZ3;
 use crate::ir::ctxt::IRContext;
 
 /// CHC engine
 pub struct BackendZ3CHC {}
+
+impl BackendZ3CHC {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl BackendZ3 for BackendZ3CHC {
     fn name(&self) -> String {
@@ -11,23 +18,21 @@ impl BackendZ3 for BackendZ3CHC {
     }
 
     fn process(&self, ir: &IRContext) -> BackendResult<String> {
-        let mut content = String::new();
-        let mut builder = ContentBuilder::new(&mut content);
+        let mut x = ContentBuilder::new();
 
         // includes
-        builder.line("#include <z3.h>");
+        x.line("#include <z3.h>");
 
         // main function
-        builder.line("int main() {");
-        {
-            let mut f_main = builder.indent();
-            f_main.line(format!("// modeling for relation: {}", ir.desc));
+        x.line("int main() {");
+        x.scope(|x| {
+            x.line(format!("// modeling for relation: {}", ir.desc));
             // TODO: content
-            f_main.line("return 0;");
-        }
-        builder.line("}");
+            x.line("return 0;");
+        });
+        x.line("}");
 
         // done
-        Ok(content)
+        Ok(x.build())
     }
 }

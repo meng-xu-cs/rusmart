@@ -1,13 +1,7 @@
 use std::path::Path;
 
+use crate::backend::error::BackendResult;
 use crate::ir::ctxt::IRContext;
-
-/// An error for backend generator
-pub enum BackendError {
-    NotSupported,
-}
-
-pub type BackendResult<T> = Result<T, BackendError>;
 
 /// Generic trait for backend code generator
 pub trait CodeGen {
@@ -19,15 +13,18 @@ pub trait CodeGen {
 }
 
 /// A utility for source code builder
-pub struct ContentBuilder<'a> {
-    buffer: &'a mut String,
+pub struct ContentBuilder {
+    buffer: String,
     indent: usize,
 }
 
-impl<'a> ContentBuilder<'a> {
+impl ContentBuilder {
     /// Create a new builder
-    pub fn new(buffer: &'a mut String) -> Self {
-        Self { buffer, indent: 0 }
+    pub fn new() -> Self {
+        Self {
+            buffer: String::new(),
+            indent: 0,
+        }
     }
 
     /// Add a new line to the content
@@ -40,10 +37,14 @@ impl<'a> ContentBuilder<'a> {
     }
 
     /// Indented builder
-    pub fn indent(&'a mut self) -> Self {
-        Self {
-            buffer: self.buffer,
-            indent: self.indent + 1,
-        }
+    pub fn scope<F: Fn(&mut Self)>(&mut self, f: F) {
+        self.indent += 1;
+        f(self);
+        self.indent -= 1;
+    }
+
+    /// Convert it to string
+    pub fn build(self) -> String {
+        self.buffer
     }
 }

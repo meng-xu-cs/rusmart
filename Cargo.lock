@@ -445,6 +445,7 @@ dependencies = [
  "rusmart-smt-derive",
  "rusmart-smt-remark",
  "rusmart-smt-stdlib",
+ "rusmart-utils",
 ]
 
 [[package]]

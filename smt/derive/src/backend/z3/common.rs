@@ -6,7 +6,8 @@ use lazy_static::lazy_static;
 
 use rusmart_cli::cli::expect_z3;
 
-use crate::backend::codegen::{BackendResult, CodeGen};
+use crate::backend::codegen::CodeGen;
+use crate::backend::error::BackendResult;
 use crate::ir::ctxt::IRContext;
 
 /// Z3 artifact wrapper
@@ -41,6 +42,12 @@ pub trait BackendZ3 {
 /// Wrapper for the backend
 pub struct CodeGenZ3<T: BackendZ3> {
     backend: T,
+}
+
+impl<T: BackendZ3> CodeGenZ3<T> {
+    pub fn new(backend: T) -> Self {
+        Self { backend }
+    }
 }
 
 impl<T: BackendZ3> CodeGen for CodeGenZ3<T> {
