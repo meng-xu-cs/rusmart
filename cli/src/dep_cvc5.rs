@@ -45,9 +45,13 @@ impl Dependency for DepCVC5 {
                 artifact.dst.to_str().expect("ascii path")
             ))
             .arg("--gpl")
-            .arg("--best")
-            .arg("--auto-download")
-            .current_dir(&artifact.src);
+            .arg("--auto-download");
+
+        // NOTE: CLN-EP cannot be built on MacOS
+        #[cfg(not(target_os = "macos"))]
+        cmd.arg("--best");
+
+        cmd.current_dir(&artifact.src);
         let status = cmd.status()?;
         if !status.success() {
             bail!("configure failed");

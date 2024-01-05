@@ -2,6 +2,7 @@ use anyhow::Result;
 use structopt::StructOpt;
 
 use rusmart_cli::cli::DepArgs;
+use rusmart_utils::config::initialize;
 
 #[derive(StructOpt)]
 #[structopt(
@@ -24,6 +25,9 @@ enum Command {
 
 /// Main entrypoint
 pub fn main() -> Result<()> {
+    initialize();
+
+    // parse arguments
     let args = Args::from_args();
     let Args { command } = args;
 
