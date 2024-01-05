@@ -1,4 +1,4 @@
-use crate::backend::codegen::ContentBuilder;
+use crate::backend::codegen::{ContentBuilder, Response};
 use crate::backend::error::BackendResult;
 use crate::backend::z3::common::BackendZ3;
 use crate::ir::ctxt::IRContext;
@@ -21,13 +21,17 @@ impl BackendZ3 for BackendZ3CHC {
         let mut x = ContentBuilder::new();
 
         // includes
+        x.line("#include <stdio.h>");
         x.line("#include <z3.h>");
 
         // main function
         x.line("int main() {");
         x.scope(|x| {
             x.line(format!("// modeling for relation: {}", ir.desc));
+
             // TODO: content
+            x.line(format!("printf(\"{}\");", Response::Unknown));
+
             x.line("return 0;");
         });
         x.line("}");

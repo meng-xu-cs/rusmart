@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 
 use rusmart_cli::cli::expect_z3;
 
-use crate::backend::codegen::CodeGen;
+use crate::backend::codegen::{run_backend, CodeGen, Response};
 use crate::backend::error::BackendResult;
 use crate::ir::ctxt::IRContext;
 
@@ -55,7 +55,7 @@ impl<T: BackendZ3> CodeGen for CodeGenZ3<T> {
         self.backend.name()
     }
 
-    fn execute(&self, ir: &IRContext, path_wks: &Path) -> BackendResult<()> {
+    fn execute(&self, ir: &IRContext, path_wks: &Path) -> BackendResult<Response> {
         // generate
         let code = self.backend.process(ir)?;
 
@@ -86,8 +86,21 @@ impl<T: BackendZ3> CodeGen for CodeGenZ3<T> {
             panic!("compilation failed, check output for details");
         }
 
-        // run
-        // TODO
-        Ok(())
+        // prepare the command
+        let mut command = Command::new(&path_bin);
+        #[cfg(target_os = "macos")]
+        command.env("DYLD_LIBRARY_PATH", &ARTIFACT_Z3.path_library);
+
+        // hand it for execution
+        let response = run_backend(command);
+
+        // occasionally, z3 leaves a trace file, remove it
+        let log_z3_trace = Path::new(".z3-trace");
+        if log_z3_trace.exists() {
+            fs::remove_file(log_z3_trace).expect("removing .z3-trace");
+        }
+
+        // done
+        Ok(response)
     }
 }

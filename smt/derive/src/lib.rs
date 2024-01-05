@@ -65,7 +65,12 @@ pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result
             fs::create_dir(&path_wks).expect("workspace freshly created");
 
             match solver.execute(&ir, &path_wks) {
-                Ok(()) => (),
+                Ok(response) => {
+                    debug!(
+                        "[{}] solving {} with {}: {}",
+                        count, ir.desc, name, response
+                    );
+                }
                 Err(BackendError::NotSupported) => {
                     info!(
                         "[{}] solving {} with {}: not supported",
