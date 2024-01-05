@@ -7,7 +7,7 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.79"
 rusmart-smt-stdlib = { path = "../../smt/stdlib" }
 rusmart-smt-remark = { path = "../../smt/remark" }
 rusmart-smt-derive = { path = "../../smt/derive" }
