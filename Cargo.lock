@@ -453,10 +453,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "itertools",
+ "lazy_static",
  "log",
  "petgraph",
  "proc-macro2",
  "quote",
+ "rusmart-cli",
  "rusmart-utils",
  "syn 2.0.48",
  "walkdir",

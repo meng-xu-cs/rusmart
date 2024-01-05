@@ -15,6 +15,8 @@ use crate::parser::ty::TypeTag;
 
 /// A context for intermediate representation
 pub struct IRContext {
+    /// description
+    pub desc: String,
     /// uninterpreted sorts
     pub undef_sorts: BTreeSet<SmtSortName>,
     /// type registry
@@ -27,8 +29,9 @@ pub struct IRContext {
 
 impl IRContext {
     /// Create an empty context
-    fn new() -> Self {
+    fn new(desc: String) -> Self {
         Self {
+            desc,
             undef_sorts: BTreeSet::new(),
             ty_registry: TypeRegistry::new(),
             fn_registry: FunRegistry::new(),
@@ -113,7 +116,7 @@ impl<'a, 'ctx: 'a> IRBuilder<'a, 'ctx> {
 
     /// Initialize it with a new refinement relation
     pub fn build(ctxt: &'ctx ASTContext, rel: &'ctx Refinement) -> IRContext {
-        let mut ir = IRContext::new();
+        let mut ir = IRContext::new(rel.to_string());
 
         // get the pair
         let fn_impl = ctxt.get_func(&rel.fn_impl);
