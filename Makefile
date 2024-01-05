@@ -35,4 +35,4 @@ rego:
 	@cd lang/rego && \
 		cargo run
 
-.PHONY: help lint cloc rego
+.PHONY: help lint cloc deps rego
