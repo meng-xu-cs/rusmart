@@ -62,6 +62,8 @@ pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result
             debug!("[{}] solving {} with {}", count, ir.desc, name);
 
             let path_wks = output.join(count.to_string());
+            fs::create_dir(&path_wks).expect("workspace freshly created");
+
             match solver.execute(&ir, &path_wks) {
                 Ok(()) => (),
                 Err(BackendError::NotSupported) => {
