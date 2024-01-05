@@ -5,9 +5,11 @@ use std::process::Command;
 use lazy_static::lazy_static;
 
 use rusmart_cli::cli::expect_z3;
+use rusmart_utils::config::{Mode, MODE};
 
-use crate::backend::codegen::{run_backend, CodeGen, Response};
+use crate::backend::codegen::CodeGen;
 use crate::backend::error::BackendResult;
+use crate::backend::exec::{mk_shell_script, run_backend, Response};
 use crate::ir::ctxt::IRContext;
 
 /// Z3 artifact wrapper
@@ -66,7 +68,7 @@ impl<T: BackendZ3> CodeGen for CodeGenZ3<T> {
         fs::write(&path_src, code)
             .unwrap_or_else(|e| panic!("IO error on writing to main.c: {}", e));
 
-        // compile
+        // prepare the compile command
         let path_bin = path_wks.join("main");
         let mut command = Command::new("cc");
         command
@@ -79,6 +81,12 @@ impl<T: BackendZ3> CodeGen for CodeGenZ3<T> {
             .arg(&path_bin)
             .arg(&path_src);
 
+        // produce a script for local debugging
+        if matches!(*MODE, Mode::Debug | Mode::Verbose) {
+            mk_shell_script(&command, &path_wks.join("build.sh"));
+        }
+
+        // run the compile command
         let status = command
             .status()
             .unwrap_or_else(|e| panic!("unexpected error in command invocation: {}", e));
@@ -86,10 +94,15 @@ impl<T: BackendZ3> CodeGen for CodeGenZ3<T> {
             panic!("compilation failed, check output for details");
         }
 
-        // prepare the command
+        // prepare the execution command
         let mut command = Command::new(&path_bin);
         #[cfg(target_os = "macos")]
         command.env("DYLD_LIBRARY_PATH", &ARTIFACT_Z3.path_library);
+
+        // produce a script for local debugging
+        if matches!(*MODE, Mode::Debug | Mode::Verbose) {
+            mk_shell_script(&command, &path_wks.join("solve.sh"));
+        }
 
         // hand it for execution
         let response = run_backend(command);
