@@ -1,8 +1,10 @@
+use std::fs;
+
 use anyhow::Result;
 use structopt::StructOpt;
 
 use rusmart_cli::cli::DepArgs;
-use rusmart_utils::config::initialize;
+use rusmart_utils::config::{initialize, WKS};
 
 #[derive(StructOpt)]
 #[structopt(
@@ -18,7 +20,9 @@ struct Args {
 
 #[derive(StructOpt)]
 enum Command {
-    /// The dependencies
+    /// Wipe-clean the entire workspace
+    Reset,
+    /// Dependencies
     #[structopt(name = "deps")]
     Deps(DepArgs),
 }
@@ -33,6 +37,7 @@ pub fn main() -> Result<()> {
 
     // run the command
     match command {
+        Command::Reset => fs::remove_dir_all(&WKS.studio)?,
         Command::Deps(sub) => sub.run()?,
     }
     Ok(())

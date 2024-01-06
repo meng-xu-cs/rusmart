@@ -1,10 +1,11 @@
 # help
 define cmdline
 Please choose one of the specific commands:
-  - lint: lint and format the code 
-  - cloc: count total number of lines of code
-  - deps: clean build the dependencies
-  - rego: semantics for language: rego
+  - lint	: lint and format the code
+  - cloc	: count total number of lines of code
+  - reset	: wipe out the entire states
+  - deps	: clean build the dependencies
+  - rego	: semantics for language: rego
 endef
 export cmdline
 
@@ -25,6 +26,9 @@ cloc:
 		cli \
 		lang
 
+reset:
+	@cd cli && cargo run reset
+
 deps:
 	@cd cli && \
 		cargo run deps z3 build --force
@@ -35,4 +39,4 @@ rego:
 	@cd lang/rego && \
 		cargo run
 
-.PHONY: help lint cloc deps rego
+.PHONY: help lint cloc reset deps rego
