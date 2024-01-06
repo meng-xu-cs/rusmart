@@ -27,14 +27,6 @@ impl Dependency for DepCVC5 {
     }
 
     fn build(artifact: &Artifact) -> Result<()> {
-        // third-party
-        let mut cmd = Command::new(artifact.src.join("contrib").join("get-glpk-cut-log"));
-        cmd.current_dir(&artifact.src);
-        let status = cmd.status()?;
-        if !status.success() {
-            bail!("contrib/get-glpk-cut-log failed");
-        }
-
         // config
         let mut cmd = Command::new("./configure.sh");
         cmd.arg("debug")
@@ -45,10 +37,6 @@ impl Dependency for DepCVC5 {
             .arg("--ninja")
             .arg("--gpl")
             .arg("--auto-download");
-
-        // NOTE: CLN-EP cannot be built on MacOS
-        #[cfg(not(target_os = "macos"))]
-        cmd.arg("--best");
 
         cmd.current_dir(&artifact.src);
         let status = cmd.status()?;
