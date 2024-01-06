@@ -2,8 +2,6 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-use rusmart_utils::config::NUM_CPU_CORES;
-
 use crate::dep::{Artifact, Dependency};
 
 // path constants
@@ -44,6 +42,7 @@ impl Dependency for DepCVC5 {
                 "--prefix={}",
                 artifact.dst.to_str().expect("ascii path")
             ))
+            .arg("--ninja")
             .arg("--gpl")
             .arg("--auto-download");
 
@@ -59,16 +58,15 @@ impl Dependency for DepCVC5 {
         let path_build = artifact.src.join("build");
 
         // build
-        let mut cmd = Command::new("make");
-        cmd.arg(format!("-j{}", *NUM_CPU_CORES))
-            .current_dir(&path_build);
+        let mut cmd = Command::new("ninja");
+        cmd.current_dir(&path_build);
         let status = cmd.status()?;
         if !status.success() {
             bail!("build failed");
         }
 
         // install
-        let mut cmd = Command::new("make");
+        let mut cmd = Command::new("ninja");
         cmd.arg("install").current_dir(&path_build);
         let status = cmd.status()?;
         if !status.success() {

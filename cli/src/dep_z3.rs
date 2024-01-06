@@ -1,8 +1,7 @@
+use std::fs;
 use std::process::Command;
 
 use anyhow::{bail, Result};
-
-use rusmart_utils::config::NUM_CPU_CORES;
 
 use crate::dep::{Artifact, Dependency};
 
@@ -18,11 +17,10 @@ impl Dependency for DepZ3 {
     }
 
     fn list_configurations(artifact: &Artifact) -> Result<()> {
-        let mut cmd = Command::new("python3");
-        cmd.arg("scripts/mk_make.py")
-            .arg("--help")
-            .current_dir(&artifact.src);
-
+        let mut cmd = Command::new("cmake");
+        cmd.arg("-LAH")
+            .arg(&artifact.src)
+            .current_dir(&artifact.dst);
         let status = cmd.status()?;
         if !status.success() {
             bail!("list configuration failed");
@@ -32,33 +30,35 @@ impl Dependency for DepZ3 {
 
     fn build(artifact: &Artifact) -> Result<()> {
         // config
-        let mut cmd = Command::new("python3");
-        cmd.arg("scripts/mk_make.py")
-            .arg(format!(
-                "--prefix={}",
-                artifact.dst.to_str().expect("ascii path")
-            ))
-            .arg("--debug")
-            .arg("--single-threaded")
-            .current_dir(&artifact.src);
+        let path_build = artifact.src.join("build");
+        fs::create_dir(&path_build)?;
+
+        let mut cmd = Command::new("cmake");
+        cmd.arg("-G")
+            .arg("Ninja")
+            .arg("-DCMAKE_BUILD_TYPE=Debug")
+            .arg("-DZ3_SINGLE_THREADED=TRUE")
+            .arg(&artifact.src)
+            .current_dir(&path_build);
         let status = cmd.status()?;
         if !status.success() {
             bail!("configure failed");
         }
-        let path_build = artifact.src.join("build");
 
         // build
-        let mut cmd = Command::new("make");
-        cmd.arg(format!("-j{}", *NUM_CPU_CORES))
-            .current_dir(&path_build);
+        let mut cmd = Command::new("cmake");
+        cmd.arg("--build").arg(&path_build);
         let status = cmd.status()?;
         if !status.success() {
             bail!("build failed");
         }
 
         // install
-        let mut cmd = Command::new("make");
-        cmd.arg("install").current_dir(&path_build);
+        let mut cmd = Command::new("cmake");
+        cmd.arg("--install")
+            .arg(&path_build)
+            .arg("--prefix")
+            .arg(&artifact.dst);
         let status = cmd.status()?;
         if !status.success() {
             bail!("install failed");
