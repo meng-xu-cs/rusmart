@@ -1,9 +1,9 @@
 pub mod ctxt;
 
-mod index;
+pub mod index;
 pub mod name;
 
-mod sort;
+pub mod sort;
 
 mod mono;
 

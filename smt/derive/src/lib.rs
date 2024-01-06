@@ -15,6 +15,7 @@ use crate::backend::exec::invoke_backend;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
+mod analysis;
 mod backend;
 mod ir;
 mod parser;

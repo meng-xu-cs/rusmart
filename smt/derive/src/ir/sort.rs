@@ -175,6 +175,11 @@ impl TypeRegistry {
         }
         panic!("no such sort id");
     }
+
+    /// Retrieve all user-defined data types
+    pub fn data_types(&self) -> &BTreeMap<UsrSortId, DataType> {
+        &self.defs
+    }
 }
 
 /// Sort-related functions in the IR builder

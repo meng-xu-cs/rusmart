@@ -1,3 +1,4 @@
+use crate::analysis::sort::topological_order;
 use crate::backend::codegen::{l, ContentBuilder};
 use crate::backend::error::BackendResult;
 use crate::backend::exec::Response;
@@ -37,6 +38,9 @@ impl BackendZ3 for BackendZ3CHC {
             for sort_name in &ir.undef_sorts {
                 Snippet::def_uninterpreted_sort(x, sort_name);
             }
+
+            // define user-defined datatypes
+            topological_order(&ir.ty_registry);
 
             // TODO: content
             l!(x, "printf(\"{}\");", Response::Unknown);
