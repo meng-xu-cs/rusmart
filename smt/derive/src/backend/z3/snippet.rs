@@ -35,7 +35,7 @@ impl Snippet {
     pub fn def_uninterpreted_sort(x: &mut ContentBuilder, sort: &SmtSortName) {
         l!(
             x,
-            "Z3_sort {} = Z3_mk_uninterpreted_sort({}, Z3_mk_string_symbol({}, {}));",
+            "Z3_sort {} = Z3_mk_uninterpreted_sort({}, Z3_mk_string_symbol({}, \"{}\"));",
             Self::ref_uninterpreted_sort(sort),
             CTX,
             CTX,
