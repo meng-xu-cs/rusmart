@@ -33,6 +33,11 @@ impl BackendZ3 for BackendZ3CHC {
         x.scope(|x| {
             Snippet::prologue(x);
 
+            // define uninterpreted sorts
+            for sort_name in &ir.undef_sorts {
+                Snippet::def_uninterpreted_sort(x, sort_name);
+            }
+
             // TODO: content
             l!(x, "printf(\"{}\");", Response::Unknown);
 

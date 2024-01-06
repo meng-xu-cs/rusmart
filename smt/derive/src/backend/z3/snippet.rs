@@ -1,4 +1,5 @@
 use crate::backend::codegen::{l, ContentBuilder};
+use crate::ir::name::SmtSortName;
 
 /// Variable of the config holder
 const CFG: &str = "cfg";
@@ -23,5 +24,22 @@ impl Snippet {
         l!(x);
         l!(x, "// epilogue");
         l!(x, "Z3_del_context({});", CTX);
+    }
+
+    /// Refer to an uninterpreted sort
+    fn ref_uninterpreted_sort(sort: &SmtSortName) -> String {
+        format!("sort_{}", sort)
+    }
+
+    /// Define an uninterpreted sort
+    pub fn def_uninterpreted_sort(x: &mut ContentBuilder, sort: &SmtSortName) {
+        l!(
+            x,
+            "Z3_sort {} = Z3_mk_uninterpreted_sort({}, Z3_mk_string_symbol({}, {}));",
+            Self::ref_uninterpreted_sort(sort),
+            CTX,
+            CTX,
+            sort,
+        )
     }
 }
