@@ -7,3 +7,6 @@
 
 # MacOS
 .DS_Store
+
+# Z3 trace files
+.z3-trace

@@ -11,6 +11,7 @@ use crate::backend::solvers;
 use crate::ir::ctxt::{IRBuilder, IRContext};
 use crate::parser::ctxt::Context;
 
+use crate::backend::exec::invoke_backend;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -64,7 +65,7 @@ pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result
             let path_wks = output.join(count.to_string());
             fs::create_dir(&path_wks).expect("workspace freshly created");
 
-            match solver.execute(&ir, &path_wks) {
+            match invoke_backend(&ir, solver.as_ref(), &path_wks) {
                 Ok(response) => {
                     debug!(
                         "[{}] solving {} with {}: {}",

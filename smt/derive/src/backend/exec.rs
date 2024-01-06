@@ -1,16 +1,21 @@
-use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
-use std::fs::Permissions;
 use std::io::Read;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
 use std::{fs, thread};
 
 use command_group::CommandGroup;
-use itertools::Itertools;
 use log::{debug, warn};
+
+use rusmart_utils::config::{Mode, MODE};
+
+use crate::backend::codegen::CodeGen;
+use crate::backend::error::BackendResult;
+use crate::ir::ctxt::IRContext;
+
+/// Execution timeout
+const MAIN_EXECUTABLE: &str = "main";
 
 /// Execution timeout
 const BACKEND_TIMEOUT: Duration = Duration::from_secs(60 * 10);
@@ -39,13 +44,67 @@ impl Display for Response {
     }
 }
 
-/// Utility on backend invocation and response conversion
-pub fn run_backend(mut command: Command) -> Response {
-    // launch the command
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command
-        .group_spawn()
-        .expect("spawning child group for command");
+/// Unified backend generation and execution service
+pub fn invoke_backend(
+    ir: &IRContext,
+    backend: &dyn CodeGen,
+    path_wks: &Path,
+) -> BackendResult<Response> {
+    // generate code
+    let code = backend.process(ir)?;
+
+    // save source code to designated file
+    let path_src = path_wks.join(format!("{}.{}", MAIN_EXECUTABLE, backend.flavor()));
+    if path_src.exists() {
+        panic!("source file already exists");
+    }
+    fs::write(&path_src, code).unwrap_or_else(|e| panic!("IO error on source file: {}", e));
+
+    // generate and save cmake file
+    let path_cmake = path_wks.join("CMakeLists.txt");
+    fs::write(path_cmake, backend.cmake())
+        .unwrap_or_else(|e| panic!("IO error on cmake file: {}", e));
+
+    // config
+    let path_build = path_wks.join("build");
+    fs::create_dir(&path_build).expect("create fresh build directory");
+
+    let mut cmd = Command::new("cmake");
+    cmd.arg("-G")
+        .arg("Ninja")
+        .arg(path_wks)
+        .current_dir(&path_build);
+    if matches!(*MODE, Mode::Prod | Mode::Dev) {
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
+    }
+
+    let status = cmd
+        .status()
+        .unwrap_or_else(|e| panic!("unexpected error in command invocation: {}", e));
+    if !status.success() {
+        panic!("setup failed, check output for details");
+    }
+
+    // compile
+    let mut cmd = Command::new("cmake");
+    cmd.arg("--build").arg(&path_build);
+    if matches!(*MODE, Mode::Prod | Mode::Dev) {
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
+    }
+
+    let status = cmd
+        .status()
+        .unwrap_or_else(|e| panic!("unexpected error in command invocation: {}", e));
+    if !status.success() {
+        panic!("build failed, check output for details");
+    }
+
+    // execute
+    let mut cmd = Command::new(path_build.join(MAIN_EXECUTABLE));
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.group_spawn().expect("spawning for execution");
 
     let mut stdout = child.inner().stdout.take().expect("piped stdout");
     let mut stderr = child.inner().stderr.take().expect("piped stderr");
@@ -115,32 +174,7 @@ pub fn run_backend(mut command: Command) -> Response {
             }
         }
     };
-    response
-}
 
-/// Utility on force coercion of OsStr to str
-fn to_ascii(v: &OsStr) -> &str {
-    v.to_str().expect("ascii string")
-}
-
-/// Utility on command to shell script conversion
-pub fn mk_shell_script(command: &Command, path: &Path) {
-    // produce the shell command
-    let shell = format!(
-        "{} {} {}",
-        // environment
-        command.get_envs().format_with(" ", |(k, v), f| {
-            f(&format_args!("{}={}", to_ascii(k), v.map_or("", to_ascii),))
-        }),
-        // program
-        to_ascii(command.get_program()),
-        // arguments
-        command.get_args().map(to_ascii).format(" "),
-    );
-
-    // write to file
-    fs::write(path, shell.trim()).expect("file IO");
-
-    // change file permission
-    fs::set_permissions(path, Permissions::from_mode(0o755)).expect("file permissions");
+    // finally, return the output
+    Ok(response)
 }

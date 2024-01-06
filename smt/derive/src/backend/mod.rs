@@ -7,7 +7,7 @@ use crate::backend::z3::engine_chc::BackendZ3CHC;
 pub mod error;
 
 mod codegen;
-mod exec;
+pub mod exec;
 
 mod cvc5;
 mod z3;

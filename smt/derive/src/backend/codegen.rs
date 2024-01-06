@@ -1,7 +1,4 @@
-use std::path::Path;
-
 use crate::backend::error::BackendResult;
-use crate::backend::exec::Response;
 use crate::ir::ctxt::IRContext;
 
 /// Generic trait for backend code generator
@@ -9,8 +6,14 @@ pub trait CodeGen {
     /// Mark the name of the code generator
     fn name(&self) -> String;
 
-    /// Execute the IR with backend-specific logic
-    fn execute(&self, ir: &IRContext, path_wks: &Path) -> BackendResult<Response>;
+    /// Content of the cmake file
+    fn cmake(&self) -> String;
+
+    /// Extension of the source code file
+    fn flavor(&self) -> &'static str;
+
+    /// Generate code for the IR context
+    fn process(&self, ir: &IRContext) -> BackendResult<String>;
 }
 
 /// A utility for source code builder
