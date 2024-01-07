@@ -1,5 +1,5 @@
 pub mod common;
 
-mod snippet;
+mod session;
 
 pub mod engine_chc;

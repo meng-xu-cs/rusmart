@@ -3,7 +3,7 @@ use crate::backend::codegen::{l, ContentBuilder};
 use crate::backend::error::BackendResult;
 use crate::backend::exec::Response;
 use crate::backend::z3::common::BackendZ3;
-use crate::backend::z3::snippet::Snippet;
+use crate::backend::z3::session::Session;
 use crate::ir::ctxt::IRContext;
 
 /// CHC engine
@@ -32,20 +32,20 @@ impl BackendZ3 for BackendZ3CHC {
         l!(x, "// modeling for relation: {}", ir.desc);
         l!(x, "int main() {");
         x.scope(|x| {
-            Snippet::prologue(x);
+            let mut session = Session::prologue(x);
 
             // define uninterpreted sorts
             for sort_name in &ir.undef_sorts {
-                Snippet::def_uninterpreted_sort(x, sort_name);
+                session.def_uninterpreted_sort(x, sort_name);
             }
 
-            // define user-defined datatypes
+            // define user-defined data types
             for scc in sort_in_topological_order(&ir.ty_registry) {}
 
             // TODO: content
             l!(x, "printf(\"{}\");", Response::Unknown);
 
-            Snippet::epilogue(x);
+            session.epilogue(x);
             l!(x, "return 0;");
         });
         l!(x, "}");
