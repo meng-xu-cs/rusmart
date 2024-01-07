@@ -4,7 +4,7 @@ use crate::analysis::sort::probe_optionals_for_datatype;
 use crate::backend::codegen::{l, ContentBuilder};
 use crate::ir::index::UsrSortId;
 use crate::ir::name::SmtSortName;
-use crate::ir::sort::{DataType, Sort};
+use crate::ir::sort::{DataType, Sort, TypeRegistry};
 
 /// Variable of the config holder
 const CFG: &str = "cfg";
@@ -15,6 +15,16 @@ const CTX: &str = "ctx";
 /// Bitsize for the error type
 const ERROR_BV_SIZE: usize = 1024;
 
+/// Datatype pack for optional<sort>
+struct OptionalPack {
+    sort_name: String,
+    mk_none: String,
+    is_none: String,
+    mk_some: String,
+    is_some: String,
+    get_some: String,
+}
+
 /// Code accumulation session
 pub struct Session {
     /// symbol count
@@ -24,7 +34,7 @@ pub struct Session {
     /// naming map for user-defined data type sorts
     sorts_data_type: BTreeMap<UsrSortId, String>,
     /// naming map for optional sorts
-    sorts_optional: BTreeMap<Sort, String>,
+    sorts_optional: BTreeMap<Sort, OptionalPack>,
 }
 
 impl Session {
@@ -56,6 +66,11 @@ impl Session {
     fn new_symbol(&mut self) -> String {
         self.symbol_count += 1;
         format!("Z3_mk_int_symbol({}, {})", CTX, self.symbol_count)
+    }
+
+    /// Create an integer symbol
+    fn int_symbol(index: usize) -> String {
+        format!("Z3_mk_int_symbol({}, {})", CTX, index)
     }
 
     /// Create a string symbol
@@ -112,6 +127,8 @@ impl Session {
         self.sorts_optional
             .get(sort)
             .unwrap_or_else(|| panic!("optional<sort> not declared: {}", sort))
+            .sort_name
+            .as_str()
     }
 
     /// Define an optional<sort> based on sort
@@ -152,7 +169,46 @@ impl Session {
             ctor_some,
         );
 
-        if self.sorts_optional.insert(sort.clone(), var).is_some() {
+        // retrieve accessors and testers
+        let mk_none = format!("func_{}_mk_none", var);
+        let is_none = format!("func_{}_is_none", var);
+        l!(x, "Z3_func_decl {};", mk_none);
+        l!(x, "Z3_func_decl {};", is_none);
+        l!(
+            x,
+            "Z3_query_constructor({}, {}, 0, &{}, &{}, (Z3_func_decl[]){{}});",
+            CTX,
+            ctor_none,
+            mk_none,
+            is_none,
+        );
+
+        let mk_some = format!("func_{}_mk_some", var);
+        let is_some = format!("func_{}_is_some", var);
+        let get_some = format!("func_{}_get_some", var);
+        l!(x, "Z3_func_decl {};", mk_some);
+        l!(x, "Z3_func_decl {};", is_some);
+        l!(x, "Z3_func_decl {};", get_some);
+        l!(
+            x,
+            "Z3_query_constructor({}, {}, 1, &{}, &{}, (Z3_func_decl[]){{{}}});",
+            CTX,
+            ctor_some,
+            mk_some,
+            is_some,
+            get_some
+        );
+
+        // register it in the states
+        let pack = OptionalPack {
+            sort_name: var,
+            mk_none,
+            is_none,
+            mk_some,
+            is_some,
+            get_some,
+        };
+        if self.sorts_optional.insert(sort.clone(), pack).is_some() {
             panic!("duplicated definition of optional<sort>: {}", sort);
         }
     }
@@ -165,19 +221,27 @@ impl Session {
     }
 
     /// Define a user-defined data type
-    pub fn def_datatype_single(&mut self, x: &mut ContentBuilder, sid: UsrSortId, dt: &DataType) {
+    pub fn def_datatype_single(
+        &mut self,
+        x: &mut ContentBuilder,
+        sid: UsrSortId,
+        registry: &TypeRegistry,
+    ) {
+        // query the data type first
+        let dt = registry.retrieve(sid);
+
         // probe and define (if not yet defined) optional sorts
         let mut optionals = BTreeSet::new();
         probe_optionals_for_datatype(dt, &mut optionals);
         for sort in optionals {
-            if self.sorts_optional.contains_key(&sort) {
-                continue;
+            if !self.sorts_optional.contains_key(&sort) {
+                self.def_optional_sort(x, &sort);
             }
-            self.def_optional_sort(x, &sort);
         }
 
+        // define the data type
         match dt {
-            DataType::Tuple(slots) => todo!(),
+            DataType::Tuple(slots) => {}
             DataType::Record(fields) => todo!(),
             DataType::Enum(variants) => todo!(),
         }

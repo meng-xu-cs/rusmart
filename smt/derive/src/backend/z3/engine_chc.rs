@@ -1,4 +1,4 @@
-use crate::analysis::sort::sort_in_topological_order;
+use crate::analysis::sort::{sort_in_topological_order, SortSCC};
 use crate::backend::codegen::{l, ContentBuilder};
 use crate::backend::error::BackendResult;
 use crate::backend::exec::Response;
@@ -40,7 +40,14 @@ impl BackendZ3 for BackendZ3CHC {
             }
 
             // define user-defined data types
-            for scc in sort_in_topological_order(&ir.ty_registry) {}
+            for scc in sort_in_topological_order(&ir.ty_registry) {
+                match scc {
+                    SortSCC::Simple(sid) => {
+                        session.def_datatype_single(x, sid, &ir.ty_registry);
+                    }
+                    SortSCC::Inductive(_) => todo!(),
+                }
+            }
 
             // TODO: content
             l!(x, "printf(\"{}\");", Response::Unknown);
