@@ -147,7 +147,7 @@ fn direct_deps_sort(sort: &Sort, deps: &mut BTreeSet<UsrSortId>) {
 }
 
 /// Topologically order the user-defined types collected in type registry
-pub fn topological_order(registry: &TypeRegistry) -> Vec<SortDep> {
+pub fn sort_in_topological_order(registry: &TypeRegistry) -> Vec<SortDep> {
     let mut graph = SortDepGraph::new(registry);
     for sid in registry.data_types().keys() {
         graph.add(*sid);

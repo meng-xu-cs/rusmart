@@ -1,4 +1,4 @@
-use crate::analysis::sort::topological_order;
+use crate::analysis::sort::sort_in_topological_order;
 use crate::backend::codegen::{l, ContentBuilder};
 use crate::backend::error::BackendResult;
 use crate::backend::exec::Response;
@@ -40,7 +40,7 @@ impl BackendZ3 for BackendZ3CHC {
             }
 
             // define user-defined datatypes
-            topological_order(&ir.ty_registry);
+            for scc in sort_in_topological_order(&ir.ty_registry) {}
 
             // TODO: content
             l!(x, "printf(\"{}\");", Response::Unknown);
