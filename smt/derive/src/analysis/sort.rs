@@ -157,7 +157,7 @@ pub fn sort_in_topological_order(registry: &TypeRegistry) -> Vec<SortSCC> {
 }
 
 /// Probe for sorts that needs an optional datatype
-pub fn probe_optionals_sort(sort: &Sort, deps: &mut BTreeSet<Sort>) {
+pub fn probe_optionals_for_sort(sort: &Sort, deps: &mut BTreeSet<Sort>) {
     match sort {
         Sort::Boolean
         | Sort::Integer
@@ -167,27 +167,27 @@ pub fn probe_optionals_sort(sort: &Sort, deps: &mut BTreeSet<Sort>) {
         | Sort::User(_) => (),
         Sort::Uninterpreted(_) => (),
         Sort::Seq(sub) | Sort::Set(sub) => {
-            probe_optionals_sort(sub, deps);
+            probe_optionals_for_sort(sub, deps);
         }
         Sort::Map(key, val) => {
-            probe_optionals_sort(key, deps);
-            probe_optionals_sort(val, deps);
+            probe_optionals_for_sort(key, deps);
+            probe_optionals_for_sort(val, deps);
             deps.insert(val.as_ref().clone());
         }
     }
 }
 
 /// Probe for sorts that needs an optional datatype
-pub fn probe_optionals_datatype(dt: &DataType, deps: &mut BTreeSet<Sort>) {
+pub fn probe_optionals_for_datatype(dt: &DataType, deps: &mut BTreeSet<Sort>) {
     match dt {
         DataType::Tuple(slots) => {
             for sort in slots {
-                probe_optionals_sort(sort, deps);
+                probe_optionals_for_sort(sort, deps);
             }
         }
         DataType::Record(fields) => {
             for sort in fields.values() {
-                probe_optionals_sort(sort, deps);
+                probe_optionals_for_sort(sort, deps);
             }
         }
         DataType::Enum(variants) => {
@@ -196,12 +196,12 @@ pub fn probe_optionals_datatype(dt: &DataType, deps: &mut BTreeSet<Sort>) {
                     Variant::Unit => (),
                     Variant::Tuple(slots) => {
                         for sort in slots {
-                            probe_optionals_sort(sort, deps);
+                            probe_optionals_for_sort(sort, deps);
                         }
                     }
                     Variant::Record(fields) => {
                         for sort in fields.values() {
-                            probe_optionals_sort(sort, deps);
+                            probe_optionals_for_sort(sort, deps);
                         }
                     }
                 }

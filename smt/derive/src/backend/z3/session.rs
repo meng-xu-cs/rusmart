@@ -1,5 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use crate::analysis::sort::probe_optionals_for_datatype;
 use crate::backend::codegen::{l, ContentBuilder};
 use crate::ir::index::UsrSortId;
 use crate::ir::name::SmtSortName;
@@ -51,6 +52,17 @@ impl Session {
         l!(x, "Z3_del_context({});", CTX);
     }
 
+    /// Create a new symbol
+    fn new_symbol(&mut self) -> String {
+        self.symbol_count += 1;
+        format!("Z3_mk_int_symbol({}, {})", CTX, self.symbol_count)
+    }
+
+    /// Create a string symbol
+    fn str_symbol(name: &str) -> String {
+        format!("Z3_mk_string_symbol({}, \"{}\")", CTX, name)
+    }
+
     /// Refer to an uninterpreted sort
     fn ref_uninterpreted_sort(&self, name: &SmtSortName) -> &str {
         self.sorts_uninterpreted
@@ -63,13 +75,11 @@ impl Session {
         let var = format!("sort_uninterpreted_{}", name);
         l!(
             x,
-            "Z3_sort {} = Z3_mk_uninterpreted_sort({}, Z3_mk_int_symbol({}, {}));",
+            "Z3_sort {} = Z3_mk_uninterpreted_sort({}, {});",
             var,
             CTX,
-            CTX,
-            self.symbol_count,
+            self.new_symbol(),
         );
-        self.symbol_count += 1;
 
         if self.sorts_uninterpreted.insert(name.clone(), var).is_some() {
             panic!("duplicated definition of uninterpreted sort: {}", name);
@@ -92,7 +102,7 @@ impl Session {
                 self.ref_optional_sort(val),
             ),
             Sort::Error => format!("Z3_mk_bv_sort({}, {})", CTX, ERROR_BV_SIZE),
-            Sort::User(sid) => self.ref_user_sort(*sid).to_string(),
+            Sort::User(sid) => self.ref_datatype_sort(*sid).to_string(),
             Sort::Uninterpreted(name) => self.ref_uninterpreted_sort(name).to_string(),
         }
     }
@@ -101,11 +111,54 @@ impl Session {
     fn ref_optional_sort(&self, sort: &Sort) -> &str {
         self.sorts_optional
             .get(sort)
-            .unwrap_or_else(|| panic!("optional sort not declared: {}", sort))
+            .unwrap_or_else(|| panic!("optional<sort> not declared: {}", sort))
+    }
+
+    /// Define an optional<sort> based on sort
+    fn def_optional_sort(&mut self, x: &mut ContentBuilder, sort: &Sort) {
+        let var = format!("sort_optional_{}", sort);
+
+        // make constructors
+        let ctor_none = format!("ctor_{}_none", var);
+        l!(
+            x,
+            "Z3_constructor {} = Z3_mk_constructor({}, {}, {}, 0, (Z3_symbol[]){{}}, (Z3_sort_opt[]){{}}, (unsigned[]){{}})",
+            ctor_none,
+            CTX,
+            Self::str_symbol("None"),
+            Self::str_symbol("is_none")
+        );
+
+        let ctor_some = format!("ctor_{}_some", var);
+        l!(
+            x,
+            "Z3_constructor {} = Z3_mk_constructor({}, {}, {}, 1, (Z3_symbol[]){{{}}}, (Z3_sort_opt[]){{{}}}, (unsigned[]){{}})",
+            ctor_some,
+            CTX,
+            Self::str_symbol("Some"),
+            Self::str_symbol("is_some"),
+            Self::str_symbol("some"),
+            self.ref_sort(sort),
+        );
+
+        // make datatype
+        l!(
+            x,
+            "Z3_sort {} = Z3_mk_datatype({}, {}, 2, (Z3_constructor[]){{{}, {}}});",
+            var,
+            CTX,
+            self.new_symbol(),
+            ctor_none,
+            ctor_some,
+        );
+
+        if self.sorts_optional.insert(sort.clone(), var).is_some() {
+            panic!("duplicated definition of optional<sort>: {}", sort);
+        }
     }
 
     /// Refer to a user-defined data type
-    fn ref_user_sort(&self, sid: UsrSortId) -> &str {
+    fn ref_datatype_sort(&self, sid: UsrSortId) -> &str {
         self.sorts_data_type
             .get(&sid)
             .unwrap_or_else(|| panic!("datatype sort not declared: {}", sid))
@@ -114,6 +167,15 @@ impl Session {
     /// Define a user-defined data type
     pub fn def_datatype_single(&mut self, x: &mut ContentBuilder, sid: UsrSortId, dt: &DataType) {
         // probe and define (if not yet defined) optional sorts
+        let mut optionals = BTreeSet::new();
+        probe_optionals_for_datatype(dt, &mut optionals);
+        for sort in optionals {
+            if self.sorts_optional.contains_key(&sort) {
+                continue;
+            }
+            self.def_optional_sort(x, &sort);
+        }
+
         match dt {
             DataType::Tuple(slots) => todo!(),
             DataType::Record(fields) => todo!(),
