@@ -15,14 +15,72 @@ const CTX: &str = "ctx";
 /// Bitsize for the error type
 const ERROR_BV_SIZE: usize = 1024;
 
+/// Utility macro to define a variable name
+macro_rules! var {
+    ($(#[$meta:meta])* $name:ident) => {
+        $(#[$meta])*
+        #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+        pub struct $name {
+            ident: String,
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                &self.ident
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(ident: String) -> Self {
+                Self {ident}
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.ident)
+            }
+        }
+    };
+}
+
+var! {
+    /// Z3_sort
+    Z3Sort
+}
+
+var! {
+    /// Z3_func_decl
+    Z3FuncDecl
+}
+
+var! {
+    /// Z3_constructor
+    Z3Ctor
+}
+
 /// Datatype pack for optional<sort>
-struct OptionalPack {
-    sort_name: String,
-    mk_none: String,
-    is_none: String,
-    mk_some: String,
-    is_some: String,
-    get_some: String,
+struct PackOptional {
+    sort_name: Z3Sort,
+    mk_none: Z3FuncDecl,
+    is_none: Z3FuncDecl,
+    mk_some: Z3FuncDecl,
+    is_some: Z3FuncDecl,
+    get_some: Z3FuncDecl,
+}
+
+/// Datatype pack for user-defined algebraic data types
+enum ADT {
+    Tuple {
+        sort_name: Z3Sort,
+        ctor: Z3FuncDecl,
+        getters: Vec<Z3FuncDecl>,
+    },
+    Record {
+        sort_name: Z3Sort,
+        ctor: Z3FuncDecl,
+        getters: BTreeMap<String, Z3FuncDecl>,
+    },
 }
 
 /// Code accumulation session
@@ -30,11 +88,11 @@ pub struct Session {
     /// symbol count
     symbol_count: usize,
     /// naming map for uninterpreted sorts
-    sorts_uninterpreted: BTreeMap<SmtSortName, String>,
-    /// naming map for user-defined data type sorts
-    sorts_data_type: BTreeMap<UsrSortId, String>,
+    sorts_uninterpreted: BTreeMap<SmtSortName, Z3Sort>,
+    /// naming map for user-defined algebraic data types
+    sorts_adt: BTreeMap<UsrSortId, Z3Sort>,
     /// naming map for optional sorts
-    sorts_optional: BTreeMap<Sort, OptionalPack>,
+    sorts_optional: BTreeMap<Sort, PackOptional>,
 }
 
 impl Session {
@@ -50,7 +108,7 @@ impl Session {
         Self {
             symbol_count: 0,
             sorts_uninterpreted: BTreeMap::new(),
-            sorts_data_type: BTreeMap::new(),
+            sorts_adt: BTreeMap::new(),
             sorts_optional: BTreeMap::new(),
         }
     }
@@ -83,11 +141,12 @@ impl Session {
         self.sorts_uninterpreted
             .get(name)
             .unwrap_or_else(|| panic!("uninterpreted sort not declared: {}", name))
+            .as_ref()
     }
 
     /// Define an uninterpreted sort
     pub fn def_uninterpreted_sort(&mut self, x: &mut ContentBuilder, name: &SmtSortName) {
-        let var = format!("sort_uninterpreted_{}", name);
+        let var = Z3Sort::from(format!("sort_uninterpreted_{}", name));
         l!(
             x,
             "Z3_sort {} = Z3_mk_uninterpreted_sort({}, {});",
@@ -117,7 +176,7 @@ impl Session {
                 self.ref_optional_sort(val),
             ),
             Sort::Error => format!("Z3_mk_bv_sort({}, {})", CTX, ERROR_BV_SIZE),
-            Sort::User(sid) => self.ref_datatype_sort(*sid).to_string(),
+            Sort::User(sid) => self.ref_adt_sort(*sid).to_string(),
             Sort::Uninterpreted(name) => self.ref_uninterpreted_sort(name).to_string(),
         }
     }
@@ -128,15 +187,15 @@ impl Session {
             .get(sort)
             .unwrap_or_else(|| panic!("optional<sort> not declared: {}", sort))
             .sort_name
-            .as_str()
+            .as_ref()
     }
 
     /// Define an optional<sort> based on sort
     fn def_optional_sort(&mut self, x: &mut ContentBuilder, sort: &Sort) {
-        let var = format!("sort_optional_{}", sort);
+        let var = Z3Sort::from(format!("sort_optional_{}", sort));
 
         // make constructors
-        let ctor_none = format!("ctor_{}_none", var);
+        let ctor_none = Z3Ctor::from(format!("ctor_{}_none", var));
         l!(
             x,
             "Z3_constructor {} = Z3_mk_constructor({}, {}, {}, 0, (Z3_symbol[]){{}}, (Z3_sort_opt[]){{}}, (unsigned[]){{}})",
@@ -146,7 +205,7 @@ impl Session {
             Self::str_symbol("is_none")
         );
 
-        let ctor_some = format!("ctor_{}_some", var);
+        let ctor_some = Z3Ctor::from(format!("ctor_{}_some", var));
         l!(
             x,
             "Z3_constructor {} = Z3_mk_constructor({}, {}, {}, 1, (Z3_symbol[]){{{}}}, (Z3_sort_opt[]){{{}}}, (unsigned[]){{}})",
@@ -170,8 +229,8 @@ impl Session {
         );
 
         // retrieve accessors and testers
-        let mk_none = format!("func_{}_mk_none", var);
-        let is_none = format!("func_{}_is_none", var);
+        let mk_none = Z3FuncDecl::from(format!("func_{}_mk_none", var));
+        let is_none = Z3FuncDecl::from(format!("func_{}_is_none", var));
         l!(x, "Z3_func_decl {};", mk_none);
         l!(x, "Z3_func_decl {};", is_none);
         l!(
@@ -183,9 +242,9 @@ impl Session {
             is_none,
         );
 
-        let mk_some = format!("func_{}_mk_some", var);
-        let is_some = format!("func_{}_is_some", var);
-        let get_some = format!("func_{}_get_some", var);
+        let mk_some = Z3FuncDecl::from(format!("func_{}_mk_some", var));
+        let is_some = Z3FuncDecl::from(format!("func_{}_is_some", var));
+        let get_some = Z3FuncDecl::from(format!("func_{}_get_some", var));
         l!(x, "Z3_func_decl {};", mk_some);
         l!(x, "Z3_func_decl {};", is_some);
         l!(x, "Z3_func_decl {};", get_some);
@@ -200,7 +259,7 @@ impl Session {
         );
 
         // register it in the states
-        let pack = OptionalPack {
+        let pack = PackOptional {
             sort_name: var,
             mk_none,
             is_none,
@@ -214,14 +273,15 @@ impl Session {
     }
 
     /// Refer to a user-defined data type
-    fn ref_datatype_sort(&self, sid: UsrSortId) -> &str {
-        self.sorts_data_type
+    fn ref_adt_sort(&self, sid: UsrSortId) -> &str {
+        self.sorts_adt
             .get(&sid)
             .unwrap_or_else(|| panic!("datatype sort not declared: {}", sid))
+            .as_ref()
     }
 
-    /// Define a user-defined data type
-    pub fn def_datatype_single(
+    /// Define one user-defined ADT
+    pub fn def_adt_single(
         &mut self,
         x: &mut ContentBuilder,
         sid: UsrSortId,
@@ -239,7 +299,7 @@ impl Session {
             }
         }
 
-        // define the data type
+        // define the algebraic data type (ADT)
         match dt {
             DataType::Tuple(slots) => {}
             DataType::Record(fields) => todo!(),

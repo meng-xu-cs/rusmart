@@ -43,7 +43,7 @@ impl BackendZ3 for BackendZ3CHC {
             for scc in sort_in_topological_order(&ir.ty_registry) {
                 match scc {
                     SortSCC::Simple(sid) => {
-                        session.def_datatype_single(x, sid, &ir.ty_registry);
+                        session.def_adt_single(x, sid, &ir.ty_registry);
                     }
                     SortSCC::Inductive(_) => todo!(),
                 }
