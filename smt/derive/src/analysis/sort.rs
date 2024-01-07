@@ -7,7 +7,7 @@ use crate::ir::index::UsrSortId;
 use crate::ir::sort::{DataType, Sort, TypeRegistry, Variant};
 
 /// One SCC in the type dependency chain
-pub enum SortDep {
+pub enum SortSCC {
     /// A single type
     Simple(UsrSortId),
     /// An inductively defined type or type group
@@ -64,7 +64,7 @@ impl<'a> SortDepGraph<'a> {
     }
 
     /// Derive the type dependency chain
-    pub fn analyze(&self) -> Vec<SortDep> {
+    pub fn analyze(&self) -> Vec<SortSCC> {
         let mut steps = vec![];
         for scc in tarjan_scc(&self.graph) {
             assert!(!scc.is_empty());
@@ -73,10 +73,10 @@ impl<'a> SortDepGraph<'a> {
                 let sid = *self.graph.node_weight(idx).unwrap();
                 if self.graph.contains_edge(idx, idx) {
                     // self-referencing inductive type
-                    SortDep::Inductive(std::iter::once(sid).collect())
+                    SortSCC::Inductive(std::iter::once(sid).collect())
                 } else {
                     // simple and plain type definition
-                    SortDep::Simple(sid)
+                    SortSCC::Simple(sid)
                 }
             } else {
                 // a multi-node SCC is always a mutually-inductive group
@@ -84,7 +84,7 @@ impl<'a> SortDepGraph<'a> {
                     .into_iter()
                     .map(|i| *self.graph.node_weight(i).unwrap())
                     .collect();
-                SortDep::Inductive(names)
+                SortSCC::Inductive(names)
             };
             steps.push(step);
         }
@@ -125,6 +125,7 @@ fn direct_deps_datatype(dt: &DataType, deps: &mut BTreeSet<UsrSortId>) {
     }
 }
 
+/// List dependencies on user-defined types of this sort
 fn direct_deps_sort(sort: &Sort, deps: &mut BTreeSet<UsrSortId>) {
     match sort {
         Sort::Boolean
@@ -134,11 +135,11 @@ fn direct_deps_sort(sort: &Sort, deps: &mut BTreeSet<UsrSortId>) {
         | Sort::Error
         | Sort::Uninterpreted(_) => (),
         Sort::Seq(sub) | Sort::Set(sub) => {
-            direct_deps_sort(sub.as_ref(), deps);
+            direct_deps_sort(sub, deps);
         }
         Sort::Map(key, val) => {
-            direct_deps_sort(key.as_ref(), deps);
-            direct_deps_sort(val.as_ref(), deps);
+            direct_deps_sort(key, deps);
+            direct_deps_sort(val, deps);
         }
         Sort::User(sid) => {
             deps.insert(*sid);
@@ -147,10 +148,64 @@ fn direct_deps_sort(sort: &Sort, deps: &mut BTreeSet<UsrSortId>) {
 }
 
 /// Topologically order the user-defined types collected in type registry
-pub fn sort_in_topological_order(registry: &TypeRegistry) -> Vec<SortDep> {
+pub fn sort_in_topological_order(registry: &TypeRegistry) -> Vec<SortSCC> {
     let mut graph = SortDepGraph::new(registry);
     for sid in registry.data_types().keys() {
         graph.add(*sid);
     }
     graph.analyze()
+}
+
+/// Probe for sorts that needs an optional datatype
+pub fn probe_optionals_sort(sort: &Sort, deps: &mut BTreeSet<Sort>) {
+    match sort {
+        Sort::Boolean
+        | Sort::Integer
+        | Sort::Rational
+        | Sort::Text
+        | Sort::Error
+        | Sort::User(_) => (),
+        Sort::Uninterpreted(_) => (),
+        Sort::Seq(sub) | Sort::Set(sub) => {
+            probe_optionals_sort(sub, deps);
+        }
+        Sort::Map(key, val) => {
+            probe_optionals_sort(key, deps);
+            probe_optionals_sort(val, deps);
+            deps.insert(val.as_ref().clone());
+        }
+    }
+}
+
+/// Probe for sorts that needs an optional datatype
+pub fn probe_optionals_datatype(dt: &DataType, deps: &mut BTreeSet<Sort>) {
+    match dt {
+        DataType::Tuple(slots) => {
+            for sort in slots {
+                probe_optionals_sort(sort, deps);
+            }
+        }
+        DataType::Record(fields) => {
+            for sort in fields.values() {
+                probe_optionals_sort(sort, deps);
+            }
+        }
+        DataType::Enum(variants) => {
+            for variant in variants.values() {
+                match variant {
+                    Variant::Unit => (),
+                    Variant::Tuple(slots) => {
+                        for sort in slots {
+                            probe_optionals_sort(sort, deps);
+                        }
+                    }
+                    Variant::Record(fields) => {
+                        for sort in fields.values() {
+                            probe_optionals_sort(sort, deps);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
