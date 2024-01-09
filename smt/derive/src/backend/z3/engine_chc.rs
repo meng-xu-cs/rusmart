@@ -45,7 +45,9 @@ impl BackendZ3 for BackendZ3CHC {
                     SortSCC::Simple(sid) => {
                         session.def_adt_single(x, sid, &ir.ty_registry);
                     }
-                    SortSCC::Inductive(_) => todo!(),
+                    SortSCC::Inductive(group) => {
+                        session.def_adt_group(x, &group, &ir.ty_registry);
+                    }
                 }
             }
 

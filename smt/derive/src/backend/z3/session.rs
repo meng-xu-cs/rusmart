@@ -69,18 +69,43 @@ struct PackOptional {
     get_some: Z3FuncDecl,
 }
 
-/// Datatype pack for user-defined algebraic data types
-enum ADT {
+/// A variant for an enum
+enum EnumBranch {
+    Unit {
+        ctor: Z3FuncDecl,
+        tester: Z3FuncDecl,
+    },
     Tuple {
-        sort_name: Z3Sort,
+        ctor: Z3FuncDecl,
+        tester: Z3FuncDecl,
+        getters: Vec<Z3FuncDecl>,
+    },
+    Record {
+        ctor: Z3FuncDecl,
+        tester: Z3FuncDecl,
+        getters: BTreeMap<String, Z3FuncDecl>,
+    },
+}
+
+/// Datatype details for user-defined algebraic data types
+enum ADTDetails {
+    Tuple {
         ctor: Z3FuncDecl,
         getters: Vec<Z3FuncDecl>,
     },
     Record {
-        sort_name: Z3Sort,
         ctor: Z3FuncDecl,
         getters: BTreeMap<String, Z3FuncDecl>,
     },
+    Enum {
+        variants: BTreeMap<String, EnumBranch>,
+    },
+}
+
+/// Datatype pack for user-defined algebraic data types
+struct PackADT {
+    sort_name: Z3Sort,
+    details: ADTDetails,
 }
 
 /// Code accumulation session
@@ -301,9 +326,39 @@ impl Session {
 
         // define the algebraic data type (ADT)
         match dt {
-            DataType::Tuple(slots) => {}
+            DataType::Tuple(slots) => todo!(),
             DataType::Record(fields) => todo!(),
             DataType::Enum(variants) => todo!(),
         }
+    }
+
+    /// Define a user-defined mutually recursive ADT group
+    pub fn def_adt_group(
+        &mut self,
+        x: &mut ContentBuilder,
+        group: &BTreeSet<UsrSortId>,
+        registry: &TypeRegistry,
+    ) {
+        // query the data type first
+        let dts: BTreeMap<_, _> = group
+            .iter()
+            .map(|sid| (*sid, registry.retrieve(*sid)))
+            .collect();
+
+        // probe and define (if not yet defined) optional sorts
+        for &dt in dts.values() {
+            let mut optionals = BTreeSet::new();
+            probe_optionals_for_datatype(dt, &mut optionals);
+            // TODO: recheck
+            for sort in optionals {
+                if !self.sorts_optional.contains_key(&sort) {
+                    self.def_optional_sort(x, &sort);
+                }
+            }
+        }
+
+        // define the recursive ADT group
+
+        todo!()
     }
 }
