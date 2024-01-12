@@ -9,5 +9,5 @@ mod mono;
 
 mod axiom;
 mod exp;
-mod fun;
+pub mod fun;
 mod intrinsics;

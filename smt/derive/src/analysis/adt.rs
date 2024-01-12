@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::ctxt::IRContext;
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::{DiGraph, NodeIndex};
 
+use crate::ir::ctxt::IRContext;
+use crate::ir::fun::FunDef;
 use crate::ir::index::UsrSortId;
 use crate::ir::sort::{DataType, Sort, TypeRegistry, Variant};
 
@@ -155,6 +156,49 @@ pub enum SortSCC {
     Simple(ExplicitADT),
     /// An inductively defined type or type group
     Inductive(BTreeSet<ExplicitADT>),
+}
+
+impl IRContext {
+    /// Utility on collecting all sorts that every appears in the IR context
+    fn all_sorts(&self) -> BTreeSet<Sort> {
+        let mut results = BTreeSet::new();
+
+        // all user-defined data types
+        for sid in self.ty_registry.data_types().keys() {
+            results.insert(Sort::User(*sid));
+        }
+
+        // sorts appearing in functions
+        for insts in self.fn_registry.lookup.values() {
+            for (inst, fid) in insts {
+                results.extend(inst.iter().cloned());
+
+                let sig = self.fn_registry.retrieve_sig(*fid);
+                results.extend(sig.params.iter().map(|(_, t)| t.clone()));
+                results.insert(sig.ret_ty.clone());
+
+                match self.fn_registry.retrieve_def(*fid) {
+                    FunDef::Uninterpreted => (),
+                    FunDef::Defined(exps, _) => {
+                        todo!()
+                    }
+                }
+            }
+        }
+
+        // sorts appearing in axioms
+        for insts in self.axiom_registry.lookup.values() {
+            for (inst, aid) in insts {
+                results.extend(inst.iter().cloned());
+
+                let axiom = self.axiom_registry.retrieve(*aid);
+                results.extend(axiom.params.iter().map(|(_, t)| t.clone()));
+                todo!()
+            }
+        }
+
+        results
+    }
 }
 
 /// Topologically order the user-defined types collected in type registry

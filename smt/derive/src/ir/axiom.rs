@@ -25,7 +25,7 @@ pub struct Predicate {
 /// A registry of axioms involved
 pub struct AxiomRegistry {
     /// a map from axiom instantiations to axiom id
-    lookup: BTreeMap<UsrAxiomName, BTreeMap<Vec<Sort>, UsrAxiomId>>,
+    pub lookup: BTreeMap<UsrAxiomName, BTreeMap<Vec<Sort>, UsrAxiomId>>,
     /// a map for the actual axioms
     axioms: BTreeMap<UsrAxiomId, Predicate>,
 }
@@ -56,12 +56,17 @@ impl AxiomRegistry {
         idx
     }
 
-    /// Register a definition to the registry
+    /// Register an axiom to the registry
     fn register(&mut self, idx: UsrAxiomId, def: Predicate) {
         let existing = self.axioms.insert(idx, def);
         if existing.is_some() {
             panic!("axiom already registered");
         }
+    }
+
+    /// Retrieve the axiom predicate
+    pub fn retrieve(&self, idx: UsrAxiomId) -> &Predicate {
+        self.axioms.get(&idx).expect("no such axiom id")
     }
 }
 
