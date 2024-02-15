@@ -6,6 +6,7 @@ members = [
     "smt/stdlib",
     "smt/remark",
     "smt/derive",
+    "smt/testing",
     "lang/rego",
 ]
 resolver = "2"

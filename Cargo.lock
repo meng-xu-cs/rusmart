@@ -500,6 +500,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusmart-smt-testing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusmart-smt-derive",
+ "rusmart-smt-remark",
+ "rusmart-smt-stdlib",
+ "rusmart-utils",
+]
+
+[[package]]
 name = "rusmart-utils"
 version = "0.1.0"
 dependencies = [
