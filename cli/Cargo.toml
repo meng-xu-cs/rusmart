@@ -10,5 +10,5 @@ edition = "2021"
 anyhow = "1.0.79"
 log = "0.4.20"
 structopt = "0.3.26"
-tempfile = "3.9.0"
+tempfile = "3.10.0"
 rusmart-utils = { path = "../utils" }
