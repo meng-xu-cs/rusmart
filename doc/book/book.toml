@@ -1,0 +1,6 @@
+[book]
+authors = ["Meng Xu"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Rusmart Language"
