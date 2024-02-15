@@ -4,3 +4,12 @@ language = "en"
 multilingual = false
 src = "src"
 title = "Rusmart Language"
+
+[build]
+create-missing = false
+
+[rust]
+edition = "2021"
+
+[output.html.playground]
+runnable = false
