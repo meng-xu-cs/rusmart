@@ -6,9 +6,13 @@ authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
 license = "GPL-3.0"
 edition = "2021"
 
-[dependencies]
-anyhow = "1.0.79"
+[dev-dependencies]
+datatest-stable = "0.2.3"
 rusmart-utils = { path = "../../utils" }
-rusmart-smt-stdlib = { path = "../../smt/stdlib" }
-rusmart-smt-remark = { path = "../../smt/remark" }
-rusmart-smt-derive = { path = "../../smt/derive" }
+rusmart-smt-stdlib = { path = "../stdlib" }
+rusmart-smt-remark = { path = "../remark" }
+rusmart-smt-derive = { path = "../derive" }
+
+[[test]]
+name = "test_remark"
+harness = false
