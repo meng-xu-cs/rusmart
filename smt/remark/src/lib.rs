@@ -452,23 +452,24 @@ pub fn smt_spec(attr: Syntax, item: Syntax) -> Syntax {
     fail_if_error!(derive_for_func(attr, item))
 }
 
-/// Derive for axiom annotations
-fn derive_for_axiom(attr: Syntax, item: Syntax) -> Result<Syntax> {
-    // check attributes
-    let attr = TokenStream::from(attr);
-    if !attr.is_empty() {
-        bail_on!(attr, "unexpected");
-    }
-
-    // ensure that the underlying item is a function
-    syn::parse::<ItemFn>(item.clone())?;
-
-    // return the original stream
-    Ok(item)
-}
-
 /// Annotation over a Rust const
 #[proc_macro_attribute]
 pub fn smt_axiom(attr: Syntax, item: Syntax) -> Syntax {
-    fail_if_error!(derive_for_axiom(attr, item))
+    // check attributes
+    let attr = TokenStream::from(attr);
+    if !attr.is_empty() {
+        fail_on!(attr, "unexpected");
+    }
+
+    // produce the output
+    let output = item.clone();
+
+    // ensure that the underlying item is a type
+    let target = parse_macro_input!(item as Item);
+    if !matches!(target, Item::Fn(_)) {
+        fail_on!(target, "expect fn");
+    }
+
+    // do nothing with the axiom definition
+    output
 }

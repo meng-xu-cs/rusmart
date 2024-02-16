@@ -51,3 +51,10 @@ additional requirements apply:
   the type parameter must implement the `SMT` trait (see [`stdlib`](stdlib.md)).
 
 ## `#[smt_axiom]`
+
+- This annotation can only be applied on a Rust function
+  i.e., `fn` as top-level module item
+  (in contrast to `fn` in an `impl` block)
+
+- Attributes will not be accepted.
+  i.e., `#[smt_axiom(<...attrs...>)]` will cause an error.
