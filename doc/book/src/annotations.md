@@ -39,16 +39,18 @@ additional requirements apply:
 - The `fn` cannot be `const`, `async`, `unsafe`, `extern`,
   nor can it be variadic.
 
-- The first parameter cannot be a receiver
-  (e.g., `self`, `&self`, `&mut self`).
-
-- The type of the first parameter (denoted as `T`) is not qualified.
-
-- If `T` has type arguments, all <TODO>
-
 - If the underlying `fn` is generic,
   only type parameter is allowed in the generics declaration and
-  the type parameter must implement the `SMT` trait (see [`stdlib`](stdlib.md)).
+  all type parameters must implement the `SMT` trait (see [`stdlib`](stdlib.md)).
+
+- The first parameter cannot be a receiver
+  (e.g., `self`, `&self`, `&mut self`)
+  nor a type argument.
+
+- The type of the first parameter (denoted as `P`) is not qualified.
+
+- If `P` has type arguments,
+  all type arguments must be declared in the generics.
 
 ## `#[smt_axiom]`
 
