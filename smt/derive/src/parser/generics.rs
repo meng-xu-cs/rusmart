@@ -461,7 +461,7 @@ mod tests {
             #[smt_type]
             struct S<T: NotSMT>(T);
         },
-        "not an intrinsic trait"
+        "not a reserved identifier"
     );
 
     unit_test!(

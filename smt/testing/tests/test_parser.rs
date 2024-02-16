@@ -7,4 +7,4 @@ fn run(path: &Path) -> Result<()> {
     Ok(())
 }
 
-harness!(run, "tests/remark", r"^.*\.rs");
+harness!(run, "tests/parser", r"^.*\.rs");
