@@ -164,29 +164,73 @@ pub fn smt_type(attr: Syntax, item: Syntax) -> Syntax {
     output
 }
 
-/// Derive for function annotations
-fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
-    // check attributes
-    let attr = TokenStream::from(attr);
-    let dict = parse_dict(&attr)?;
+/// Collect type arguments recursively
+fn collect_type_arguments<'a>(
+    segment: &'a PathSegment,
+    ty_params: &BTreeSet<&Ident>,
+    ty_args: &mut BTreeSet<&'a Ident>,
+    ty_args_ordered: &mut Vec<&'a Ident>,
+) -> Result<()> {
+    let PathSegment { ident, arguments } = segment;
 
-    // ensure that the underlying item is a function
-    let target = syn::parse::<ItemFn>(item.clone())?;
+    match arguments {
+        PathArguments::None => {
+            if !ty_params.contains(ident) {
+                // just a type not a type argument
+                return Ok(());
+            }
+            if ty_args.insert(ident) {
+                ty_args_ordered.push(ident);
+            }
+        }
+        PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+            colon2_token,
+            lt_token: _,
+            args,
+            gt_token: _,
+        }) => {
+            bail_if_exists!(colon2_token);
+            if ty_params.contains(ident) {
+                bail_on!(arguments, "type parameter should not have arguments");
+            }
 
-    // check whether we need to derive any method
-    let method = match dict.get("method") {
-        None => return Ok(item.clone()),
-        Some(MetaValue::One(ident)) => ident,
-        Some(MetaValue::Set(_)) => bail_on!(attr, "invalid method attribute"),
+            for arg in args {
+                match arg {
+                    GenericArgument::Type(Type::Path(TypePath {
+                        qself,
+                        path:
+                            Path {
+                                leading_colon,
+                                segments,
+                            },
+                    })) => {
+                        bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+                        bail_if_exists!(leading_colon);
+                        let mut iter = segments.iter();
+                        let segment = bail_if_missing!(iter.next(), arg, "type name");
+                        bail_if_exists!(iter.next());
+
+                        // extract type arguments recursively
+                        collect_type_arguments(segment, ty_params, ty_args, ty_args_ordered)?;
+                    }
+                    _ => bail_on!(arg, "expect type argument"),
+                }
+            }
+        }
+        PathArguments::Parenthesized(args) => bail_on!(args, "invalid type arguments"),
     };
+    Ok(())
+}
 
+/// Derive for function annotations
+fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
     // unpack things
     let ItemFn {
         attrs: _,
         vis,
         sig,
         block: _,
-    } = &target;
+    } = target;
 
     let Signature {
         constness,
@@ -209,90 +253,6 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
     bail_if_exists!(abi);
     bail_if_exists!(variadic);
 
-    // extract the self type
-    let param0 = bail_if_missing!(inputs.first(), sig, "at least one parameter");
-    let (self_ty_name, self_ty_params) = match param0 {
-        FnArg::Receiver(_) => bail_on!(param0, "expect type declaration"),
-        FnArg::Typed(PatType {
-            attrs: _,
-            pat: _,
-            colon_token: _,
-            ty,
-        }) => match ty.as_ref() {
-            // extract type
-            Type::Path(TypePath {
-                qself,
-                path:
-                    Path {
-                        leading_colon,
-                        segments,
-                    },
-            }) => {
-                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
-                bail_if_exists!(leading_colon);
-                let mut iter = segments.iter();
-                let segment = bail_if_missing!(iter.next(), param0, "type name");
-                bail_if_exists!(iter.next());
-
-                let PathSegment { ident, arguments } = segment;
-
-                // extract type arguments
-                let ty_params = match arguments {
-                    PathArguments::None => vec![],
-                    PathArguments::AngleBracketed(AngleBracketedGenericArguments {
-                        colon2_token,
-                        lt_token: _,
-                        args,
-                        gt_token: _,
-                    }) => {
-                        bail_if_exists!(colon2_token);
-
-                        let mut names = vec![];
-                        for arg in args {
-                            match arg {
-                                GenericArgument::Type(Type::Path(TypePath {
-                                    qself,
-                                    path:
-                                        Path {
-                                            leading_colon,
-                                            segments,
-                                        },
-                                })) => {
-                                    bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
-                                    bail_if_exists!(leading_colon);
-                                    let mut iter = segments.iter();
-                                    let segment = bail_if_missing!(
-                                        iter.next(),
-                                        arg,
-                                        "type parameter name as type argument"
-                                    );
-                                    bail_if_exists!(iter.next());
-
-                                    // extract type parameter
-                                    let PathSegment { ident, arguments } = segment;
-                                    if !matches!(arguments, PathArguments::None) {
-                                        bail_on!(
-                                            arguments,
-                                            "expect type parameter as type argument"
-                                        )
-                                    }
-                                    names.push(ident);
-                                }
-                                _ => bail_on!(arg, "expect type argument"),
-                            }
-                        }
-                        names
-                    }
-                    PathArguments::Parenthesized(args) => bail_on!(args, "invalid type arguments"),
-                };
-
-                // done with the parsing
-                (ident, ty_params)
-            }
-            _ => bail_on!(param0, "expect type path"),
-        },
-    };
-
     // extract the function generics
     let Generics {
         lt_token,
@@ -310,6 +270,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
     }
     bail_if_exists!(where_clause);
 
+    let mut ty_params = BTreeSet::new();
     let mut func_generics = vec![];
     for param in params {
         match param {
@@ -364,23 +325,67 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
                 }
                 bail_if_exists!(iter.next());
 
-                // save the type parameter name
+                // save the type parameter name after duplication check
+                if !ty_params.insert(ident) {
+                    bail_on!(ident, "duplicated declaration");
+                }
                 func_generics.push(ident);
             }
             _ => bail_on!(param, "expect type parameter"),
         }
     }
 
-    // cross-match the generics
-    for name in self_ty_params.iter() {
-        if !func_generics.contains(name) {
-            bail_on!(generics, "incomplete generics");
-        }
-    }
+    // extract the self type
+    let param0 = bail_if_missing!(inputs.first(), sig, "at least one parameter");
+    let (self_ty_name, self_ty_args, self_ty_args_ordered) = match param0 {
+        FnArg::Receiver(_) => bail_on!(param0, "expect type declaration"),
+        FnArg::Typed(PatType {
+            attrs: _,
+            pat: _,
+            colon_token: _,
+            ty,
+        }) => match ty.as_ref() {
+            // extract type that should be marked as self
+            Type::Path(TypePath {
+                qself,
+                path:
+                    Path {
+                        leading_colon,
+                        segments,
+                    },
+            }) => {
+                bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
+                bail_if_exists!(leading_colon);
+
+                let mut iter = segments.iter();
+                let segment = bail_if_missing!(iter.next(), param0, "type name");
+                bail_if_exists!(iter.next());
+
+                // collect type arguments involved
+                let mut ty_args = BTreeSet::new();
+                let mut ty_args_ordered = vec![];
+                collect_type_arguments(segment, &ty_params, &mut ty_args, &mut ty_args_ordered)?;
+
+                let PathSegment {
+                    ident,
+                    arguments: _,
+                } = segment;
+                if ty_args.contains(ident) {
+                    bail_on!(ident, "cannot derive a method for a type argument");
+                }
+
+                // done with the parsing
+                (segment, ty_args, ty_args_ordered)
+            }
+            _ => bail_on!(param0, "expect type path"),
+        },
+    };
+
+    // derive the method generics
     let method_ty_params: Vec<_> = func_generics
         .iter()
-        .filter(|n| !self_ty_params.contains(*n))
-        .cloned()
+        .filter(|n| !self_ty_args.contains(*n))
+        .copied()
         .collect();
 
     // derive the generics tokens
@@ -392,7 +397,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
             quote!(<#(#content),*>)
         }
     };
-    let tokenized_impl_generics = generics_to_decl(&self_ty_params);
+    let tokenized_impl_generics = generics_to_decl(&self_ty_args_ordered);
     let tokenized_method_generics = generics_to_decl(&method_ty_params);
 
     let generics_to_args = |params: &[&Ident]| {
@@ -403,7 +408,7 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
             quote!(<#(#content),*>)
         }
     };
-    let tokenized_self_ty_args = generics_to_args(&self_ty_params);
+    let tokenized_self_ty_args = generics_to_args(&self_ty_args_ordered);
     let tokenized_func_ty_args = generics_to_args(&func_generics);
 
     // derive the parameter tokens
@@ -433,11 +438,31 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
             }
         }
     };
+    Ok(extended)
+}
 
-    // combine the original declaration with the extended block
-    let mut output = TokenStream::from(item);
-    output.extend(extended);
-    Ok(Syntax::from(output))
+/// Derive for function annotations
+fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
+    // check attributes
+    let attr = TokenStream::from(attr);
+    let mut dict = parse_dict(&attr)?;
+
+    // ensure that the underlying item is a function
+    let target = syn::parse::<ItemFn>(item.clone())?;
+
+    // derive the method, if requested
+    let output = match dict.remove("method") {
+        None => item,
+        Some(MetaValue::One(ident)) => {
+            let extended = derive_method(&target, &ident)?;
+
+            let mut output = TokenStream::from(item);
+            output.extend(extended);
+            Syntax::from(output)
+        }
+        Some(MetaValue::Set(_)) => bail_on!(attr, "invalid method attribute"),
+    };
+    Ok(output)
 }
 
 /// Annotation over a Rust function
