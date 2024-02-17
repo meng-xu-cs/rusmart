@@ -16,5 +16,5 @@ rusmart-smt-remark = { path = "../remark" }
 rusmart-smt-derive = { path = "../derive" }
 
 [[test]]
-name = "test_parser"
+name = "integration"
 harness = false

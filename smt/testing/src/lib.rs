@@ -57,10 +57,10 @@ pub fn test_model(path: &Path) -> datatest_stable::Result<()> {
 
 #[macro_export]
 macro_rules! test_suite {
-    ($name:ident, $path:literal) => {
-        mod $name {
+    ($( $name:ident => $path:literal ),+ $(,)?) => {
+        $(mod $name {
             automod::dir!($path);
-        }
-        datatest_stable::harness!($crate::test_model, $path, r"^.*\.rs$");
+        })+
+        datatest_stable::harness!($( $crate::test_model, $path, r"^.*\.rs$" ),+);
     };
 }
