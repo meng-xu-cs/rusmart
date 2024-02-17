@@ -1,12 +1,11 @@
 use std::path::Path;
 use std::{env, fs};
 
-use anyhow::{bail, Result};
+use anyhow::anyhow;
 
-pub fn test<F>(path: &Path, runner: F) -> Result<()>
-where
-    F: FnOnce(&Path) -> Result<()>,
-{
+use rusmart_smt_derive::model;
+
+pub fn test_model(path: &Path) -> datatest_stable::Result<()> {
     // load existing message
     let path_exp = path.with_extension(".exp");
     let expected = if path_exp.exists() {
@@ -22,17 +21,17 @@ where
     };
 
     // run the test
-    match (runner(path), expected) {
-        (Ok(()), None) => (),
-        (Ok(()), Some(exp)) => {
+    match (model(path), expected) {
+        (Ok(_), None) => (),
+        (Ok(_), Some(exp)) => {
             if !update {
-                bail!("test passed while expecting failure\n{}", exp);
+                return Err(anyhow!("test passed while expecting failure\n{}", exp).into());
             }
             fs::remove_file(path_exp)?;
         }
         (Err(err), None) => {
             if !update {
-                bail!("test failed while expecting success\n{}", err)
+                return Err(anyhow!("test failed while expecting success\n{}", err).into());
             }
             fs::write(path_exp, err.to_string())?;
         }
@@ -40,11 +39,12 @@ where
             let msg = err.to_string();
             if exp != msg {
                 if !update {
-                    bail!(
+                    return Err(anyhow!(
                         "failure mismatch\n==== expect ===={}\n==== actual ===={}",
                         exp,
                         msg
-                    );
+                    )
+                    .into());
                 }
                 fs::write(path_exp, msg)?;
             }
@@ -57,13 +57,10 @@ where
 
 #[macro_export]
 macro_rules! test_suite {
-    ($name:ident, $path:literal, $runner:path) => {
+    ($name:ident, $path:literal) => {
         mod $name {
             automod::dir!($path);
-            pub fn tester(path: &std::path::Path) -> datatest_stable::Result<()> {
-                $crate::test(path, $runner).map_err(|e| e.into())
-            }
         }
-        datatest_stable::harness!($name::tester, $path, r"^.*\.rs$");
+        datatest_stable::harness!($crate::test_model, $path, r"^.*\.rs$");
     };
 }

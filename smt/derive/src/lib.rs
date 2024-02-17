@@ -38,22 +38,21 @@ fn pipeline(ctxt: Context) -> Result<Vec<IRContext>> {
     Ok(models)
 }
 
-/// Internal entrypoint
-pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result<()> {
-    // init
-    initialize();
+/// Internal entrypoint for front-end
+pub fn model<P: AsRef<Path>>(input: P) -> Result<Vec<IRContext>> {
+    pipeline(Context::new(input)?)
+}
 
-    // derive
-    let models = pipeline(Context::new(input)?)?;
-    debug!("derivation completed");
-
-    // solve
+/// Internal entrypoint for back-end
+pub fn solve<P: AsRef<Path>>(models: &[IRContext], output: P) {
+    // prepare workspace
     let output = output.as_ref();
     if output.exists() {
         panic!("output directory exists");
     }
     fs::create_dir_all(output).expect("output directory created");
 
+    // fire-up all solvers
     let mut count = 0;
     for ir in models {
         for solver in solvers() {
@@ -65,7 +64,7 @@ pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result
             let path_wks = output.join(count.to_string());
             fs::create_dir(&path_wks).expect("workspace freshly created");
 
-            match invoke_backend(&ir, solver.as_ref(), &path_wks) {
+            match invoke_backend(ir, solver.as_ref(), &path_wks) {
                 Ok(response) => {
                     debug!(
                         "[{}] solving {} with {}: {}",
@@ -81,6 +80,15 @@ pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result
             }
         }
     }
+}
+
+/// Internal entrypoint
+pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result<()> {
+    initialize();
+
+    let models = pipeline(Context::new(input)?)?;
+    debug!("derivation completed");
+    solve(&models, output);
 
     Ok(())
 }
