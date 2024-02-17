@@ -6,7 +6,9 @@ authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
 license = "GPL-3.0"
 edition = "2021"
 
-[dev-dependencies]
+[dependencies]
+anyhow = "1.0.79"
+automod = "1.0.14"
 datatest-stable = "0.2.3"
 rusmart-utils = { path = "../../utils" }
 rusmart-smt-stdlib = { path = "../stdlib" }

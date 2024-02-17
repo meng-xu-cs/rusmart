@@ -1,10 +1,12 @@
 use std::path::Path;
 
-use datatest_stable::{harness, Result};
+use anyhow::Result;
+
+use rusmart_smt_testing::test_suite;
 
 fn run(path: &Path) -> Result<()> {
     println!("{}", path.to_string_lossy());
     Ok(())
 }
 
-harness!(run, "tests/parser", r"^.*\.rs");
+test_suite!(parser, "tests/parser", crate::run);
