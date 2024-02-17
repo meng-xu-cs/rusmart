@@ -2,10 +2,11 @@ use std::path::Path;
 
 use anyhow::Result;
 
+use rusmart_smt_derive::parser::ctxt::Context;
 use rusmart_smt_testing::test_suite;
 
 fn run(path: &Path) -> Result<()> {
-    println!("{}", path.to_string_lossy());
+    Context::new(path)?;
     Ok(())
 }
 

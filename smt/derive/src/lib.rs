@@ -18,7 +18,7 @@ use proc_macro2::TokenStream;
 mod analysis;
 mod backend;
 mod ir;
-mod parser;
+pub mod parser;
 
 /// Default pipeline after a context is constructed
 fn pipeline(ctxt: Context) -> Result<Vec<IRContext>> {

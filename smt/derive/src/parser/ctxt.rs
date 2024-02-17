@@ -13,10 +13,10 @@ use crate::parser::err::{bail_if_exists, bail_on, bail_on_with_note};
 use crate::parser::expr::{Expr, ExprParserRoot, Op};
 use crate::parser::func::{Axiom, FuncDef, FuncSig, ImplFuncDef, SpecFuncDef};
 use crate::parser::generics::{Generics, GenericsInstPartial, Monomorphization, PartialInst};
+use crate::parser::infer::{TIError, TypeRef, TypeUnifier};
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef, TypeTag};
 
-use crate::parser::infer::{TIError, TypeRef, TypeUnifier};
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
@@ -97,7 +97,7 @@ pub struct Context {
 
 impl Context {
     /// Build a context for crate
-    pub fn new(path_input: &Path) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(path_input: P) -> Result<Self> {
         let mut ctxt = Self {
             types: BTreeMap::new(),
             impls: BTreeMap::new(),
@@ -106,22 +106,20 @@ impl Context {
         };
 
         // scan over the code base
-        for entry in WalkDir::new(path_input) {
-            let entry = entry.unwrap_or_else(|err| panic!("unable to walk the directory: {}", err));
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "rs") {
-                // load and parse the source
-                let content = fs::read_to_string(path).unwrap_or_else(|err| {
+        let path_input = path_input.as_ref();
+
+        if path_input.is_file() {
+            ctxt.process_file(path_input)?;
+        } else {
+            for entry in WalkDir::new(path_input) {
+                let entry = entry.unwrap_or_else(|err| {
                     panic!(
-                        "unable to read source file {}: {}",
-                        path.to_string_lossy(),
+                        "unable to walk the directory {}: {}",
+                        path_input.to_string_lossy(),
                         err
                     )
                 });
-                let file = syn::parse_file(&content)?;
-
-                // process it
-                ctxt.process_file(file)?;
+                ctxt.process_file(entry.path())?;
             }
         }
 
@@ -179,8 +177,23 @@ impl Context {
         Ok(())
     }
 
-    /// Process a single input file
-    fn process_file(&mut self, file: File) -> Result<()> {
+    /// Process a single file in filesystem
+    fn process_file(&mut self, path: &Path) -> Result<()> {
+        if path.extension().map_or(false, |ext| ext == "rs") {
+            let content = fs::read_to_string(path).unwrap_or_else(|err| {
+                panic!(
+                    "unable to read source file {}: {}",
+                    path.to_string_lossy(),
+                    err
+                )
+            });
+            self.process_syntax(syn::parse_file(&content)?)?;
+        }
+        Ok(())
+    }
+
+    /// Process the content (i.e., syntax) of the entire file
+    fn process_syntax(&mut self, file: File) -> Result<()> {
         let File {
             shebang: _,
             attrs: _,
@@ -298,9 +311,7 @@ impl Context {
             specs: BTreeMap::new(),
             axioms: BTreeMap::new(),
         };
-
-        let file: File = syn::parse2(stream)?;
-        ctxt.process_file(file)?;
+        ctxt.process_syntax(syn::parse2(stream)?)?;
         ctxt.sanity_check()?;
         Ok(ctxt)
     }
