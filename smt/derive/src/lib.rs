@@ -18,7 +18,7 @@ use proc_macro2::TokenStream;
 mod analysis;
 mod backend;
 mod ir;
-pub mod parser;
+mod parser;
 
 /// Default pipeline after a context is constructed
 fn pipeline(ctxt: Context) -> Result<Vec<IRContext>> {
@@ -43,18 +43,17 @@ pub fn derive<P1: AsRef<Path>, P2: AsRef<Path>>(input: P1, output: P2) -> Result
     // init
     initialize();
 
-    let input = input.as_ref();
-    let output = output.as_ref();
-    if output.exists() {
-        fs::remove_dir_all(output).expect("output directory cleared");
-    }
-    fs::create_dir_all(output).expect("output directory created");
-
     // derive
     let models = pipeline(Context::new(input)?)?;
     debug!("derivation completed");
 
     // solve
+    let output = output.as_ref();
+    if output.exists() {
+        panic!("output directory exists");
+    }
+    fs::create_dir_all(output).expect("output directory created");
+
     let mut count = 0;
     for ir in models {
         for solver in solvers() {
