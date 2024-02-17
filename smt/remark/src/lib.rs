@@ -441,8 +441,13 @@ fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
     Ok(extended)
 }
 
+enum FnKind {
+    Impl,
+    Spec,
+}
+
 /// Derive for function annotations
-fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
+fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
     // check attributes
     let attr = TokenStream::from(attr);
     let mut dict = parse_dict(&attr)?;
@@ -462,19 +467,29 @@ fn derive_for_func(attr: Syntax, item: Syntax) -> Result<Syntax> {
         }
         Some(MetaValue::Set(_)) => bail_on!(attr, "invalid method attribute"),
     };
+
+    // check for other attributes
+    match kind {
+        FnKind::Impl => dict.remove("specs"),
+        FnKind::Spec => dict.remove("impls"),
+    };
+    if !dict.is_empty() {
+        bail_on!(attr, "unknown attributes");
+    }
+
     Ok(output)
 }
 
 /// Annotation over a Rust function
 #[proc_macro_attribute]
 pub fn smt_impl(attr: Syntax, item: Syntax) -> Syntax {
-    fail_if_error!(derive_for_func(attr, item))
+    fail_if_error!(derive_for_func(attr, item, FnKind::Impl))
 }
 
 /// Annotation over a Rust function
 #[proc_macro_attribute]
 pub fn smt_spec(attr: Syntax, item: Syntax) -> Syntax {
-    fail_if_error!(derive_for_func(attr, item))
+    fail_if_error!(derive_for_func(attr, item, FnKind::Spec))
 }
 
 /// Annotation over a Rust const

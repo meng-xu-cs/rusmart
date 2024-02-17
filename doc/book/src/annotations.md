@@ -33,6 +33,12 @@ A violation of these checks will lead to compile-time error.
     - `method = <ident>`: will derive a method
       with the type of the first parameter as the receiver (i.e., `self`).
 
+    - For `#[smt_impl]` only, `specs = <ident>` or `specs = [<ident>, ...]`:
+      marks that this impl is confined by the designated spec(s).
+
+    - For `#[smt_spec]` only, `impls = <ident>` or `impls = [<ident>, ...]`:
+      marks that this spec confines the designated impl(s).
+
 If method derivation is requested,
 additional requirements apply:
 
