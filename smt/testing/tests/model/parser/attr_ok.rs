@@ -1,5 +1,7 @@
-use rusmart_smt_remark::{smt_impl, smt_spec, smt_type};
+use rusmart_smt_remark::{smt_axiom, smt_impl, smt_spec, smt_type};
 use rusmart_smt_stdlib::dt::Boolean;
+
+/* annotations for types */
 
 #[smt_type]
 enum E {
@@ -10,6 +12,8 @@ enum E {
 struct S {
     f1: Boolean,
 }
+
+/* annotations for impls and specs */
 
 #[smt_impl]
 fn f1() -> Boolean {
@@ -39,4 +43,11 @@ fn f5(s: S) -> Boolean {
 #[smt_spec(impls = f5)]
 fn f6(s: S) -> Boolean {
     f4(s)
+}
+
+/* annotations for axioms */
+
+#[smt_axiom]
+fn a1() -> Boolean {
+    Boolean::from(false)
 }
