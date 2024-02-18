@@ -179,15 +179,12 @@ impl Context {
                         mod_token: _,
                         ident: _,
                         content,
-                        semi,
+                        semi: _,
                     } = syntax;
                     bail_if_exists!(unsafety);
                     match content {
                         None => (),
-                        Some((_, items)) => {
-                            bail_if_exists!(semi);
-                            self.process_items(items)?
-                        }
+                        Some((_, items)) => self.process_items(items)?,
                     }
                 }
                 _ => (),
