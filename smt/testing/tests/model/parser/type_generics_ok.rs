@@ -5,3 +5,9 @@ use rusmart_smt_stdlib::dt::SMT;
 struct S<T: SMT> {
     f: T,
 }
+
+#[smt_type]
+struct R<P: SMT, Q: SMT> {
+    f1: P,
+    f2: S<Q>,
+}
