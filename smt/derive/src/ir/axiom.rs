@@ -23,6 +23,7 @@ pub struct Predicate {
 }
 
 /// A registry of axioms involved
+#[derive(Default)]
 pub struct AxiomRegistry {
     /// a map from axiom instantiations to axiom id
     pub lookup: BTreeMap<UsrAxiomName, BTreeMap<Vec<Sort>, UsrAxiomId>>,

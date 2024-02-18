@@ -103,6 +103,7 @@ impl Display for DataType {
 }
 
 /// A registry of data types involved
+#[derive(Default)]
 pub struct TypeRegistry {
     /// a map from user-defined type and instantiations to sort id
     idx_named: BTreeMap<UsrSortName, BTreeMap<Vec<Sort>, UsrSortId>>,

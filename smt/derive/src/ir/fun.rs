@@ -27,6 +27,7 @@ pub enum FunDef {
 }
 
 /// A registry of functions involved
+#[derive(Default)]
 pub struct FunRegistry {
     /// a map from user-defined functions and instantiations to function id
     pub lookup: BTreeMap<UsrFunName, BTreeMap<Vec<Sort>, UsrFunId>>,

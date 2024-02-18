@@ -144,6 +144,7 @@ pub enum Expression {
 }
 
 /// A registry of expressions (organized around a function body)
+#[derive(Default)]
 pub struct ExpRegistry {
     /// a map from variable id to variables
     vars: BTreeMap<VarId, Variable>,
