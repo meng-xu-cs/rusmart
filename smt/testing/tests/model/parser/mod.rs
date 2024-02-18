@@ -10,3 +10,4 @@ mod name_conflict_on_type_and_axiom;
 mod type_generics_const;
 mod type_generics_lifetime;
 mod type_generics_ok;
+mod type_generics_where_clause;
