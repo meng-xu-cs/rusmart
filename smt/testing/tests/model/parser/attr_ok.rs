@@ -45,6 +45,16 @@ fn f6(s: S) -> Boolean {
     f4(s)
 }
 
+#[smt_impl(specs = [f6, f8])]
+fn f7(s: S) -> Boolean {
+    f5(s)
+}
+
+#[smt_spec(impls = [f5, f7])]
+fn f8(s: S) -> Boolean {
+    f6(s)
+}
+
 /* annotations for axioms */
 
 #[smt_axiom]
