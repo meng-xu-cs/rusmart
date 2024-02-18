@@ -11,3 +11,5 @@ mod type_generics_const;
 mod type_generics_lifetime;
 mod type_generics_ok;
 mod type_generics_where_clause;
+mod type_generics_default;
+mod type_generics_no_trait;
