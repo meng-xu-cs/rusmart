@@ -74,6 +74,25 @@ impl MarkedAxiom {
     }
 }
 
+/// A helper enum to resolve naming conflicts
+enum NamedItem {
+    Type,
+    Impl,
+    Spec,
+    Axiom,
+}
+
+impl Display for NamedItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Type => write!(f, "type"),
+            Self::Impl => write!(f, "impl"),
+            Self::Spec => write!(f, "spec"),
+            Self::Axiom => write!(f, "axiom"),
+        }
+    }
+}
+
 /// A refinement relation
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Refinement {
@@ -229,14 +248,6 @@ impl Context {
                 "duplicated impl name"
             );
         }
-        if let Some(prev) = self.specs.get(&name) {
-            bail_on_with_note!(
-                prev.name(),
-                "previously defined here",
-                item.name(),
-                "naming conflict with spec"
-            );
-        }
         trace!("impl found: {}", name);
         self.impls.insert(name, item);
         Ok(())
@@ -251,14 +262,6 @@ impl Context {
                 "previously defined here",
                 item.name(),
                 "duplicated spec name"
-            );
-        }
-        if let Some(prev) = self.impls.get(&name) {
-            bail_on_with_note!(
-                prev.name(),
-                "previously defined here",
-                item.name(),
-                "naming conflict with impl"
             );
         }
         trace!("spec found: {}", name);
@@ -284,6 +287,42 @@ impl Context {
 
     /// Check whether the marks declared are correct or not
     fn sanity_check(&self) -> Result<()> {
+        // avoid naming conflict
+        let mut names = BTreeMap::new();
+        for (key, (kind, ident)) in self
+            .types
+            .iter()
+            .map(|(k, v)| (k.as_ref(), (NamedItem::Type, v.name())))
+            .chain(
+                self.impls
+                    .iter()
+                    .map(|(k, v)| (k.as_ref(), (NamedItem::Impl, v.name()))),
+            )
+            .chain(
+                self.specs
+                    .iter()
+                    .map(|(k, v)| (k.as_ref(), (NamedItem::Spec, v.name()))),
+            )
+            .chain(
+                self.axioms
+                    .iter()
+                    .map(|(k, v)| (k.as_ref(), (NamedItem::Axiom, v.name()))),
+            )
+        {
+            if let Some((prev_kind, prev_ident)) = names.get(key) {
+                bail_on_with_note!(
+                    prev_ident,
+                    "previously defined here",
+                    ident,
+                    "naming conflict between {} and {}",
+                    kind,
+                    prev_kind,
+                );
+            }
+            names.insert(key, (kind, ident));
+        }
+
+        // impl and spec pairs
         for marked in self.impls.values() {
             let MarkedImpl { item, mark } = marked;
             for target in &mark.specs {
@@ -730,7 +769,7 @@ impl ASTContext {
         for (key, axiom) in &self.axioms {
             let mut inst_candidates = vec![];
             let mut body = axiom.body.clone();
-            match body.visit(&mut |_| Ok(()), &mut |_| Ok(()), &mut |e| {
+            body.visit(&mut |_| Ok(()), &mut |_| Ok(()), &mut |e| {
                 // check whether this expr involves the target procedure call
                 let op = match e {
                     Expr::Unit(inst) => inst.op.as_ref(),
@@ -752,10 +791,8 @@ impl ASTContext {
                     }
                 }
                 Ok(())
-            }) {
-                Ok(_) => (),
-                Err(e) => panic!("unexpected expression visitation error: {}", e),
-            }
+            })
+            .unwrap_or_else(|e| panic!("unexpected expression visitation error: {}", e));
 
             // check relevance of their instantiations
             let inst_ref: Vec<TypeRef> = inst.iter().map(|t| t.into()).collect();
