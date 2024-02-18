@@ -12,4 +12,5 @@ Namespace is not supported at this moment.
 
 As `#[smt_type]` is also a Rust type while
 `#[smt_impl]`, `#[smt_spec]`, `#[smt_axiom]` are Rust functions,
-their names should also follow the naming convention of Rust and functions, respectively.
+their names should also follow the naming convention of Rust type and functions,
+respectively.

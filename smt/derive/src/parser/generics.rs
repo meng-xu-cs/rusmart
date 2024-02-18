@@ -126,7 +126,7 @@ impl Generics {
                         GenericParam::Type(ty_param) => {
                             let name = SysTrait::validate_type_param_decl(ty_param)?;
                             if declared.contains(&name) {
-                                bail_on!(ty_param, "name conflict");
+                                bail_on!(ty_param, "name conflict on generics");
                             }
                             declared.push(name);
                         }
