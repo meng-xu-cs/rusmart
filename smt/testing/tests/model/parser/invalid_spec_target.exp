@@ -1,0 +1,2 @@
+invalid spec target: does_non_exist
+# [smt_impl (specs = does_non_exist)] fn foo () -> Boolean { Boolean :: from (false) }
