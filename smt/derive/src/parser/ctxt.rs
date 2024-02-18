@@ -229,6 +229,14 @@ impl Context {
                 "duplicated impl name"
             );
         }
+        if let Some(prev) = self.specs.get(&name) {
+            bail_on_with_note!(
+                prev.name(),
+                "previously defined here",
+                item.name(),
+                "naming conflict with spec"
+            );
+        }
         trace!("impl found: {}", name);
         self.impls.insert(name, item);
         Ok(())
@@ -243,6 +251,14 @@ impl Context {
                 "previously defined here",
                 item.name(),
                 "duplicated spec name"
+            );
+        }
+        if let Some(prev) = self.impls.get(&name) {
+            bail_on_with_note!(
+                prev.name(),
+                "previously defined here",
+                item.name(),
+                "naming conflict with impl"
             );
         }
         trace!("spec found: {}", name);
