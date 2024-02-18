@@ -13,7 +13,7 @@ static ENV_UPDATE_BASELINE: &str = "UPBL";
 /// Generic test runner for all front-end test cases
 fn test_model(path: &Path) -> datatest_stable::Result<()> {
     // load existing message
-    let path_exp = path.with_extension(".exp");
+    let path_exp = path.with_extension("exp");
     let expected = if path_exp.exists() {
         Some(fs::read_to_string(&path_exp)?)
     } else {
