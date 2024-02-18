@@ -15,6 +15,7 @@ rusmart-smt-remark = { path = "../remark" }
 rusmart-smt-derive = { path = "../derive" }
 
 [lints.rust]
+non_camel_case_types = "allow"
 unused = "allow"
 
 [lints.clippy]
