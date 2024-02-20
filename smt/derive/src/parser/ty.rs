@@ -353,7 +353,7 @@ impl TypeTag {
             gt_token: _,
         } = generics;
         bail_if_missing!(colon2_token, generics, "::");
-        bail_if_empty!(args, "type argument");
+        bail_if_empty!(args, generics, "type argument");
 
         let mut arguments = vec![];
         for item in args {
@@ -594,7 +594,7 @@ impl TypeBody {
                     brace_token: _,
                     variants,
                 } = item;
-                bail_if_empty!(variants, "variants");
+                bail_if_empty!(variants, item, "variants");
 
                 // build from variants
                 Self::Enum(TypeEnum::from_variants(&ctxt, variants.iter())?)

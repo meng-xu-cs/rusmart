@@ -84,10 +84,9 @@ pub(crate) use bail_if_non_empty;
 
 /// Special case on bail: expect a token to exist
 macro_rules! bail_if_empty {
-    ($item:expr, $note:literal) => {{
-        let __v = $item;
-        if __v.is_empty() {
-            $crate::parser::err::bail_on!(__v, "expect {}", $note);
+    ($item:expr, $parent:expr, $note:literal) => {{
+        if $item.is_empty() {
+            $crate::parser::err::bail_on!($parent, "expect {}", $note);
         }
     }};
 }

@@ -118,7 +118,7 @@ impl Generics {
             Some(_) => {
                 bail_if_missing!(gt_token, generics, ">");
                 bail_if_exists!(where_clause);
-                bail_if_empty!(params, "type parameter");
+                bail_if_empty!(params, generics, "type parameter");
 
                 let mut declared = vec![];
                 for item in params {
