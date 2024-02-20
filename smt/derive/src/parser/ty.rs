@@ -3,9 +3,9 @@ use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 use syn::{
-    AngleBracketedGenericArguments, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument,
-    Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type, TypePath,
-    TypeTuple as TypePack, Variant,
+    AngleBracketedGenericArguments, Field, FieldMutability, Fields, FieldsNamed, FieldsUnnamed,
+    GenericArgument, Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type,
+    TypePath, TypeTuple as TypePack, Variant,
 };
 
 use crate::parser::ctxt::{ContextWithGenerics, MarkedType};
@@ -453,12 +453,15 @@ impl TypeRecord {
             let Field {
                 attrs: _,
                 vis: _,
-                mutability: _,
+                mutability,
                 ident,
                 colon_token,
                 ty,
             } = field;
 
+            if !matches!(mutability, FieldMutability::None) {
+                bail_on!(field, "unexpected field mutability");
+            }
             let name = bail_if_missing!(ident, field, "name");
             bail_if_missing!(colon_token, field, "colon");
 
