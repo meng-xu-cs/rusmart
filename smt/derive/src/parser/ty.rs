@@ -543,6 +543,13 @@ impl TypeEnum {
 
             bail_if_exists!(discriminant.as_ref().map(|(_, e)| e));
             let branch = EnumVariant::from_fields(ctxt, fields)?;
+
+            // check variant consistency
+            match &branch {
+                EnumVariant::Unit => (),
+                EnumVariant::Tuple(tuple) => bail_if_empty!(tuple.slots, variant, "slots"),
+                EnumVariant::Record(record) => bail_if_empty!(record.fields, variant, "fields"),
+            }
             match variants.insert(ident.to_string(), branch) {
                 None => (),
                 Some(_) => bail_on!(ident, "duplicated variant name"),
@@ -614,16 +621,12 @@ impl TypeBody {
                 match EnumVariant::from_fields(&ctxt, fields)? {
                     EnumVariant::Unit => bail_on!(item, "expect fields or slots"),
                     EnumVariant::Tuple(tuple) => {
-                        if tuple.slots.is_empty() {
-                            bail_on!(item, "expect slots");
-                        }
+                        bail_if_empty!(tuple.slots, item, "slots");
                         bail_if_missing!(semi_token, item, "expect ; at the end");
                         Self::Tuple(tuple)
                     }
                     EnumVariant::Record(record) => {
-                        if record.fields.is_empty() {
-                            bail_on!(item, "expect fields");
-                        }
+                        bail_if_empty!(record.fields, item, "fields");
                         bail_if_exists!(semi_token);
                         Self::Record(record)
                     }
