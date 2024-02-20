@@ -615,14 +615,14 @@ impl TypeBody {
                     EnumVariant::Unit => bail_on!(item, "expect fields or slots"),
                     EnumVariant::Tuple(tuple) => {
                         if tuple.slots.is_empty() {
-                            bail_on!(fields, "expect slots");
+                            bail_on!(item, "expect slots");
                         }
                         bail_if_missing!(semi_token, item, "expect ; at the end");
                         Self::Tuple(tuple)
                     }
                     EnumVariant::Record(record) => {
                         if record.fields.is_empty() {
-                            bail_on!(fields, "expect fields");
+                            bail_on!(item, "expect fields");
                         }
                         bail_if_exists!(semi_token);
                         Self::Record(record)

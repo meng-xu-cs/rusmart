@@ -14,3 +14,7 @@ mod type_generics_no_trait;
 mod type_generics_ok;
 mod type_generics_where_clause;
 mod type_generics_wrong_trait;
+mod type_struct_no_fields;
+mod type_struct_ok;
+mod type_tuple_no_slots;
+mod type_unit;
