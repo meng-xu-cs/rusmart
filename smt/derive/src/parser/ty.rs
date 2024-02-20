@@ -493,7 +493,7 @@ pub enum EnumVariant {
 }
 
 impl EnumVariant {
-    /// Convert from a fields token
+    /// Convert from fields token
     fn from_fields<CTX: CtxtForType>(ctxt: &CTX, fields: &Fields) -> Result<Self> {
         let variant = match fields {
             Fields::Unit => Self::Unit,

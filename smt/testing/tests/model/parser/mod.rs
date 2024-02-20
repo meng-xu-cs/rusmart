@@ -7,6 +7,7 @@ mod invalid_impl_target;
 mod invalid_spec_target;
 mod name_conflict_on_impl_and_spec;
 mod name_conflict_on_type_and_axiom;
+mod type_enum_discriminant;
 mod type_enum_no_variants;
 mod type_enum_variant_tuple_no_slots;
 mod type_generics_const;
