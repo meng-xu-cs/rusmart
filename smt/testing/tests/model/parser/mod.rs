@@ -9,6 +9,7 @@ mod name_conflict_on_impl_and_spec;
 mod name_conflict_on_type_and_axiom;
 mod type_enum_discriminant;
 mod type_enum_no_variants;
+mod type_enum_ok;
 mod type_enum_variant_tuple_no_slots;
 mod type_generics_const;
 mod type_generics_default;
