@@ -24,4 +24,7 @@ mod invalid_impl_target;
 mod invalid_spec_target;
 mod name_conflict_on_impl_and_spec;
 mod name_conflict_on_type_and_axiom;
+mod type_array;
+mod type_never;
 mod type_reference;
+mod type_unit;
