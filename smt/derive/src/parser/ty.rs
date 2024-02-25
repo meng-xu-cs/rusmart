@@ -413,12 +413,15 @@ impl TypeTuple {
             let Field {
                 attrs: _,
                 vis: _,
-                mutability: _,
+                mutability,
                 ident,
                 colon_token,
                 ty,
             } = field;
 
+            if !matches!(mutability, FieldMutability::None) {
+                bail_on!(field, "unexpected slot mutability");
+            }
             bail_if_exists!(ident);
             bail_if_exists!(colon_token);
 

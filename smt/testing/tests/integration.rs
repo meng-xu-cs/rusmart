@@ -132,7 +132,7 @@ fn test_model(path: &Path) -> datatest_stable::Result<()> {
                         exp,
                         msg
                     )
-                        .into());
+                    .into());
                 }
                 fs::write(path_exp, msg)?;
             }
