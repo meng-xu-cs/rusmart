@@ -7,7 +7,7 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dev-dependencies]
-anyhow = "1.0.79"
+anyhow = "1.0.80"
 datatest-stable = "0.2.3"
 rusmart-utils = { path = "../../utils" }
 rusmart-smt-stdlib = { path = "../stdlib" }
