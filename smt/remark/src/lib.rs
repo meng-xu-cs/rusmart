@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use proc_macro2::{Delimiter, Ident, TokenStream, TokenTree};
 use quote::quote;
 use syn::{
-    parse_macro_input, parse_quote, AngleBracketedGenericArguments, FnArg, GenericArgument,
+    parse_macro_input, parse_quote, AngleBracketedGenericArguments, Fields, FnArg, GenericArgument,
     GenericParam, Generics, Item, ItemFn, PatType, Path, PathArguments, PathSegment, Result,
-    Signature, TraitBound, TraitBoundModifier, Type, TypeParam, TypeParamBound, TypePath,
+    Signature, TraitBound, TraitBoundModifier, Type, TypeParam, TypeParamBound, TypePath, Variant,
 };
 
 /// Shortcut to return a compiler error
@@ -261,23 +261,70 @@ fn derive_for_type(attr: Syntax, item: Syntax) -> Result<Syntax> {
 
     // instrument necessary attributes
     let mut target = syn::parse::<Item>(item)?;
-    let attrs = match &mut target {
-        Item::Struct(item_struct) => &mut item_struct.attrs,
+    let impl_default = match &mut target {
+        Item::Struct(item_struct) => {
+            // derivation of `Default`
+            item_struct.attrs.push(parse_quote!(
+                #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+            ));
+            None
+        }
         Item::Enum(item_enum) => {
-            // instrument the #[default] marker
-            match item_enum.variants.first_mut() {
+            // no derivation of `Default`
+            item_enum.attrs.push(parse_quote!(
+                #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+            ));
+
+            // construct manual `Default` implementation
+            match item_enum.variants.first() {
                 None => bail_on!(item_enum, "expect at least one variant"),
                 Some(variant) => {
-                    variant.attrs.push(parse_quote!(#[default]));
+                    let Variant {
+                        attrs: _,
+                        ident,
+                        fields,
+                        discriminant,
+                    } = variant;
+
+                    bail_if_exists!(discriminant.as_ref().map(|(_, e)| e));
+                    let default_impl = match fields {
+                        Fields::Unit => quote! {
+                            fn default() -> Self { Self::#ident }
+                        },
+                        Fields::Named(fields_named) => {
+                            let init: Vec<_> = fields_named
+                                .named
+                                .iter()
+                                .map(|f| {
+                                    let field_name = f.ident.as_ref().expect("named field");
+                                    let field_type = &f.ty;
+                                    quote!(#field_name: #field_type::default())
+                                })
+                                .collect();
+                            quote! {
+                                fn default() -> Self { Self::#ident { #(#init),* } }
+                            }
+                        }
+                        Fields::Unnamed(fields_unnamed) => {
+                            let init: Vec<_> = fields_unnamed
+                                .unnamed
+                                .iter()
+                                .map(|f| {
+                                    let field_type = &f.ty;
+                                    quote!(#field_type::default())
+                                })
+                                .collect();
+                            quote! {
+                                fn default() -> Self { Self::#ident(#(#init),*) }
+                            }
+                        }
+                    };
+                    Some(default_impl)
                 }
             }
-            &mut item_enum.attrs
         }
         t => bail_on!(t, "expect type"),
     };
-    attrs.push(parse_quote!(
-        #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
-    ));
 
     // exact type name and generics
     let (ident, generics) = match &target {
@@ -293,9 +340,18 @@ fn derive_for_type(attr: Syntax, item: Syntax) -> Result<Syntax> {
     let tokenized_impl_generics = generics_to_defs(&ty_params_vec);
     let tokenized_name_ty_args = generics_to_uses(&ty_params_vec);
 
-    let combined = quote! {
-        #target
-        impl #tokenized_impl_generics SMT for #ident #tokenized_name_ty_args {}
+    let combined = match impl_default {
+        None => quote! {
+            #target
+            impl #tokenized_impl_generics SMT for #ident #tokenized_name_ty_args {}
+        },
+        Some(default) => quote! {
+            #target
+            impl #tokenized_impl_generics Default for #ident #tokenized_name_ty_args {
+                #default
+            }
+            impl #tokenized_impl_generics SMT for #ident #tokenized_name_ty_args {}
+        },
     };
     Ok(Syntax::from(combined))
 }
