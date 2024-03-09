@@ -4,9 +4,7 @@ use rusmart_smt_stdlib::{choose, forall};
 
 /// A term *in its valid state* is defined by the following ADT
 #[smt_type]
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub enum Value {
-    #[default]
     Null,
     Boolean(Boolean),
     Number(Rational),
@@ -16,19 +14,13 @@ pub enum Value {
     Set(Set<Value>),
 }
 
-impl SMT for Value {}
-
 /// A term *in any state* is defined by the following ADT
 #[smt_type]
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub enum State {
-    #[default]
     Undef,
     Value(Value),
     Error(Error),
 }
-
-impl SMT for State {}
 
 #[smt_impl]
 fn seq_lt_recursive(l: Seq<Value>, r: Seq<Value>, i: Integer) -> Boolean {

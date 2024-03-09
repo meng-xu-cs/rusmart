@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use proc_macro2::{Delimiter, Ident, TokenStream, TokenTree};
 use quote::quote;
 use syn::{
-    parse_macro_input, AngleBracketedGenericArguments, FnArg, GenericArgument, GenericParam,
-    Generics, Item, ItemFn, PatType, Path, PathArguments, PathSegment, Result, Signature,
-    TraitBound, TraitBoundModifier, Type, TypeParam, TypeParamBound, TypePath,
+    parse_macro_input, parse_quote, AngleBracketedGenericArguments, FnArg, GenericArgument,
+    GenericParam, Generics, Item, ItemFn, PatType, Path, PathArguments, PathSegment, Result,
+    Signature, TraitBound, TraitBoundModifier, Type, TypeParam, TypeParamBound, TypePath,
 };
 
 /// Shortcut to return a compiler error
@@ -142,26 +142,168 @@ fn parse_dict(stream: &TokenStream) -> Result<BTreeMap<String, MetaValue>> {
     Ok(store)
 }
 
-/// Annotation over a Rust type
-#[proc_macro_attribute]
-pub fn smt_type(attr: Syntax, item: Syntax) -> Syntax {
+/// Parse the generics
+fn parse_generics(generics: &Generics) -> Result<(BTreeSet<&Ident>, Vec<&Ident>)> {
+    let Generics {
+        lt_token,
+        params,
+        gt_token,
+        where_clause,
+    } = generics;
+
+    // sanity check
+    if params.is_empty() {
+        bail_if_exists!(lt_token);
+        bail_if_exists!(gt_token);
+    } else {
+        bail_if_missing!(lt_token, generics, "<");
+        bail_if_missing!(gt_token, generics, ">");
+    }
+    bail_if_exists!(where_clause);
+
+    // collect type parameters
+    let mut ty_params_set = BTreeSet::new();
+    let mut ty_params_vec = vec![];
+    for param in params {
+        match param {
+            GenericParam::Type(TypeParam {
+                attrs: _,
+                ident,
+                colon_token,
+                bounds,
+                eq_token,
+                default,
+            }) => {
+                bail_if_missing!(colon_token, param, ":");
+                bail_if_exists!(eq_token);
+                bail_if_exists!(default);
+
+                // check that the SMT trait is enforced
+                let mut iter = bounds.iter();
+                let bound = bail_if_missing!(iter.next(), param, "trait");
+                match bound {
+                    TypeParamBound::Trait(TraitBound {
+                        paren_token,
+                        modifier,
+                        lifetimes,
+                        path:
+                            Path {
+                                leading_colon,
+                                segments,
+                            },
+                    }) => {
+                        if paren_token.is_some() {
+                            bail_on!(bound, "invalid bound");
+                        }
+                        if !matches!(modifier, TraitBoundModifier::None) {
+                            bail_on!(modifier, "invalid modifier");
+                        }
+                        bail_if_exists!(lifetimes);
+                        bail_if_exists!(leading_colon);
+
+                        let mut iter = segments.iter();
+                        let segment = bail_if_missing!(iter.next(), bound, "trait name");
+                        bail_if_exists!(iter.next());
+
+                        let PathSegment { ident, arguments } = segment;
+                        if !matches!(arguments, PathArguments::None) {
+                            bail_on!(arguments, "unexpected")
+                        }
+                        if ident.to_string().as_str() != "SMT" {
+                            bail_on!(ident, "expect SMT trait");
+                        }
+                    }
+                    _ => bail_on!(bound, "expect trait bound"),
+                }
+                bail_if_exists!(iter.next());
+
+                // save the type parameter name after duplication check
+                if !ty_params_set.insert(ident) {
+                    bail_on!(ident, "duplicated declaration");
+                }
+                ty_params_vec.push(ident);
+            }
+            _ => bail_on!(param, "expect type parameter"),
+        }
+    }
+
+    // return both the set and vec
+    Ok((ty_params_set, ty_params_vec))
+}
+
+/// Type parameters to def tokens
+fn generics_to_defs(params: &[&Ident]) -> TokenStream {
+    if params.is_empty() {
+        TokenStream::new()
+    } else {
+        let content = params.iter().map(|&n| quote!(#n: SMT));
+        quote!(<#(#content),*>)
+    }
+}
+
+/// Type parameters to use tokens
+fn generics_to_uses(params: &[&Ident]) -> TokenStream {
+    if params.is_empty() {
+        TokenStream::new()
+    } else {
+        let content = params.iter().map(|&n| quote!(#n));
+        quote!(<#(#content),*>)
+    }
+}
+
+/// Derive for type annotations
+fn derive_for_type(attr: Syntax, item: Syntax) -> Result<Syntax> {
     // check attributes
     let attr = TokenStream::from(attr);
     if !attr.is_empty() {
-        fail_on!(attr, "unexpected");
+        bail_on!(attr, "unexpected");
     }
 
-    // produce the output
-    let output = item.clone();
+    // instrument necessary attributes
+    let mut target = syn::parse::<Item>(item)?;
+    let attrs = match &mut target {
+        Item::Struct(item_struct) => &mut item_struct.attrs,
+        Item::Enum(item_enum) => {
+            // instrument the #[default] marker
+            match item_enum.variants.first_mut() {
+                None => bail_on!(item_enum, "expect at least one variant"),
+                Some(variant) => {
+                    variant.attrs.push(parse_quote!(#[default]));
+                }
+            }
+            &mut item_enum.attrs
+        }
+        t => bail_on!(t, "expect type"),
+    };
+    attrs.push(parse_quote!(
+        #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+    ));
 
-    // ensure that the underlying item is a type
-    let target = parse_macro_input!(item as Item);
-    if !matches!(target, Item::Struct(_) | Item::Enum(_)) {
-        fail_on!(target, "expect type");
-    }
+    // exact type name and generics
+    let (ident, generics) = match &target {
+        Item::Struct(item_struct) => (&item_struct.ident, &item_struct.generics),
+        Item::Enum(item_enum) => (&item_enum.ident, &item_enum.generics),
+        _ => unreachable!(),
+    };
 
-    // do nothing with the type declaration
-    output
+    // check validity of generics
+    let (_, ty_params_vec) = parse_generics(generics)?;
+
+    // construct the extended stream
+    let tokenized_impl_generics = generics_to_defs(&ty_params_vec);
+    let tokenized_name_ty_args = generics_to_uses(&ty_params_vec);
+
+    let combined = quote! {
+        #target
+        impl #tokenized_impl_generics SMT for #ident #tokenized_name_ty_args {}
+    };
+    Ok(Syntax::from(combined))
+}
+
+/// Annotation over a Rust type
+#[proc_macro_attribute]
+pub fn smt_type(attr: Syntax, item: Syntax) -> Syntax {
+    fail_if_error!(derive_for_type(attr, item))
 }
 
 /// Collect type arguments recursively
@@ -254,86 +396,7 @@ fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
     bail_if_exists!(variadic);
 
     // extract the function generics
-    let Generics {
-        lt_token,
-        params,
-        gt_token,
-        where_clause,
-    } = generics;
-
-    if params.is_empty() {
-        bail_if_exists!(lt_token);
-        bail_if_exists!(gt_token);
-    } else {
-        bail_if_missing!(lt_token, generics, "<");
-        bail_if_missing!(gt_token, generics, ">");
-    }
-    bail_if_exists!(where_clause);
-
-    let mut ty_params = BTreeSet::new();
-    let mut func_generics = vec![];
-    for param in params {
-        match param {
-            GenericParam::Type(TypeParam {
-                attrs: _,
-                ident,
-                colon_token,
-                bounds,
-                eq_token,
-                default,
-            }) => {
-                bail_if_missing!(colon_token, param, ":");
-                bail_if_exists!(eq_token);
-                bail_if_exists!(default);
-
-                // check that the SMT trait is enforced
-                let mut iter = bounds.iter();
-                let bound = bail_if_missing!(iter.next(), param, "trait");
-                match bound {
-                    TypeParamBound::Trait(TraitBound {
-                        paren_token,
-                        modifier,
-                        lifetimes,
-                        path:
-                            Path {
-                                leading_colon,
-                                segments,
-                            },
-                    }) => {
-                        if paren_token.is_some() {
-                            bail_on!(bound, "invalid bound");
-                        }
-                        if !matches!(modifier, TraitBoundModifier::None) {
-                            bail_on!(modifier, "invalid modifier");
-                        }
-                        bail_if_exists!(lifetimes);
-                        bail_if_exists!(leading_colon);
-
-                        let mut iter = segments.iter();
-                        let segment = bail_if_missing!(iter.next(), bound, "trait name");
-                        bail_if_exists!(iter.next());
-
-                        let PathSegment { ident, arguments } = segment;
-                        if !matches!(arguments, PathArguments::None) {
-                            bail_on!(arguments, "unexpected")
-                        }
-                        if ident.to_string().as_str() != "SMT" {
-                            bail_on!(ident, "expect SMT trait");
-                        }
-                    }
-                    _ => bail_on!(bound, "expect trait bound"),
-                }
-                bail_if_exists!(iter.next());
-
-                // save the type parameter name after duplication check
-                if !ty_params.insert(ident) {
-                    bail_on!(ident, "duplicated declaration");
-                }
-                func_generics.push(ident);
-            }
-            _ => bail_on!(param, "expect type parameter"),
-        }
-    }
+    let (ty_params_set, ty_params_vec) = parse_generics(generics)?;
 
     // extract the self type
     let param0 = bail_if_missing!(inputs.first(), sig, "at least one parameter");
@@ -364,7 +427,12 @@ fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
                 // collect type arguments involved
                 let mut ty_args = BTreeSet::new();
                 let mut ty_args_ordered = vec![];
-                collect_type_arguments(segment, &ty_params, &mut ty_args, &mut ty_args_ordered)?;
+                collect_type_arguments(
+                    segment,
+                    &ty_params_set,
+                    &mut ty_args,
+                    &mut ty_args_ordered,
+                )?;
 
                 let PathSegment {
                     ident,
@@ -382,34 +450,18 @@ fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
     };
 
     // derive the method generics
-    let method_ty_params: Vec<_> = func_generics
+    let method_ty_params: Vec<_> = ty_params_vec
         .iter()
         .filter(|n| !self_ty_args.contains(*n))
         .copied()
         .collect();
 
     // derive the generics tokens
-    let generics_to_decl = |params: &[&Ident]| {
-        if params.is_empty() {
-            TokenStream::new()
-        } else {
-            let content = params.iter().map(|&n| quote!(#n: SMT));
-            quote!(<#(#content),*>)
-        }
-    };
-    let tokenized_impl_generics = generics_to_decl(&self_ty_args_ordered);
-    let tokenized_method_generics = generics_to_decl(&method_ty_params);
+    let tokenized_impl_generics = generics_to_defs(&self_ty_args_ordered);
+    let tokenized_method_generics = generics_to_defs(&method_ty_params);
 
-    let generics_to_args = |params: &[&Ident]| {
-        if params.is_empty() {
-            TokenStream::new()
-        } else {
-            let content = params.iter().map(|&n| quote!(#n));
-            quote!(<#(#content),*>)
-        }
-    };
-    let tokenized_self_ty_args = generics_to_args(&self_ty_args_ordered);
-    let tokenized_func_ty_args = generics_to_args(&func_generics);
+    let tokenized_self_ty_args = generics_to_uses(&self_ty_args_ordered);
+    let tokenized_func_ty_args = generics_to_uses(&ty_params_vec);
 
     // derive the parameter tokens
     let mut iter = inputs.iter();
