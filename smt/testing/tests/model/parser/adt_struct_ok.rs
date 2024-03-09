@@ -2,12 +2,9 @@ use rusmart_smt_remark::smt_type;
 use rusmart_smt_stdlib::dt::{Boolean, Cloak, Map, Seq, Set, SMT};
 
 #[smt_type]
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 struct S1 {
     f1: Boolean,
 }
-
-impl SMT for S1 {}
 
 #[smt_type]
 struct S2 {

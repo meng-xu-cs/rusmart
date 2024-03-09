@@ -1,10 +1,10 @@
-use rusmart_smt_remark::smt_type;
+use rusmart_smt_remark::smt_impl;
 use rusmart_smt_stdlib::dt::SMT;
 
-#[smt_type]
-struct S<T>
+#[smt_impl]
+fn foo<T>(t: T) -> T
 where
     T: SMT,
 {
-    f: T,
+    t
 }

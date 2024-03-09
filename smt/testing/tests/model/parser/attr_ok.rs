@@ -1,5 +1,5 @@
 use rusmart_smt_remark::{smt_axiom, smt_impl, smt_spec, smt_type};
-use rusmart_smt_stdlib::dt::Boolean;
+use rusmart_smt_stdlib::dt::{Boolean, SMT};
 
 /* annotations for types */
 

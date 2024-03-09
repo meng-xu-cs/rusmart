@@ -1,8 +1,8 @@
-use rusmart_smt_remark::smt_type;
+use rusmart_smt_remark::smt_impl;
 
 trait NotSMT {}
 
-#[smt_type]
-struct S<T: NotSMT> {
-    f: T,
+#[smt_impl]
+fn foo<T: NotSMT>(t: T) -> T {
+    t
 }

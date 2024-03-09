@@ -1,7 +1,7 @@
-use rusmart_smt_remark::smt_type;
+use rusmart_smt_remark::smt_impl;
 use rusmart_smt_stdlib::dt::Boolean;
 
-#[smt_type]
-struct S<const N: usize> {
-    f: [Boolean; N],
+#[smt_impl]
+fn foo<const N: usize>() -> Boolean {
+    Boolean::from(true)
 }
