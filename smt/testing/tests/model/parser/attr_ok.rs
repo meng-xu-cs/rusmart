@@ -45,12 +45,12 @@ fn f6(s: S) -> Boolean {
     f4(s)
 }
 
-#[smt_impl(specs = [f6, f8])]
+#[smt_impl(method = m7, specs = [f6, f8])]
 fn f7(s: S) -> Boolean {
     f5(s)
 }
 
-#[smt_spec(impls = [f5, f7])]
+#[smt_spec(method = m8, impls = [f5, f7])]
 fn f8(s: S) -> Boolean {
     f6(s)
 }
@@ -60,4 +60,11 @@ fn f8(s: S) -> Boolean {
 #[smt_axiom]
 fn a1() -> Boolean {
     Boolean::from(false)
+}
+
+/* allow other annotations */
+#[smt_type]
+#[allow(dead_code)]
+enum E1 {
+    V0,
 }

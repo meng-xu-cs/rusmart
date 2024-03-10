@@ -1,3 +1,7 @@
 #!/bin/bash
 
-cargo tarpaulin --out html
+cargo tarpaulin \
+    --engine llvm \
+    --out html
+
+open ../../tarpaulin-report.html
