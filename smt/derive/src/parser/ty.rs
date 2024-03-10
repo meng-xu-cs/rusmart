@@ -359,7 +359,7 @@ impl TypeTag {
         for item in args {
             match item {
                 GenericArgument::Type(ty_arg) => {
-                    let t = TypeTag::from_type(ctxt, ty_arg)?;
+                    let t = Self::from_type(ctxt, ty_arg)?;
                     arguments.push(t);
                 }
                 _ => bail_on!(item, "not a type argument"),
