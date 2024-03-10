@@ -14,12 +14,6 @@ enum Annotation {
     Axiom,
 }
 
-/// Annotation value
-enum MetaValue {
-    One(Ident),
-    Set(BTreeSet<Ident>),
-}
-
 impl Annotation {
     /// Convert a path to an annotation
     pub fn parse_path(path: &Path) -> Option<Self> {
@@ -31,6 +25,12 @@ impl Annotation {
             _ => None,
         }
     }
+}
+
+/// Annotation value
+enum MetaValue {
+    One(Ident),
+    Set(BTreeSet<Ident>),
 }
 
 /// A mark for an annotated impl function

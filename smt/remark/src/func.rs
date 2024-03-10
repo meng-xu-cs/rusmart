@@ -9,7 +9,7 @@ use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::generics::TypeParamGroup;
 
 /// Derive for function annotations
-fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
+fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<TokenStream>> {
     // unpack things
     let ItemFn {
         attrs: _,
@@ -55,34 +55,43 @@ fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
             // collect type arguments involved
             let self_ty_args = ty_params.collect_type_arguments(ty)?;
 
-            // extract the name of the self type
-            match ty.as_ref() {
-                // extract type that should be marked as self
-                Type::Path(TypePath {
-                    qself: _,
-                    path:
-                        Path {
-                            leading_colon: _,
-                            segments,
-                        },
-                }) => {
-                    let mut iter = segments.iter();
-                    let segment = bail_if_missing!(iter.next(), param0, "type name");
-                    bail_if_exists!(iter.next());
-
-                    let PathSegment {
-                        ident,
-                        arguments: _,
-                    } = segment;
-                    if self_ty_args.contains(ident) {
-                        bail_on!(ident, "cannot derive a method for a type argument");
-                    }
-
-                    // done with the parsing
-                    (ident.clone(), self_ty_args)
+            // extract the name for the `self` type
+            let self_ty_name = match method {
+                None => {
+                    // end of derivation
+                    return Ok(None);
                 }
-                _ => unreachable!(),
-            }
+                Some(_) => {
+                    match ty.as_ref() {
+                        // extract type that should be marked as self
+                        Type::Path(TypePath {
+                            qself: _,
+                            path:
+                                Path {
+                                    leading_colon: _,
+                                    segments,
+                                },
+                        }) => {
+                            let mut iter = segments.iter();
+                            let segment = bail_if_missing!(iter.next(), param0, "type name");
+                            bail_if_exists!(iter.next());
+
+                            let PathSegment {
+                                ident,
+                                arguments: _,
+                            } = segment;
+                            if self_ty_args.contains(ident) {
+                                bail_on!(ident, "cannot derive a method for a type argument");
+                            }
+
+                            // done with the parsing
+                            ident.clone()
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            };
+            (self_ty_name, self_ty_args)
         }
     };
 
@@ -116,6 +125,7 @@ fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
     let tokenized_func_args = quote!(#(#func_args),*);
 
     // construct the expanded stream
+    let method = method.unwrap();
     let extended = quote! {
         impl #tokenized_impl_generics #self_ty_name #tokenized_self_ty_args {
             #vis fn #method #tokenized_method_generics (#tokenized_method_params) #output {
@@ -123,7 +133,7 @@ fn derive_method(target: &ItemFn, method: &Ident) -> Result<TokenStream> {
             }
         }
     };
-    Ok(extended)
+    Ok(Some(extended))
 }
 
 enum FnKind {
@@ -141,15 +151,9 @@ fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
     let target = syn::parse::<ItemFn>(item.clone())?;
 
     // derive the method, if requested
-    let output = match dict.remove("method") {
-        None => item,
-        Some(MetaValue::One(ident)) => {
-            let extended = derive_method(&target, &ident)?;
-
-            let mut output = TokenStream::from(item);
-            output.extend(extended);
-            Syntax::from(output)
-        }
+    let derived = match dict.remove("method") {
+        None => check_and_derive(&target, None)?,
+        Some(MetaValue::One(ident)) => check_and_derive(&target, Some(&ident))?,
         Some(MetaValue::Set(_)) => bail_on!(attr, "invalid method attribute"),
     };
 
@@ -162,6 +166,15 @@ fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
         bail_on!(attr, "unknown attributes");
     }
 
+    // consolidate the extended stream
+    let output = match derived {
+        None => item,
+        Some(extended) => {
+            let mut output = TokenStream::from(item);
+            output.extend(extended);
+            Syntax::from(output)
+        }
+    };
     Ok(output)
 }
 
