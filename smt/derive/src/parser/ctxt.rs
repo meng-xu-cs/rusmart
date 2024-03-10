@@ -4,6 +4,8 @@ use std::fs;
 use std::path::Path;
 
 use log::trace;
+#[cfg(test)]
+use proc_macro2::TokenStream;
 use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemMod, ItemStruct, Result, Stmt};
 use walkdir::WalkDir;
 
@@ -16,9 +18,6 @@ use crate::parser::generics::{Generics, GenericsInstPartial, Monomorphization, P
 use crate::parser::infer::{TIError, TypeRef, TypeUnifier};
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef, TypeTag};
-
-#[cfg(test)]
-use proc_macro2::TokenStream;
 
 /// SMT-marked type
 pub enum MarkedType {
@@ -499,9 +498,9 @@ impl ContextWithType {
             let mark = &self.impls.get(name).expect("impl").mark;
             // check signature
             for spec_name in &mark.specs {
-                let (spec_sig, _) = sig_specs.get(spec_name).expect("spec");
+                let (spec_sig, spec_raw) = sig_specs.get(spec_name).expect("spec");
                 if !spec_sig.is_compatible(sig) {
-                    bail_on!(raw, "signature mismatch");
+                    bail_on_with_note!(raw, "signature mismatch", spec_raw, "spec signature here");
                 }
                 vc_db.insert(Refinement {
                     fn_impl: name.clone(),
@@ -520,9 +519,9 @@ impl ContextWithType {
             let mark = &self.specs.get(name).expect("spec").mark;
             // check signature
             for impl_name in &mark.impls {
-                let (impl_sig, _) = sig_impls.get(impl_name).expect("impl");
+                let (impl_sig, impl_raw) = sig_impls.get(impl_name).expect("impl");
                 if !impl_sig.is_compatible(sig) {
-                    bail_on!(raw, "signature mismatch");
+                    bail_on_with_note!(raw, "signature mismatch", impl_raw, "impl signature here");
                 }
                 vc_db.insert(Refinement {
                     fn_impl: impl_name.clone(),
