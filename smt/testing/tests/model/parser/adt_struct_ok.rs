@@ -4,6 +4,7 @@ use rusmart_smt_stdlib::dt::{Boolean, Cloak, Map, Seq, Set, SMT};
 #[smt_type]
 struct S1 {
     f1: Boolean,
+    f2: (Boolean, Boolean),
 }
 
 #[smt_type]
