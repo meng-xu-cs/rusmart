@@ -9,9 +9,7 @@ use syn::{
 };
 
 use crate::parser::ctxt::MarkedType;
-use crate::parser::err::{
-    bail_if_empty, bail_if_exists, bail_if_missing, bail_if_non_empty, bail_on,
-};
+use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::expr::CtxtForExpr;
 use crate::parser::infer::{TypeRef, TypeUnifier, TypeVar};
 use crate::parser::name::{ReservedIdent, TypeParamName, UsrTypeName};
@@ -108,36 +106,31 @@ impl Generics {
             gt_token,
         } = generics;
 
-        let params = match lt_token {
-            None => {
-                bail_if_exists!(gt_token);
-                bail_if_exists!(where_clause);
-                bail_if_non_empty!(params);
-                vec![]
-            }
-            Some(_) => {
-                bail_if_missing!(gt_token, generics, ">");
-                bail_if_exists!(where_clause);
-                bail_if_empty!(params, generics, "type parameter");
+        let mut declared = vec![];
 
-                let mut declared = vec![];
-                for item in params {
-                    match item {
-                        GenericParam::Type(ty_param) => {
-                            let name = SysTrait::validate_type_param_decl(ty_param)?;
-                            if declared.contains(&name) {
-                                bail_on!(ty_param, "name conflict on generics");
-                            }
-                            declared.push(name);
+        if params.is_empty() {
+            bail_if_exists!(lt_token);
+            bail_if_exists!(gt_token);
+        } else {
+            bail_if_missing!(lt_token, generics, "<");
+            bail_if_missing!(gt_token, generics, ">");
+
+            for item in params {
+                match item {
+                    GenericParam::Type(ty_param) => {
+                        let name = SysTrait::validate_type_param_decl(ty_param)?;
+                        if declared.contains(&name) {
+                            bail_on!(ty_param, "name conflict on generics");
                         }
-                        _ => bail_on!(item, "type parameters only"),
+                        declared.push(name);
                     }
+                    _ => bail_on!(item, "type parameters only"),
                 }
-                declared
             }
         };
+        bail_if_exists!(where_clause);
 
-        Ok(Self { params })
+        Ok(Self { params: declared })
     }
 
     /// Convert from a marked type
