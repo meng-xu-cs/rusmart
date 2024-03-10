@@ -400,3 +400,22 @@ impl Error {
 }
 
 impl SMT for Error {}
+
+/// Trait implementation
+macro_rules! smt_tuple_impls {
+    ( $( $name:ident )+ ) => {
+        impl<$($name: SMT),+> SMT for ($($name,)+) {}
+    };
+}
+
+smt_tuple_impls! { A B }
+smt_tuple_impls! { A B C }
+smt_tuple_impls! { A B C D }
+smt_tuple_impls! { A B C D E }
+smt_tuple_impls! { A B C D E F }
+smt_tuple_impls! { A B C D E F G }
+smt_tuple_impls! { A B C D E F G H }
+smt_tuple_impls! { A B C D E F G H I }
+smt_tuple_impls! { A B C D E F G H I J }
+smt_tuple_impls! { A B C D E F G H I J K }
+smt_tuple_impls! { A B C D E F G H I J K L }
