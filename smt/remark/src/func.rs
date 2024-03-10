@@ -42,8 +42,14 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
     // extract the function generics
     let ty_params = TypeParamGroup::parse_generics(generics)?;
 
+    // probe on the first parameter
+    let param0 = match (inputs.first(), method) {
+        (None, None) => return Ok(None),
+        (None, Some(_)) => bail_on!(sig, "at least one parameter"),
+        (Some(p), _) => p,
+    };
+
     // extract the self type
-    let param0 = bail_if_missing!(inputs.first(), sig, "at least one parameter");
     let (self_ty_name, self_ty_args) = match param0 {
         FnArg::Receiver(_) => bail_on!(param0, "expect type declaration"),
         FnArg::Typed(PatType {
