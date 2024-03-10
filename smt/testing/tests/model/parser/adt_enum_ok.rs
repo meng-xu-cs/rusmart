@@ -1,11 +1,12 @@
 use rusmart_smt_remark::smt_type;
-use rusmart_smt_stdlib::dt::{Boolean, SMT};
+use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Rational, Text, SMT};
 
 #[smt_type]
 enum E1 {
     V1,
     V2(Boolean),
-    V3 { f1: Boolean },
-    V4((Boolean, Boolean)),
-    V5 { f1: (Boolean, Boolean) },
+    V3 { f1: Integer },
+    V4((Boolean, Rational)),
+    V5 { f1: (Text, Boolean) },
+    V6(Error),
 }

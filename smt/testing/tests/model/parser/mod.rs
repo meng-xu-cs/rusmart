@@ -5,6 +5,7 @@ mod adt_struct_as_unit;
 mod adt_struct_no_fields;
 mod adt_struct_ok;
 mod adt_tuple_no_slots;
+mod adt_tuple_ok;
 mod attr_ok;
 mod duplicated_axiom;
 mod duplicated_impl;
