@@ -8,6 +8,7 @@ mod adt_tuple_no_slots;
 mod adt_tuple_ok;
 mod attr_ok;
 mod axiom_not_boolean_return;
+mod axiom_ok;
 mod duplicated_axiom;
 mod duplicated_impl;
 mod duplicated_spec;
