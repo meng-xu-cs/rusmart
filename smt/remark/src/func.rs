@@ -2,9 +2,9 @@ use proc_macro::TokenStream as Syntax;
 
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{FnArg, ItemFn, PatType, Path, PathSegment, Result, Signature, Type, TypePath};
+use syn::{FnArg, ItemFn, Path, PathSegment, PatType, Result, Signature, Type, TypePath};
 
-use crate::attr::{parse_dict, MetaValue};
+use crate::attr::{MetaValue, parse_dict};
 use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::generics::TypeParamGroup;
 
@@ -109,7 +109,7 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
     let tokenized_method_generics = method_ty_params.to_syntax_def();
 
     let tokenized_self_ty_args = self_ty_args.to_syntax_use();
-    let tokenized_func_ty_args = ty_params.to_syntax_use();
+    let tokenized_func_ty_args = ty_params.to_syntax_invoke();
 
     // derive the parameter tokens
     let mut iter = inputs.iter();

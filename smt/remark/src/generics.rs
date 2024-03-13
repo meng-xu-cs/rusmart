@@ -151,6 +151,16 @@ impl TypeParamGroup {
             quote!(<#(#content),*>)
         }
     }
+
+    /// Convert into invoke syntax
+    pub fn to_syntax_invoke(&self) -> TokenStream {
+        if self.params.is_empty() {
+            TokenStream::new()
+        } else {
+            let content = self.params.iter().map(|n| quote!(#n));
+            quote!(::<#(#content),*>)
+        }
+    }
 }
 
 /// Collect type arguments recursively

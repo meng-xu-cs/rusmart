@@ -15,6 +15,7 @@ mod duplicated_spec;
 mod duplicated_type;
 mod func_no_return_type;
 mod generics_ok;
+mod method_derive_ok;
 mod name_conflict_on_impl_and_spec;
 mod name_conflict_on_type_and_axiom;
 mod type_never;
