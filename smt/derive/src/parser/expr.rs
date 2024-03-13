@@ -883,7 +883,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     let LetDecl { vars, decl } = LetDecl::parse(self.root, unifier, pat)?;
 
                     // extract the body
-                    let body = bail_if_missing!(init, binding, "expect initializer");
+                    let body = bail_if_missing!(init, binding, "initializer");
                     let LocalInit {
                         eq_token: _,
                         expr,

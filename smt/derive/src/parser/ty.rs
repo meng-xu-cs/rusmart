@@ -88,7 +88,7 @@ impl ReservedIdent for SysTypeName {
 }
 
 impl SysTypeName {
-    /// Create an generics for intrinsic types
+    /// Create the associated generics for an intrinsic type
     pub fn generics(&self) -> Generics {
         match self {
             Self::Boolean | Self::Integer | Self::Rational | Self::Text | Self::Error => {

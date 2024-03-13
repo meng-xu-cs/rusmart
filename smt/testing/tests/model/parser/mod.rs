@@ -13,6 +13,7 @@ mod duplicated_axiom;
 mod duplicated_impl;
 mod duplicated_spec;
 mod duplicated_type;
+mod expr_local_without_binding;
 mod func_no_return_type;
 mod generics_ok;
 mod method_derive_ok;
