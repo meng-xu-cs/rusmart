@@ -50,65 +50,56 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
     };
 
     // extract the self type
-    let (self_ty_name, self_ty_args) = match param0 {
+    let self_ty = match param0 {
         FnArg::Receiver(_) => bail_on!(param0, "expect type declaration"),
         FnArg::Typed(PatType {
             attrs: _,
             pat: _,
             colon_token: _,
             ty,
-        }) => {
-            // collect type arguments involved
-            let self_ty_args = ty_params.collect_type_arguments(ty)?;
-
-            // extract the name for the `self` type
-            let self_ty_name = match method {
-                None => {
-                    // end of derivation
-                    return Ok(None);
-                }
-                Some(_) => {
-                    match ty.as_ref() {
-                        // extract type that should be marked as self
-                        Type::Path(TypePath {
-                            qself: _,
-                            path:
-                                Path {
-                                    leading_colon: _,
-                                    segments,
-                                },
-                        }) => {
-                            let mut iter = segments.iter();
-                            let segment = bail_if_missing!(iter.next(), param0, "type name");
-                            bail_if_exists!(iter.next());
-
-                            let PathSegment {
-                                ident,
-                                arguments: _,
-                            } = segment;
-                            if self_ty_args.contains(ident) {
-                                bail_on!(ident, "cannot derive a method for a type argument");
-                            }
-
-                            // done with the parsing
-                            ident.clone()
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-            };
-            (self_ty_name, self_ty_args)
-        }
+        }) => ty.as_ref(),
     };
 
-    // derive the method generics
-    let method_ty_params = ty_params.diff(&self_ty_args);
+    // collect (and validate) type arguments involved
+    let self_ty_consumed_params = ty_params.collect_type_arguments(self_ty)?;
+
+    // decide whether to early terminate
+    let method = match method {
+        None => return Ok(None),
+        Some(m) => m,
+    };
+
+    // validate the self type
+    let (self_ty_name, self_ty_args) = match self_ty {
+        // extract type that should be marked as self
+        Type::Path(TypePath {
+            qself: _,
+            path: Path {
+                leading_colon: _,
+                segments,
+            },
+        }) => {
+            let mut iter = segments.iter();
+            let segment = bail_if_missing!(iter.next(), param0, "type name");
+            bail_if_exists!(iter.next());
+
+            let PathSegment { ident, arguments } = segment;
+            if self_ty_consumed_params.contains(ident) {
+                bail_on!(ident, "cannot derive a method for a type argument");
+            }
+
+            // done with the parsing
+            (ident, arguments)
+        }
+        _ => unreachable!(),
+    };
 
     // derive the generics tokens
-    let tokenized_impl_generics = self_ty_args.to_syntax_def();
+    let tokenized_impl_generics = self_ty_consumed_params.to_syntax_def();
+
+    let method_ty_params = ty_params.diff(&self_ty_consumed_params);
     let tokenized_method_generics = method_ty_params.to_syntax_def();
 
-    let tokenized_self_ty_args = self_ty_args.to_syntax_use();
     let tokenized_func_ty_args = ty_params.to_syntax_invoke();
 
     // derive the parameter tokens
@@ -131,9 +122,8 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
     let tokenized_func_args = quote!(#(#func_args),*);
 
     // construct the expanded stream
-    let method = method.unwrap();
     let extended = quote! {
-        impl #tokenized_impl_generics #self_ty_name #tokenized_self_ty_args {
+        impl #tokenized_impl_generics #self_ty_name #self_ty_args {
             #vis fn #method #tokenized_method_generics (#tokenized_method_params) #output {
                 #func_name #tokenized_func_ty_args(#tokenized_func_args)
             }
