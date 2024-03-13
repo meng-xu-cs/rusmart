@@ -57,7 +57,7 @@ pub struct ApplyDatabase {
     /// user-defined function with a system-built type qualifier
     on_sys_type: BTreeMap<UsrFuncName, BTreeMap<SysTypeName, TypeFn>>,
     /// user-defined function with a user-defined type qualifier
-    on_usr_type: BTreeMap<UsrFuncName, BTreeMap<UsrTypeName, BTreeMap<Vec<TypeTag>, TypeFn>>>,
+    on_usr_type: BTreeMap<UsrFuncName, BTreeMap<UsrTypeName, (Vec<TypeTag>, TypeFn)>>,
 }
 
 impl ApplyDatabase {
@@ -216,7 +216,7 @@ impl ApplyDatabase {
 
             let ty_params = &sig.generics.params;
             if self_ty_generics.len() > ty_params.len() {
-                bail!("the receiver argument take too many type arguments");
+                bail!("[invariant] the receiver argument takes too many type arguments");
             }
 
             // reset the generics
@@ -232,9 +232,7 @@ impl ApplyDatabase {
                 .on_usr_type
                 .entry(method_name.clone())
                 .or_default()
-                .entry(self_ty_name)
-                .or_default()
-                .insert(self_ty_args, method)
+                .insert(self_ty_name, (self_ty_args, method))
             {
                 None => (),
                 Some(_) => bail!(
@@ -295,9 +293,7 @@ impl ApplyDatabase {
         self.on_usr_type
             .get(fn_name)
             .and_then(|s| s.get(ty_name))
-            // TODO: FIXME: lookup the correct instantiation
-            .and_then(|s| s.get(&vec![]))
-            .and_then(|ty| Self::filter_by_kind(ty, kind))
+            .and_then(|(_, ty)| Self::filter_by_kind(ty, kind))
     }
 
     /// Get candidates given a function name
@@ -321,10 +317,8 @@ impl ApplyDatabase {
         }
         match self.on_usr_type.get(name) {
             None => (),
-            Some(options) => candidates.extend(options.iter().filter_map(|(n, t)| {
-                // TODO: FIXME: lookup the correct instantiation
-                Self::filter_by_kind(t.get(&vec![]).unwrap(), kind)
-                    .map(|t| (TypeName::Usr(n.clone()), t))
+            Some(options) => candidates.extend(options.iter().filter_map(|(n, (_, t))| {
+                Self::filter_by_kind(t, kind).map(|t| (TypeName::Usr(n.clone()), t))
             })),
         }
 
