@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use anyhow::{bail, Result};
 
@@ -57,7 +57,7 @@ pub struct ApplyDatabase {
     /// user-defined function with a system-built type qualifier
     on_sys_type: BTreeMap<UsrFuncName, BTreeMap<SysTypeName, TypeFn>>,
     /// user-defined function with a user-defined type qualifier
-    on_usr_type: BTreeMap<UsrFuncName, BTreeMap<UsrTypeName, TypeFn>>,
+    on_usr_type: BTreeMap<UsrFuncName, BTreeMap<UsrTypeName, BTreeMap<Vec<TypeTag>, TypeFn>>>,
 }
 
 impl ApplyDatabase {
@@ -202,37 +202,29 @@ impl ApplyDatabase {
         sig: &FuncSig,
         kind: Kind,
     ) -> Result<()> {
-        let func = TypeFn::new_from_sig(sig, kind);
-
         // try to register a method
         if let Some(method_name) = method {
-            let (ty_name, ty_args) = match func.params.first() {
+            // probe type parameters used in the first argument (i.e., `self`)
+            let (self_ty, self_ty_name, self_ty_args) = match sig.params.first() {
                 None => bail!("no receiver argument"),
-                Some(TypeTag::User(ty_name, ty_args)) => (ty_name, ty_args),
-                Some(_) => bail!("the receiver argument is not a user-defined type"),
+                Some((_, t)) => match t {
+                    TypeTag::User(ty_name, ty_args) => (t, ty_name.clone(), ty_args.clone()),
+                    _ => bail!("the receiver argument is not a user-defined type"),
+                },
             };
+            let self_ty_generics = self_ty.type_params_used();
 
-            // for simplicity, require type generics be the first set of type parameters
-            // TODO: relax this requirement
             let ty_params = &sig.generics.params;
-            if ty_args.len() > ty_params.len() {
+            if self_ty_generics.len() > ty_params.len() {
                 bail!("the receiver argument take too many type arguments");
-            }
-
-            let mut ty_generics = BTreeSet::new();
-            for (ty_arg, param_name) in ty_args.iter().zip(ty_params) {
-                if !matches!(ty_arg, TypeTag::Parameter(n) if n == param_name) {
-                    bail!("type parameter name mismatch");
-                }
-                ty_generics.insert(param_name.clone());
             }
 
             // reset the generics
             let method = TypeFn {
-                kind: func.kind,
-                generics: func.generics.filter(&ty_generics),
-                params: func.params.clone(),
-                ret_ty: func.ret_ty.clone(),
+                kind,
+                generics: sig.generics.filter(&self_ty_generics),
+                params: sig.params.iter().map(|(_, ty)| ty.clone()).collect(),
+                ret_ty: sig.ret_ty.clone(),
             };
 
             // all checked up
@@ -240,18 +232,21 @@ impl ApplyDatabase {
                 .on_usr_type
                 .entry(method_name.clone())
                 .or_default()
-                .insert(ty_name.clone(), method)
+                .entry(self_ty_name)
+                .or_default()
+                .insert(self_ty_args, method)
             {
                 None => (),
                 Some(_) => bail!(
                     "duplicated registration of user-defined function: {}::{}",
-                    ty_name,
-                    method_name
+                    self_ty,
+                    method_name,
                 ),
             }
         }
 
         // register this function as unqualified
+        let func = TypeFn::new_from_sig(sig, kind);
         match self.unqualified.insert(name.clone(), func) {
             None => (),
             Some(_) => panic!("duplicated registration of user-defined function: {}", name),
@@ -300,6 +295,8 @@ impl ApplyDatabase {
         self.on_usr_type
             .get(fn_name)
             .and_then(|s| s.get(ty_name))
+            // TODO: FIXME: lookup the correct instantiation
+            .and_then(|s| s.get(&vec![]))
             .and_then(|ty| Self::filter_by_kind(ty, kind))
     }
 
@@ -325,7 +322,9 @@ impl ApplyDatabase {
         match self.on_usr_type.get(name) {
             None => (),
             Some(options) => candidates.extend(options.iter().filter_map(|(n, t)| {
-                Self::filter_by_kind(t, kind).map(|t| (TypeName::Usr(n.clone()), t))
+                // TODO: FIXME: lookup the correct instantiation
+                Self::filter_by_kind(t.get(&vec![]).unwrap(), kind)
+                    .map(|t| (TypeName::Usr(n.clone()), t))
             })),
         }
 

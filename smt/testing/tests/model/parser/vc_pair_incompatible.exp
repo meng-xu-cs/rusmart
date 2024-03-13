@@ -1,0 +1,2 @@
+spec signature here
+fn spec_foo (a : Rational , b : Rational) -> Boolean

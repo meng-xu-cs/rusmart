@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
@@ -366,6 +366,40 @@ impl TypeTag {
             }
         }
         Ok(arguments)
+    }
+
+    /// Collect type parameters involved in this type tag (recursive function)
+    fn type_params_used_recursive(&self, params: &mut BTreeSet<TypeParamName>) {
+        match self {
+            Self::Boolean | Self::Integer | Self::Rational | Self::Text | Self::Error => (),
+            Self::Cloak(sub) => sub.type_params_used_recursive(params),
+            Self::Seq(sub) => sub.type_params_used_recursive(params),
+            Self::Set(sub) => sub.type_params_used_recursive(params),
+            Self::Map(key, val) => {
+                key.type_params_used_recursive(params);
+                val.type_params_used_recursive(params);
+            }
+            Self::User(_, args) => {
+                for arg in args {
+                    arg.type_params_used_recursive(params);
+                }
+            }
+            Self::Pack(elems) => {
+                for elem in elems {
+                    elem.type_params_used_recursive(params);
+                }
+            }
+            Self::Parameter(name) => {
+                params.insert(name.clone());
+            }
+        }
+    }
+
+    /// Collect type parameters involved in this type tag
+    pub fn type_params_used(&self) -> BTreeSet<TypeParamName> {
+        let mut params = BTreeSet::new();
+        self.type_params_used_recursive(&mut params);
+        params
     }
 }
 
