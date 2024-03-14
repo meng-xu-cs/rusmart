@@ -2,9 +2,9 @@ use proc_macro::TokenStream as Syntax;
 
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{FnArg, ItemFn, Path, PathSegment, PatType, Result, Signature, Type, TypePath};
+use syn::{FnArg, ItemFn, PatType, Path, PathSegment, Result, Signature, Type, TypePath};
 
-use crate::attr::{MetaValue, parse_dict};
+use crate::attr::{parse_dict, MetaValue};
 use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::generics::TypeParamGroup;
 

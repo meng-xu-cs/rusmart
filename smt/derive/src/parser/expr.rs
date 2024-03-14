@@ -1017,11 +1017,22 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         let fields = match self.root.get_type_def(&ty_name) {
                             None => bail_on!(expr_struct, "[invariant] no such type"),
                             Some(def) => match &def.body {
-                                TypeBody::Record(record_def) => record_def
-                                    .fields
-                                    .iter()
-                                    .map(|(k, t)| (k.clone(), t.into()))
-                                    .collect(),
+                                TypeBody::Record(record_def) => {
+                                    let mut fields_instantiated = BTreeMap::new();
+                                    for (k, t) in &record_def.fields {
+                                        match inst.instantiate(t) {
+                                            None => bail_on!(
+                                                expr_struct,
+                                                "[invariant] no such type parameter in struct field {}",
+                                                k
+                                            ),
+                                            Some(instantiated) => {
+                                                fields_instantiated.insert(k.clone(), instantiated);
+                                            }
+                                        }
+                                    }
+                                    fields_instantiated
+                                }
                                 _ => bail_on!(expr_struct, "[invariant] not a record type"),
                             },
                         };
@@ -1046,11 +1057,23 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                         };
 
                         let fields = match variant {
-                            EnumVariant::Record(record_def) => record_def
-                                .fields
-                                .iter()
-                                .map(|(k, t)| (k.clone(), t.into()))
-                                .collect(),
+                            EnumVariant::Record(record_def) => {
+                                let mut fields_instantiated = BTreeMap::new();
+                                for (k, t) in &record_def.fields {
+                                    match inst.instantiate(t) {
+                                        None => bail_on!(
+                                            expr_struct,
+                                            "[invariant] no such type parameter in enum variant {} and field {}",
+                                            branch.variant,
+                                            k
+                                        ),
+                                        Some(instantiated) => {
+                                            fields_instantiated.insert(k.clone(), instantiated);
+                                        }
+                                    }
+                                }
+                                fields_instantiated
+                            }
                             _ => bail_on!(expr_struct, "not a record variant"),
                         };
                         let ret_ty = inst.make_ty(branch.ty_name.clone());

@@ -24,6 +24,7 @@ mod expr_local_type_ref;
 mod expr_local_without_binding;
 mod expr_path_ok;
 mod expr_path_with_namespace;
+mod expr_struct_ok;
 mod expr_tuple_ok;
 mod func_no_return_type;
 mod generics_ok;

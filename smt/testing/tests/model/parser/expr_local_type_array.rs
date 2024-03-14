@@ -3,6 +3,6 @@ use rusmart_smt_stdlib::dt::Boolean;
 
 #[smt_impl]
 fn foo(a: Boolean) -> Boolean {
-    let x: [Boolean;1] = [a];
+    let x: [Boolean; 1] = [a];
     a
 }

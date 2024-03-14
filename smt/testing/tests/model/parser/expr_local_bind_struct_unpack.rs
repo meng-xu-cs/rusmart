@@ -8,6 +8,6 @@ struct S {
 
 #[smt_impl]
 fn foo(s: S) -> Boolean {
-    let S {f} = s;
+    let S { f } = s;
     f
 }
