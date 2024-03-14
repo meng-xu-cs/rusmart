@@ -10,3 +10,8 @@ fn f1() -> (Boolean, Integer) {
 fn f2<K: SMT, V: SMT>(k: K, v: V) -> (K, V) {
     (k, v)
 }
+
+#[smt_impl]
+fn f3<T: SMT>(t: T) -> (T, T) {
+    (t, t)
+}

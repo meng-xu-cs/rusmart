@@ -20,6 +20,11 @@ fn f1() -> S1 {
 }
 
 #[smt_impl]
-fn f2<T: SMT>(t: T) -> S2<T, T> {
+fn f2<K: SMT, V: SMT>(k: K, v: V) -> S2<K, V> {
+    S2 { k, v }
+}
+
+#[smt_impl]
+fn f3<T: SMT>(t: T) -> S2<T, T> {
     S2 { k: t, v: t }
 }
