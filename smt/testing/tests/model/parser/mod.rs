@@ -14,6 +14,7 @@ mod duplicated_impl;
 mod duplicated_spec;
 mod duplicated_type;
 mod expr_local_bind_enum_unpack;
+mod expr_local_bind_paren;
 mod expr_local_bind_struct_unpack;
 mod expr_local_ok;
 mod expr_local_type_array;
