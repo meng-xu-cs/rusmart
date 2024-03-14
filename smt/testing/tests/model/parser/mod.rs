@@ -22,6 +22,8 @@ mod expr_local_type_infer;
 mod expr_local_type_paren;
 mod expr_local_type_ref;
 mod expr_local_without_binding;
+mod expr_path_ok;
+mod expr_path_with_namespace;
 mod func_no_return_type;
 mod generics_ok;
 mod method_derive_ok;
