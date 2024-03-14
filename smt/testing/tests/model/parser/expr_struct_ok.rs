@@ -28,3 +28,11 @@ fn f2<K: SMT, V: SMT>(k: K, v: V) -> S2<K, V> {
 fn f3<T: SMT>(t: T) -> S2<T, T> {
     S2 { k: t, v: t }
 }
+
+#[smt_impl]
+fn f4<T: SMT>(t: T) -> S2<T, Boolean> {
+    S2::<T, Boolean> {
+        k: t,
+        v: Boolean::from(false),
+    }
+}

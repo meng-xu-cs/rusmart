@@ -13,6 +13,7 @@ mod duplicated_axiom;
 mod duplicated_impl;
 mod duplicated_spec;
 mod duplicated_type;
+mod expr_enum_ok;
 mod expr_local_bind_enum_unpack;
 mod expr_local_bind_paren;
 mod expr_local_bind_struct_unpack;
