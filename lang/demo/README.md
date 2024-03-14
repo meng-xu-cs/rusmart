@@ -24,5 +24,5 @@ stmt-if     := var if expr;
 
 ### Type system
 
-- `Null`, `Bool`, `Int`
-- 
+- `Bool`, `Int` for any defined value
+- `Undef` for any undefined value
