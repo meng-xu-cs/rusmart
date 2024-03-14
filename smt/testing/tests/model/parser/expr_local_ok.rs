@@ -18,3 +18,13 @@ fn f3() -> (Boolean, Integer) {
     let (x, y) = (Boolean::from(false), Integer::from(0));
     (x, y)
 }
+
+#[smt_impl]
+fn f4(a: Boolean) -> Integer {
+    let x = if *a {
+        Integer::from(0)
+    } else {
+        Integer::from(1)
+    };
+    x
+}
