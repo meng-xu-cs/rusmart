@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
+use syn::punctuated::Punctuated;
 use syn::{
     AngleBracketedGenericArguments, Field, FieldMutability, Fields, FieldsNamed, FieldsUnnamed,
-    GenericArgument, Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Type,
-    TypePath, TypeTuple as TypePack, Variant,
+    GenericArgument, Ident, ItemEnum, ItemStruct, Path, PathArguments, PathSegment, Result, Token,
+    Type, TypePath, TypeTuple as TypePack, Variant,
 };
 
 use crate::parser::ctxt::{ContextWithGenerics, MarkedType};
@@ -192,19 +193,11 @@ pub enum TypeTag {
 }
 
 impl TypeTag {
-    /// Convert from a type argument pack
-    pub fn from_args<CTX: CtxtForType>(
+    /// Convert from a type argument pack (in type path)
+    fn from_args<CTX: CtxtForType>(
         ctxt: &CTX,
-        pack: &AngleBracketedGenericArguments,
+        args: &Punctuated<GenericArgument, Token![,]>,
     ) -> Result<Vec<Self>> {
-        let AngleBracketedGenericArguments {
-            colon2_token,
-            args,
-            lt_token: _,
-            gt_token: _,
-        } = pack;
-        bail_if_exists!(colon2_token);
-
         let mut list = vec![];
         for arg in args {
             match arg {
@@ -217,12 +210,42 @@ impl TypeTag {
         Ok(list)
     }
 
+    /// Convert from a type argument pack (in type path)
+    pub fn from_args_in_type_path<CTX: CtxtForType>(
+        ctxt: &CTX,
+        pack: &AngleBracketedGenericArguments,
+    ) -> Result<Vec<Self>> {
+        let AngleBracketedGenericArguments {
+            colon2_token,
+            args,
+            lt_token: _,
+            gt_token: _,
+        } = pack;
+        bail_if_exists!(colon2_token);
+        Self::from_args(ctxt, args)
+    }
+
+    /// Convert from a type argument pack (in expr path)
+    pub fn from_args_in_expr_path<CTX: CtxtForType>(
+        ctxt: &CTX,
+        pack: &AngleBracketedGenericArguments,
+    ) -> Result<Vec<Self>> {
+        let AngleBracketedGenericArguments {
+            colon2_token,
+            args,
+            lt_token: _,
+            gt_token: _,
+        } = pack;
+        bail_if_missing!(colon2_token, pack, "::");
+        Self::from_args(ctxt, args)
+    }
+
     /// Convert from a type argument pack, expecting 1 argument
     fn from_args_expect_1<CTX: CtxtForType>(
         ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<Self> {
-        let mut iter = Self::from_args(ctxt, pack)?.into_iter();
+        let mut iter = Self::from_args_in_type_path(ctxt, pack)?.into_iter();
         let a1 = match iter.next() {
             None => bail_on!(pack, "expect 1 argument, found 0"),
             Some(t) => t,
@@ -238,7 +261,7 @@ impl TypeTag {
         ctxt: &CTX,
         pack: &AngleBracketedGenericArguments,
     ) -> Result<(Self, Self)> {
-        let mut iter = Self::from_args(ctxt, pack)?.into_iter();
+        let mut iter = Self::from_args_in_type_path(ctxt, pack)?.into_iter();
         let a1 = match iter.next() {
             None => bail_on!(pack, "expect 2 argument, found 0"),
             Some(t) => t,
@@ -254,7 +277,7 @@ impl TypeTag {
     }
 
     /// Convert from a path
-    fn from_path<CTX: CtxtForType>(ctxt: &CTX, path: &Path) -> Result<Self> {
+    fn from_type_path<CTX: CtxtForType>(ctxt: &CTX, path: &Path) -> Result<Self> {
         let Path {
             leading_colon,
             segments,
@@ -303,7 +326,7 @@ impl TypeTag {
                     n => match arguments {
                         PathArguments::None => bail_on!(ident, "expect type arguments"),
                         PathArguments::AngleBracketed(pack) => {
-                            let args = Self::from_args(ctxt, pack)?;
+                            let args = Self::from_args_in_type_path(ctxt, pack)?;
                             if args.len() != n {
                                 bail_on!(arguments, "type argument number mismatch");
                             }
@@ -325,7 +348,7 @@ impl TypeTag {
         match ty {
             Type::Path(TypePath { qself, path }) => {
                 bail_if_exists!(qself.as_ref().map(|q| q.ty.as_ref()));
-                Self::from_path(ctxt, path)
+                Self::from_type_path(ctxt, path)
             }
             Type::Tuple(TypePack {
                 paren_token: _,

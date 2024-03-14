@@ -264,7 +264,7 @@ impl GenericsInstPartial {
                 .map(|(i, n)| (n.clone(), (i, None)))
                 .collect(),
             PathArguments::AngleBracketed(pack) => {
-                let ty_args = TypeTag::from_args(ctxt, pack)?;
+                let ty_args = TypeTag::from_args_in_expr_path(ctxt, pack)?;
                 if ty_args.len() != ty_params.len() {
                     bail_on!(pack, "type argument number mismatch");
                 }
