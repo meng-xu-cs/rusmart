@@ -262,3 +262,7 @@ pub fn axiom1(p1: Program, p2: Program) -> Boolean {
     p1.eq(p2)
         .implies(spec_evaluate_program(p1).eq(spec_evaluate_program(p2)))
 }
+
+// DCE
+// linting
+// error patterns (based on data)
