@@ -49,6 +49,16 @@ program:            := expr
 a := 1 + 2;
 b := 3 if a >= 0;
 a + b
+
+// evaluate to 6
+```
+
+```rego
+a := 1 + false;
+b := 3 if a >= 0;
+a + b
+
+// evaluate to fail by type mismatch
 ```
 
 ### Workflow
