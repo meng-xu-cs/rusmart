@@ -1,5 +1,5 @@
 use rusmart_smt_remark::{smt_impl, smt_type};
-use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Map, SMT};
+use rusmart_smt_stdlib::dt::{Boolean, Cloak, Error, Integer, Map, SMT};
 
 /// A term *in its valid state* is defined by the following ADT
 #[smt_type]
@@ -87,7 +87,7 @@ pub fn le(lhs: Expr, rhs: Expr) -> Expr {
         (_, Expr::Undef) => Expr::Error(Error::fresh()),
 
         // value op is delegated
-        (Expr::Value(l), Expr::Value(r)) => l.lt(r),
+        (Expr::Value(l), Expr::Value(r)) => l.le(r),
     }
 }
 
@@ -142,4 +142,98 @@ pub fn retrieve(state: State, var: Variable) -> Expr {
     } else {
         Expr::Undef
     }
+}
+
+#[smt_type]
+pub enum Operator {
+    LitBool(Boolean),
+    LitInt(Integer),
+    VarRef(Variable),
+    Add(Cloak<Operator>, Cloak<Operator>),
+    Sub(Cloak<Operator>, Cloak<Operator>),
+    Mul(Cloak<Operator>, Cloak<Operator>),
+    Div(Cloak<Operator>, Cloak<Operator>),
+    Eq(Cloak<Operator>, Cloak<Operator>),
+    Ne(Cloak<Operator>, Cloak<Operator>),
+    Lt(Cloak<Operator>, Cloak<Operator>),
+    Le(Cloak<Operator>, Cloak<Operator>),
+    Ge(Cloak<Operator>, Cloak<Operator>),
+    Gt(Cloak<Operator>, Cloak<Operator>),
+    And(Cloak<Operator>, Cloak<Operator>),
+    Or(Cloak<Operator>, Cloak<Operator>),
+    Xor(Cloak<Operator>, Cloak<Operator>),
+    Block(Cloak<BlockHead>, Cloak<Operator>),
+}
+
+#[smt_type]
+pub enum Statement {
+    Assign(Variable, Operator),
+    AssignIf(Variable, Operator, Operator),
+}
+
+#[smt_type]
+pub enum BlockHead {
+    None,
+    Stmt(Statement, Cloak<BlockHead>),
+}
+
+#[smt_type]
+pub struct Program {
+    body: Operator,
+}
+
+#[smt_impl]
+pub fn evaluate_operator(state: State, op: Operator) -> (State, Expr) {
+    match op {
+        Operator::LitBool(v) => (state, Expr::Value(Value::Boolean(v))),
+        Operator::LitInt(v) => (state, Expr::Value(Value::Integer(v))),
+        Operator::VarRef(v) => (state, retrieve(state, v)),
+        Operator::Lt(lhs, rhs) => {
+            let (t1, l) = evaluate_operator(state, lhs.reveal());
+            let (t2, r) = evaluate_operator(t1, rhs.reveal());
+            (t2, l.lt(r))
+        }
+        Operator::Le(lhs, rhs) => {
+            let (t1, l) = evaluate_operator(state, lhs.reveal());
+            let (t2, r) = evaluate_operator(t1, rhs.reveal());
+            (t2, l.le(r))
+        }
+        Operator::Block(head, body) => {
+            let t = evaluate_block_head(state, head.reveal());
+            evaluate_operator(t, body.reveal())
+        }
+        _ => todo!(),
+    }
+}
+
+#[smt_impl]
+pub fn evaluate_statement(state: State, stmt: Statement) -> State {
+    match stmt {
+        Statement::Assign(v, op) => {
+            let (t, e) = evaluate_operator(state, op);
+            assign(t, v, e)
+        }
+        Statement::AssignIf(v, op1, op2) => {
+            let (t1, expr) = evaluate_operator(state, op1);
+            let (t2, cond) = evaluate_operator(t1, op2);
+            assign_if(t2, v, expr, cond)
+        }
+    }
+}
+
+#[smt_impl]
+pub fn evaluate_block_head(state: State, head: BlockHead) -> State {
+    match head {
+        BlockHead::None => state,
+        BlockHead::Stmt(stmt, rest) => {
+            let t = evaluate_statement(state, stmt);
+            evaluate_block_head(t, rest.reveal())
+        }
+    }
+}
+
+#[smt_impl]
+pub fn evaluate_program(prog: Program) -> (State, Expr) {
+    let state = State::default();
+    evaluate_operator(state, prog.body)
 }

@@ -18,6 +18,8 @@ block-head         := {stmt}*
 stmt               := stmt-assign | stmt-if
 stmt-assign        := var := expr;
 stmt-assign-if     := var := expr if expr;
+
+program:           := expr
 ```
 
 ## Language semantics
