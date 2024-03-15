@@ -95,21 +95,50 @@ pub fn le(lhs: Expr, rhs: Expr) -> Expr {
 pub struct Variable;
 
 #[smt_type]
-pub struct Namespace {
-    map: Map<Variable, Expr>,
+pub struct State {
+    ns: Map<Variable, Expr>,
 }
 
 #[smt_impl(method = assign)]
-pub fn assign(ns: Namespace, var: Variable, expr: Expr) -> Namespace {
-    Namespace {
-        map: ns.map.put_unchecked(var, expr),
+pub fn assign(state: State, var: Variable, expr: Expr) -> State {
+    State {
+        ns: state.ns.put_unchecked(var, expr),
     }
 }
 
+#[smt_impl(method = assign_if)]
+pub fn assign_if(state: State, var: Variable, expr: Expr, cond: Expr) -> State {
+    let assigned = match (expr, cond) {
+        // error propagates
+        (Expr::Error(e1), Expr::Error(e2)) => Expr::Error(e1.merge(e2)),
+        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::fresh().merge(e)),
+        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::fresh().merge(e)),
+        (Expr::Error(e), _) => Expr::Error(e),
+        (_, Expr::Error(e)) => Expr::Error(e),
+
+        // undef causes error
+        (Expr::Undef, _) => Expr::Error(Error::fresh()),
+        (_, Expr::Undef) => Expr::Error(Error::fresh()),
+
+        // intended semantics when the condition is a boolean
+        (_, Expr::Value(Value::Boolean(v))) => {
+            if *v {
+                expr
+            } else {
+                Expr::Value(Value::Null)
+            }
+        }
+
+        // all other case should cause an error
+        (_, Expr::Value(_)) => Expr::Error(Error::fresh()),
+    };
+    assign(state, var, assigned)
+}
+
 #[smt_impl(method = retrieve)]
-pub fn retrieve(ns: Namespace, var: Variable) -> Expr {
-    if *ns.map.contains_key(var) {
-        ns.map.get_unchecked(var)
+pub fn retrieve(state: State, var: Variable) -> Expr {
+    if *state.ns.contains_key(var) {
+        state.ns.get_unchecked(var)
     } else {
         Expr::Undef
     }
