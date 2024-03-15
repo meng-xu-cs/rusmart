@@ -18,7 +18,7 @@ pub enum State {
 }
 
 #[smt_impl(method = lt)]
-pub fn lt_value(lhs: Value, rhs: Value) -> State {
+fn lt_value(lhs: Value, rhs: Value) -> State {
     match (lhs, rhs) {
         // null will make every operation null
         (Value::Null, Value::Null) => State::Value(Value::Null),
@@ -38,7 +38,7 @@ pub fn lt_value(lhs: Value, rhs: Value) -> State {
 }
 
 #[smt_impl(method = lt)]
-pub fn lt_state(lhs: State, rhs: State) -> State {
+pub fn lt(lhs: State, rhs: State) -> State {
     match (lhs, rhs) {
         // undef will cause an error
         (State::Undef, State::Undef) => State::Error(Error::fresh()),
