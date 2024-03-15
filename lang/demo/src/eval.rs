@@ -1,6 +1,10 @@
 use rusmart_smt_remark::{smt_impl, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Cloak, Error, Integer, Map, SMT};
 
+//
+// Expression evaluation
+//
+
 #[smt_type]
 pub enum Value {
     Null,
@@ -89,6 +93,10 @@ pub fn le(lhs: Expr, rhs: Expr) -> Expr {
     }
 }
 
+//
+// Statement evaluation
+//
+
 #[smt_type]
 pub struct Variable;
 
@@ -141,6 +149,10 @@ pub fn retrieve(state: State, var: Variable) -> Expr {
         Expr::Undef
     }
 }
+
+//
+// Program evaluation
+//
 
 #[smt_type]
 pub enum Operator {
