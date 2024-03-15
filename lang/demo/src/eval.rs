@@ -57,6 +57,40 @@ pub fn lt(lhs: Expr, rhs: Expr) -> Expr {
     }
 }
 
+#[smt_impl(method = le)]
+fn le_value(lhs: Value, rhs: Value) -> Expr {
+    match (lhs, rhs) {
+        // null will make every operation null
+        (Value::Null, _) => Expr::Value(Value::Null),
+        (_, Value::Null) => Expr::Value(Value::Null),
+
+        // integer
+        (Value::Integer(l), Value::Integer(r)) => Expr::Value(Value::Boolean(l.lt(r))),
+
+        // all others lead to type error
+        (_, _) => Expr::Error(Error::fresh()),
+    }
+}
+
+#[smt_impl(method = le)]
+pub fn le(lhs: Expr, rhs: Expr) -> Expr {
+    match (lhs, rhs) {
+        // error will be propagated
+        (Expr::Error(l), Expr::Error(r)) => Expr::Error(l.merge(r)),
+        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::fresh().merge(e)),
+        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::fresh().merge(e)),
+        (Expr::Error(e), _) => Expr::Error(e),
+        (_, Expr::Error(e)) => Expr::Error(e),
+
+        // undef will cause an error
+        (Expr::Undef, _) => Expr::Error(Error::fresh()),
+        (_, Expr::Undef) => Expr::Error(Error::fresh()),
+
+        // value op is delegated
+        (Expr::Value(l), Expr::Value(r)) => l.lt(r),
+    }
+}
+
 #[smt_type]
 pub struct Variable;
 
