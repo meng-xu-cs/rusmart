@@ -1,4 +1,4 @@
-use rusmart_smt_remark::{smt_impl, smt_type};
+use rusmart_smt_remark::{smt_axiom, smt_impl, smt_spec, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Cloak, Error, Integer, Map, SMT};
 
 //
@@ -246,4 +246,19 @@ pub fn evaluate_block_head(state: State, head: BlockHead) -> State {
 pub fn evaluate_program(prog: Program) -> (State, Expr) {
     let state = State::default();
     evaluate_operator(state, prog.body)
+}
+
+//
+// High-level properties about the evaluator
+//
+
+#[smt_spec(impls = [evaluate_program])]
+pub fn spec_evaluate_program(_prog: Program) -> (State, Expr) {
+    unimplemented!()
+}
+
+#[smt_axiom]
+pub fn axiom1(p1: Program, p2: Program) -> Boolean {
+    p1.eq(p2)
+        .implies(spec_evaluate_program(p1).eq(spec_evaluate_program(p2)))
 }
