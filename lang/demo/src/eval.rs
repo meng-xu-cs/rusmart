@@ -1,7 +1,6 @@
 use rusmart_smt_remark::{smt_impl, smt_type};
 use rusmart_smt_stdlib::dt::{Boolean, Cloak, Error, Integer, Map, SMT};
 
-/// A term *in its valid state* is defined by the following ADT
 #[smt_type]
 pub enum Value {
     Null,
@@ -9,7 +8,6 @@ pub enum Value {
     Integer(Integer),
 }
 
-/// A term *in any state* is defined by the following ADT
 #[smt_type]
 pub enum Expr {
     Undef,
