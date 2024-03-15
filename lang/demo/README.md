@@ -88,3 +88,9 @@ Collect a corpus of programs that are deemed interesting (e.g., by fuzzing)
 - For each program `p` in the corpus:
     - Query SMT solver for `exists p2: Program` s.t. `S(p) == S(p2)`
     - Send `p2` to `I` and compare `I(p)` and `I(p2)`
+ 
+  Scalability
+    - use propoerties of the domain to do fast / early filtering
+    - decompose SMT queries (SAT-sweaping)
+ 
+  ZEN work, K framework
