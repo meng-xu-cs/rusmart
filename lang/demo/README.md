@@ -50,3 +50,21 @@ a := 1 + 2;
 b := 3 if a >= 0;
 a + b
 ```
+
+### Workflow
+
+Suppose the goal is to stress-test a specific implementation of the language
+interpreter `I`:
+
+- Develop a reference implementation of the language interpreter in Rusmart,
+  a subset of Rust that can be converted to SMT representations.
+    - A concrete interpreter: `C`
+    - A symbolic interpreter: `S`
+
+- For each possible error code `c`:
+    - Query SMT solver for `exists p: Program` s.t. `S(p) -> Error(c)`
+    - Send `p` to `I` (i.e., `r <- I(p)`) and compare `r` and `c`
+
+- For each possible non-error result `v`:
+    - Query SMT solver for `exists p: Program` s.t. `S(p) -> v`
+    - Send `p` to `I` (i.e., `r <- I(p)`) and compare `r` and `v`
