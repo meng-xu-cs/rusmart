@@ -266,3 +266,5 @@ pub fn axiom1(p1: Program, p2: Program) -> Boolean {
 // DCE
 // linting
 // error patterns (based on data)
+// K-framework for operation semantics correctness (maybe some test suites)
+// common sense properties
