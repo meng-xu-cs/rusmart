@@ -71,6 +71,8 @@ interpreter `I`:
     - A concrete interpreter: `C`
     - A symbolic interpreter: `S`
 
+[Enumerative testing]
+
 - For each possible error code `c`:
     - Query SMT solver for `exists p: Program` s.t. `S(p) -> Error(c)`
     - Send `p` to `I` (i.e., `r <- I(p)`) and compare `r` and `c`
@@ -78,3 +80,11 @@ interpreter `I`:
 - For each possible non-error result `v`:
     - Query SMT solver for `exists p: Program` s.t. `S(p) -> v`
     - Send `p` to `I` (i.e., `r <- I(p)`) and compare `r` and `v`
+
+[Equivalence testing]
+
+Collect a corpus of programs that are deemed interesting (e.g., by fuzzing)
+
+- For each program `p` in the corpus:
+    - Query SMT solver for `exists p2: Program` s.t. `S(p) == S(p2)`
+    - Send `p2` to `I` and compare `I(p)` and `I(p2)`
