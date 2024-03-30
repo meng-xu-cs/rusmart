@@ -9,3 +9,14 @@ fn f1(x: Boolean) -> Boolean {
         Boolean::from(false)
     }
 }
+
+#[smt_impl]
+fn f2(x: Boolean, y: Boolean) -> Boolean {
+    if *x {
+        Boolean::from(true)
+    } else if *y {
+        Boolean::from(true)
+    } else {
+        Boolean::from(false)
+    }
+}
