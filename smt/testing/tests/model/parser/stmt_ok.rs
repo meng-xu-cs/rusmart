@@ -31,3 +31,12 @@ fn f4() -> Boolean {
     };
     x
 }
+
+#[smt_impl]
+fn f5() -> Boolean {
+    let x = {
+        let x = Boolean::from(true);
+        x
+    };
+    x
+}
