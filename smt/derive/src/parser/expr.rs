@@ -1245,7 +1245,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                     arms,
                 } = expr_match;
 
-                // collects heads of the match case
+                // collect heads of the match case
                 let (is_tuple, head_exprs) = match base.as_ref() {
                     Exp::Tuple(expr_tuple) => {
                         let ExprTuple {
