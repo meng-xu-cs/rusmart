@@ -32,6 +32,7 @@ mod generics_ok;
 mod method_derive_ok;
 mod name_conflict_on_impl_and_spec;
 mod name_conflict_on_type_and_axiom;
+mod stmt_ok;
 mod type_never;
 mod type_not_smt_in_adt;
 mod type_not_smt_in_func;
