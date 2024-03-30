@@ -40,3 +40,18 @@ fn f4(a: E1, b: E1) -> Boolean {
         (_, _) => Boolean::from(false),
     }
 }
+
+#[smt_impl]
+fn f5(e: E1) -> Boolean {
+    match e {
+        _ => Boolean::from(false),
+    }
+}
+
+#[smt_impl]
+fn f6(e: E1) -> Boolean {
+    match e {
+        E1::None => Boolean::from(false),
+        E1::Some(_) => Boolean::from(true),
+    }
+}
