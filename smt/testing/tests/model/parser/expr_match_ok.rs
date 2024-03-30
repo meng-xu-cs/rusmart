@@ -32,3 +32,11 @@ fn f3(a: E1, b: E1) -> Boolean {
         (E1::Some(v1), E1::Some(v2)) => v1.xor(v2),
     }
 }
+
+#[smt_impl]
+fn f4(a: E1, b: E1) -> Boolean {
+    match (a, b) {
+        (E1::Some(v1), E1::Some(v2)) => v1.xor(v2),
+        (_, _) => Boolean::from(false),
+    }
+}

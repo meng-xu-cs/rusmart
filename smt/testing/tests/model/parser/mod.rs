@@ -30,6 +30,7 @@ mod expr_local_without_binding;
 mod expr_match_if_in_arm;
 mod expr_match_naming_conflict;
 mod expr_match_ok;
+mod expr_match_vague_arm;
 mod expr_paren_ok;
 mod expr_path_ok;
 mod expr_path_with_namespace;
