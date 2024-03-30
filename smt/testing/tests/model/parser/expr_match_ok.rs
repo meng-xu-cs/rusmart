@@ -16,7 +16,15 @@ fn f1(e: E1) -> Boolean {
 }
 
 #[smt_impl]
-fn f2(a: E1, b: E1) -> Boolean {
+fn f2(e: E1) -> Boolean {
+    match (e) {
+        E1::None => Boolean::from(false),
+        E1::Some(v) => v,
+    }
+}
+
+#[smt_impl]
+fn f3(a: E1, b: E1) -> Boolean {
     match (a, b) {
         (E1::None, E1::None) => Boolean::from(false),
         (E1::None, _) => Boolean::from(false),
