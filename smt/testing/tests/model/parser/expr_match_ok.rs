@@ -14,3 +14,13 @@ fn f1(e: E1) -> Boolean {
         E1::Some(v) => v,
     }
 }
+
+#[smt_impl]
+fn f2(a: E1, b: E1) -> Boolean {
+    match (a, b) {
+        (E1::None, E1::None) => Boolean::from(false),
+        (E1::None, _) => Boolean::from(false),
+        (_, E1::None) => Boolean::from(false),
+        (E1::Some(v1), E1::Some(v2)) => v1.xor(v2),
+    }
+}
