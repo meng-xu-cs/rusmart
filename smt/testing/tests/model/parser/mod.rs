@@ -16,6 +16,7 @@ mod duplicated_type;
 mod expr_enum_ok;
 mod expr_field_ok;
 mod expr_if_not_bool_deref;
+mod expr_if_ok;
 mod expr_local_bind_enum_unpack;
 mod expr_local_bind_paren;
 mod expr_local_bind_struct_unpack;
