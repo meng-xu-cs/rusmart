@@ -55,3 +55,19 @@ fn f6(e: E1) -> Boolean {
         E1::Some(_) => Boolean::from(true),
     }
 }
+
+#[smt_type]
+enum E2<T: SMT, K: SMT, V: SMT> {
+    Zero,
+    One(T),
+    Two { k: K, v: V },
+}
+
+#[smt_impl]
+fn f7<T: SMT, K: SMT, V: SMT>(e: E2<T, K, V>) -> (T, K, V) {
+    match e {
+        E2::Zero => (T::default(), K::default(), V::default()),
+        E2::One(t) => (t, K::default(), V::default()),
+        E2::Two { k, v } => (T::default(), k, v),
+    }
+}
