@@ -27,6 +27,7 @@ mod expr_local_type_infer;
 mod expr_local_type_paren;
 mod expr_local_type_ref;
 mod expr_local_without_binding;
+mod expr_match_if_in_arm;
 mod expr_match_ok;
 mod expr_paren_ok;
 mod expr_path_ok;
