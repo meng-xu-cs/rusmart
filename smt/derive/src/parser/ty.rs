@@ -225,21 +225,6 @@ impl TypeTag {
         Self::from_args(ctxt, args)
     }
 
-    /// Convert from a type argument pack (in expr path)
-    pub fn from_args_in_expr_path<CTX: CtxtForType>(
-        ctxt: &CTX,
-        pack: &AngleBracketedGenericArguments,
-    ) -> Result<Vec<Self>> {
-        let AngleBracketedGenericArguments {
-            colon2_token,
-            args,
-            lt_token: _,
-            gt_token: _,
-        } = pack;
-        bail_if_missing!(colon2_token, pack, "::");
-        Self::from_args(ctxt, args)
-    }
-
     /// Convert from a type argument pack, expecting 1 argument
     fn from_args_expect_1<CTX: CtxtForType>(
         ctxt: &CTX,

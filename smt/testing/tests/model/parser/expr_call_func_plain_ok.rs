@@ -30,6 +30,11 @@ fn call_wrap_t_sys_ty_with_arg() -> Boolean {
 }
 
 #[smt_impl]
+fn call_wrap_t_sys_ty_infer_arg() -> Boolean {
+    wrap_t_generic::<_>(Boolean::from(false))
+}
+
+#[smt_impl]
 fn call_wrap_t_usr_ty_no_arg() -> S {
     wrap_t_generic(S(Boolean::from(false)))
 }
@@ -40,6 +45,11 @@ fn call_wrap_t_usr_ty_with_arg() -> S {
 }
 
 #[smt_impl]
+fn call_wrap_t_usr_ty_infer_arg() -> S {
+    wrap_t_generic::<_>(S(Boolean::from(false)))
+}
+
+#[smt_impl]
 fn call_wrap_t_param_ty_no_arg<X: SMT>(x: X) -> X {
     wrap_t_generic(x)
 }
@@ -47,4 +57,9 @@ fn call_wrap_t_param_ty_no_arg<X: SMT>(x: X) -> X {
 #[smt_impl]
 fn call_wrap_t_param_ty_with_arg<X: SMT>(x: X) -> X {
     wrap_t_generic::<X>(x)
+}
+
+#[smt_impl]
+fn call_wrap_t_param_ty_infer_arg<X: SMT>(x: X) -> X {
+    wrap_t_generic::<_>(x)
 }

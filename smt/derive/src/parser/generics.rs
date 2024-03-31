@@ -4,8 +4,9 @@ use std::fmt::{Display, Formatter};
 use itertools::Itertools;
 use quote::quote_spanned;
 use syn::{
-    GenericParam, Generics as GenericsDecl, ItemEnum, ItemStruct, PathArguments, Result,
-    TraitBound, TraitBoundModifier, TypeParam, TypeParamBound,
+    AngleBracketedGenericArguments, GenericArgument, GenericParam, Generics as GenericsDecl,
+    ItemEnum, ItemStruct, PathArguments, Result, TraitBound, TraitBoundModifier, Type, TypeParam,
+    TypeParamBound,
 };
 
 use crate::parser::ctxt::MarkedType;
@@ -264,15 +265,38 @@ impl GenericsInstPartial {
                 .map(|(i, n)| (n.clone(), (i, None)))
                 .collect(),
             PathArguments::AngleBracketed(pack) => {
-                let ty_args = TypeTag::from_args_in_expr_path(ctxt, pack)?;
+                // probe for arguments
+                let AngleBracketedGenericArguments {
+                    colon2_token,
+                    args,
+                    lt_token: _,
+                    gt_token: _,
+                } = pack;
+                bail_if_missing!(colon2_token, pack, "::");
+
+                let mut ty_args = vec![];
+                for arg in args {
+                    match arg {
+                        GenericArgument::Type(ty) => {
+                            let elem = match ty {
+                                Type::Infer(_) => None,
+                                _ => Some(TypeTag::from_type(ctxt, ty)?),
+                            };
+                            ty_args.push(elem);
+                        }
+                        _ => bail_on!(arg, "invalid type argument"),
+                    }
+                }
                 if ty_args.len() != ty_params.len() {
                     bail_on!(pack, "type argument number mismatch");
                 }
+
+                // construct partial instantiation
                 ty_params
                     .iter()
                     .zip(ty_args)
                     .enumerate()
-                    .map(|(i, (n, t))| (n.clone(), (i, Some(t))))
+                    .map(|(i, (n, t))| (n.clone(), (i, t)))
                     .collect()
             }
             PathArguments::Parenthesized(_) => bail_on!(arguments, "invalid arguments"),
