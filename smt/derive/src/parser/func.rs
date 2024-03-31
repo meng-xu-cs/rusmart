@@ -13,7 +13,7 @@ use crate::parser::generics::Generics;
 use crate::parser::name::{ReservedIdent, UsrFuncName, UsrTypeName, VarName};
 use crate::parser::ty::{CtxtForType, TypeTag};
 
-/// Reserved function name
+/// Casting-related function names
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum CastFuncName {
     From,
@@ -41,7 +41,7 @@ impl Display for CastFuncName {
     }
 }
 
-/// Reserved function name
+/// System function names
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SysFuncName {
     Eq,
@@ -69,23 +69,55 @@ impl Display for SysFuncName {
     }
 }
 
+/// Reserved function names
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub enum ReservedFuncName {
+    Clone,
+    Default,
+}
+
+impl ReservedIdent for ReservedFuncName {
+    fn from_str(ident: &str) -> Option<Self> {
+        let matched = match ident.to_string().as_str() {
+            "clone" => Self::Clone,
+            "default" => Self::Default,
+            _ => return None,
+        };
+        Some(matched)
+    }
+}
+
+impl Display for ReservedFuncName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Clone => "clone",
+            Self::Default => "default",
+        };
+        f.write_str(name)
+    }
+}
+
 /// A function name
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum FuncName {
     Cast(CastFuncName),
     Sys(SysFuncName),
     Usr(UsrFuncName),
+    Reserved(ReservedFuncName),
 }
 
 impl FuncName {
     /// Try to convert an ident into a function name
     pub fn try_from(ident: &Ident) -> Result<Self> {
         let name = ident.to_string();
-        let parsed = match CastFuncName::from_str(&name) {
-            Some(n) => Self::Cast(n),
-            None => match SysFuncName::from_str(&name) {
-                Some(n) => Self::Sys(n),
-                None => Self::Usr(ident.try_into()?),
+        let parsed = match ReservedFuncName::from_str(&name) {
+            Some(n) => Self::Reserved(n),
+            None => match CastFuncName::from_str(&name) {
+                Some(n) => Self::Cast(n),
+                None => match SysFuncName::from_str(&name) {
+                    Some(n) => Self::Sys(n),
+                    None => Self::Usr(ident.try_into()?),
+                },
             },
         };
         Ok(parsed)
@@ -98,6 +130,7 @@ impl Display for FuncName {
             Self::Cast(name) => name.fmt(f),
             Self::Sys(name) => name.fmt(f),
             Self::Usr(name) => name.fmt(f),
+            Self::Reserved(name) => name.fmt(f),
         }
     }
 }

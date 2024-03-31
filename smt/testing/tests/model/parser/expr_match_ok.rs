@@ -64,10 +64,10 @@ enum E2<T: SMT, K: SMT, V: SMT> {
 }
 
 #[smt_impl]
-fn f7<T: SMT, K: SMT, V: SMT>(e: E2<T, K, V>) -> (T, K, V) {
+fn f7<T: SMT, K: SMT, V: SMT>(e: E2<T, K, V>, a: T, b: K, c: V) -> (T, K, V) {
     match e {
-        E2::Zero => (T::default(), K::default(), V::default()),
-        E2::One(t) => (t, K::default(), V::default()),
-        E2::Two { k, v } => (T::default(), k, v),
+        E2::Zero => (a, b, c),
+        E2::One(t) => (t, b, c),
+        E2::Two { k, v } => (a, k, v),
     }
 }

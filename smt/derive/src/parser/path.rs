@@ -295,6 +295,7 @@ impl QualifiedPath {
                     }
                 },
             },
+            FuncName::Reserved(_) => bail_on!(ident, "reserved function"),
         };
 
         // ensure that there are no more tokens

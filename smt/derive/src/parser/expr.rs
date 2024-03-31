@@ -1683,6 +1683,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Err(e) => bail_on!(expr_method, "{}", e),
                         }
                     }
+                    FuncName::Reserved(_) => bail_on!(method, "reserved method"),
                 }
             }
             // SMT-specific macro (i.e., DSL)
