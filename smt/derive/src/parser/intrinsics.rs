@@ -47,7 +47,7 @@ pub enum Intrinsic {
     /// `Integer::rem`
     IntRem { lhs: Expr, rhs: Expr },
     /// `Rational::from`
-    NumVal(f64),
+    NumVal(i128),
     /// `Rational::lt`
     NumLt { lhs: Expr, rhs: Expr },
     /// `Rational::le`
@@ -267,7 +267,7 @@ impl Intrinsic {
                         Ok(v) => v,
                         Err(_) => bail_on!(val, "unable to parse"),
                     },
-                    _ => bail_on!(lit, "not a integer literal"),
+                    _ => bail_on!(lit, "not an integer literal"),
                 }
             }
             _ => bail_on!(expr, "not a literal"),
@@ -277,24 +277,8 @@ impl Intrinsic {
     }
 
     /// Convert an argument list to a floating-point literal
-    pub fn unpack_lit_float(args: &Punctuated<Exp, Comma>) -> Result<f64> {
-        let mut iter = args.iter();
-        let expr = bail_if_missing!(iter.next(), args, "argument");
-        let parsed = match expr {
-            Exp::Lit(expr_lit) => {
-                let ExprLit { attrs: _, lit } = expr_lit;
-                match lit {
-                    Lit::Float(val) => match val.token().to_string().parse() {
-                        Ok(v) => v,
-                        Err(_) => bail_on!(val, "unable to parse"),
-                    },
-                    _ => bail_on!(lit, "not a float literal"),
-                }
-            }
-            _ => bail_on!(expr, "not a literal"),
-        };
-        bail_if_exists!(iter.next());
-        Ok(parsed)
+    pub fn unpack_lit_float(args: &Punctuated<Exp, Comma>) -> Result<i128> {
+        Self::unpack_lit_int(args)
     }
 
     /// Convert an argument list to a string literal

@@ -16,6 +16,7 @@ mod duplicated_type;
 mod expr_call_default_by_sys_ty;
 mod expr_call_default_by_ty_param;
 mod expr_call_default_by_usr_ty;
+mod expr_call_func_cast_ok;
 mod expr_call_func_plain_nonexist;
 mod expr_call_func_plain_ok;
 mod expr_enum_ok;

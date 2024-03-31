@@ -36,7 +36,7 @@ pub enum Intrinsic {
     /// `Integer::rem`
     IntRem { lhs: ExpId, rhs: ExpId },
     /// `Rational::from`
-    NumVal(f64),
+    NumVal(i128),
     /// `Rational::lt`
     NumLt { lhs: ExpId, rhs: ExpId },
     /// `Rational::le`
