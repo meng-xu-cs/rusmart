@@ -362,34 +362,28 @@ impl ExprPathAsCallee {
         // case by number of path segments
         let parsed = match path.segments.len() {
             1 => {
-                // type takes first priority
-                match TuplePath::from_path(ctxt, path) {
-                    Ok(tuple) => Self::CtorTuple(tuple),
-                    Err(mut e1) => {
-                        // try to see whether this is a function call
-                        match FuncPath::from_path(ctxt, path) {
-                            Ok(func) => Self::FuncNoPrefix(func),
-                            Err(e2) => {
-                                e1.combine(e2);
-                                return Err(e1);
-                            }
-                        }
+                match (
+                    TuplePath::from_path(ctxt, path),
+                    FuncPath::from_path(ctxt, path),
+                ) {
+                    (Ok(_), Ok(_)) => bail_on!(path, "ambiguous callee"),
+                    (Ok(tuple), Err(_)) => Self::CtorTuple(tuple),
+                    (Err(_), Ok(func)) => Self::FuncNoPrefix(func),
+                    (Err(e1), Err(e2)) => {
+                        bail_on!(path, "unable to resolve callee\n{}\n{}", e1, e2);
                     }
                 }
             }
             2 => {
-                // type takes first priority
-                match ADTPath::from_path(ctxt, path) {
-                    Ok(adt) => Self::CtorEnum(adt),
-                    Err(mut e1) => {
-                        // try to see whether this is a function call
-                        match QualifiedPath::from_path(ctxt, path) {
-                            Ok(qualified) => Self::FuncWithType(qualified),
-                            Err(e2) => {
-                                e1.combine(e2);
-                                return Err(e1);
-                            }
-                        }
+                match (
+                    ADTPath::from_path(ctxt, path),
+                    QualifiedPath::from_path(ctxt, path),
+                ) {
+                    (Ok(_), Ok(_)) => bail_on!(path, "ambiguous callee"),
+                    (Ok(adt), Err(_)) => Self::CtorEnum(adt),
+                    (Err(_), Ok(qualified)) => Self::FuncWithType(qualified),
+                    (Err(e1), Err(e2)) => {
+                        bail_on!(path, "unable to resolve callee\n{}\n{}", e1, e2);
                     }
                 }
             }
