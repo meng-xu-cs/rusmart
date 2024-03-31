@@ -370,9 +370,7 @@ impl ExprPathAsCallee {
                     (Ok(_), Ok(_)) => bail_on!(path, "ambiguous callee"),
                     (Ok(tuple), Err(_)) => Self::CtorTuple(tuple),
                     (Err(_), Ok(func)) => Self::FuncNoPrefix(func),
-                    (Err(e1), Err(e2)) => {
-                        bail_on!(path, "unable to resolve callee\n{}\n{}", e1, e2);
-                    }
+                    (Err(_), Err(e2)) => return Err(e2),
                 }
             }
             2 => {
@@ -383,9 +381,7 @@ impl ExprPathAsCallee {
                     (Ok(_), Ok(_)) => bail_on!(path, "ambiguous callee"),
                     (Ok(adt), Err(_)) => Self::CtorEnum(adt),
                     (Err(_), Ok(qualified)) => Self::FuncWithType(qualified),
-                    (Err(e1), Err(e2)) => {
-                        bail_on!(path, "unable to resolve callee\n{}\n{}", e1, e2);
-                    }
+                    (Err(_), Err(e2)) => return Err(e2),
                 }
             }
             _ => bail_on!(path, "unrecognized callee"),
