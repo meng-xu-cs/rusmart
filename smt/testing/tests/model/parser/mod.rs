@@ -19,6 +19,7 @@ mod expr_call_default_by_usr_ty;
 mod expr_call_func_cast_ok;
 mod expr_call_func_plain_nonexist;
 mod expr_call_func_plain_ok;
+mod expr_call_sys_func_ok;
 mod expr_enum_ok;
 mod expr_field_ok;
 mod expr_if_let;
