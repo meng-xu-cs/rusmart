@@ -3,12 +3,12 @@ use rusmart_smt_stdlib::dt::{Boolean, Integer, Rational, Text, SMT};
 
 #[smt_impl]
 fn int_eq(a: Integer, b: Integer) -> Boolean {
-    Integer::eq(a, b)
+    a.eq(b)
 }
 
 #[smt_impl]
 fn str_ne(a: Text, b: Text) -> Boolean {
-    Text::ne(a, b)
+    a.ne(b)
 }
 
 #[smt_type]
@@ -16,7 +16,7 @@ struct S(Rational);
 
 #[smt_impl]
 fn usr_s_eq(a: S, b: S) -> Boolean {
-    S::eq(a, b)
+    a.eq(b)
 }
 
 #[smt_type]
@@ -27,12 +27,12 @@ enum E {
 
 #[smt_impl]
 fn usr_e_ne(a: E, b: E) -> Boolean {
-    E::ne(a, b)
+    a.ne(b)
 }
 
 #[smt_impl]
 fn param_t_eq<T: SMT>(a: T, b: T) -> Boolean {
-    T::eq(a, b)
+    a.ne(b)
 }
 
 #[smt_type]

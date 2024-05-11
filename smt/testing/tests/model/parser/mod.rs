@@ -40,6 +40,7 @@ mod expr_match_naming_conflict_slot;
 mod expr_match_ok;
 mod expr_match_vague_arm;
 mod expr_match_wildcard_arm;
+mod expr_method_sys_func_ok;
 mod expr_pack_ok;
 mod expr_paren_ok;
 mod expr_path_ok;
