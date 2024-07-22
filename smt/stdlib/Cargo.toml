@@ -7,9 +7,9 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.81"
-internment = { version = "0.7.4", features = ["arc"] }
-itertools = "0.12.1"
-num-bigint = "0.4.4"
-num-rational = "0.4.1"
-num-traits = "0.2.18"
+anyhow = "1.0.86"
+internment = { version = "0.8.4", features = ["arc"] }
+itertools = "0.13.0"
+num-bigint = "0.4.6"
+num-rational = "0.4.2"
+num-traits = "0.2.19"

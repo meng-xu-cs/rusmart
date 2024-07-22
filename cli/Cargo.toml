@@ -7,8 +7,8 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.81"
-log = "0.4.21"
+anyhow = "1.0.86"
+log = "0.4.22"
 structopt = "0.3.26"
 tempfile = "3.10.1"
 rusmart-utils = { path = "../utils" }
