@@ -5,6 +5,7 @@ Please choose one of the specific commands:
   - cloc	: count total number of lines of code
   - reset	: wipe out the entire states
   - deps	: clean build the dependencies
+  - docs	: build and display the documentation
   - rego	: semantics for language: rego
 endef
 export cmdline
@@ -35,8 +36,12 @@ deps:
 	@cd cli && \
 		cargo run deps cvc5 build --force
 
+docs:
+	@cd doc/book && \
+		mdbook build && mdbook serve
+
 rego:
 	@cd lang/rego && \
 		cargo run
 
-.PHONY: help lint cloc reset deps rego
+.PHONY: help lint cloc reset deps docs rego
