@@ -11,7 +11,7 @@ macro_rules! forall {
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
         $crate::dt::Boolean::from(
             $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*).all(
-                |($v0 $(, $vn)*)| *$constraint
+                |($v0, $($vn, )*)| *$constraint
             )
         )
     };
@@ -28,7 +28,7 @@ macro_rules! exists {
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
         $crate::dt::Boolean::from(
             $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*).any(
-                |($v0 $(, $vn)*)| *$constraint
+                |($v0, $($vn, )*)| *$constraint
             )
         )
     };
@@ -46,7 +46,7 @@ macro_rules! choose {
     };
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
         (|| {
-            for ($v0 $(, $vn)*) in $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*) {
+            for ($v0, $($vn, )*) in $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*) {
                 if *$constraint {
                     return ($v0 $(, $vn)*);
                 }

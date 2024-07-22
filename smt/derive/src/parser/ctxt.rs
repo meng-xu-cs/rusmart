@@ -233,7 +233,7 @@ impl Context {
         Ok(())
     }
 
-    /// Add a impl function to the context
+    /// Add an impl function to the context
     fn add_impl(&mut self, item: MarkedImpl) -> Result<()> {
         let name = item.name().try_into()?;
         if let Some(prev) = self.impls.get(&name) {
@@ -281,7 +281,7 @@ impl Context {
         Ok(())
     }
 
-    /// Check whether the marks declared are correct or not
+    /// Check whether the marks declared are consistent or not
     fn sanity_check(&self) -> Result<()> {
         // avoid naming conflict
         let mut names = BTreeMap::new();

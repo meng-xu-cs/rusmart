@@ -8,7 +8,7 @@ use crate::err::{bail_if_missing, bail_on};
 /// Annotation value
 pub enum MetaValue {
     One(Ident),
-    Set(BTreeSet<Ident>),
+    Set(#[allow(dead_code)] BTreeSet<Ident>), // TODO: use the MetaValue::Set variant
 }
 
 /// Parse a key-value mapping from a token stream

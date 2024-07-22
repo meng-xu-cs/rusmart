@@ -93,7 +93,10 @@ pub fn initialize() {
     // check whether we need to run the initialization process
     match INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
         Ok(false) => (),
-        Err(true) => return,
+        Err(true) => {
+            // already initialized, do nothing
+            return;
+        }
         _ => panic!("invalid result from atomic reading"),
     }
 

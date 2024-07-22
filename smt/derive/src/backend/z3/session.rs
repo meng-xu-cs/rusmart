@@ -326,9 +326,9 @@ impl Session {
 
         // define the algebraic data type (ADT)
         match dt {
-            DataType::Tuple(slots) => todo!(),
-            DataType::Record(fields) => todo!(),
-            DataType::Enum(variants) => todo!(),
+            DataType::Tuple(_slots) => todo!(),
+            DataType::Record(_fields) => todo!(),
+            DataType::Enum(_variants) => todo!(),
         }
     }
 

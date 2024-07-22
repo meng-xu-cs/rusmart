@@ -126,7 +126,7 @@ impl TypeParamGroup {
         let filtered: Vec<_> = self
             .params
             .iter()
-            .filter(|n| !other.contains(*n))
+            .filter(|n| !other.contains(n))
             .cloned()
             .collect();
         Self { params: filtered }

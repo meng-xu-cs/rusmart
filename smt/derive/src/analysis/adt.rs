@@ -10,7 +10,7 @@ use crate::ir::sort::{DataType, Sort, TypeRegistry, Variant};
 
 /// All potential ADTs fully specified out in SMT context
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
-enum ExplicitADT {
+pub enum ExplicitADT {
     Simple(UsrSortId),
     Optional(Sort),
 }
@@ -179,7 +179,7 @@ impl IRContext {
 
                 match self.fn_registry.retrieve_def(*fid) {
                     FunDef::Uninterpreted => (),
-                    FunDef::Defined(exps, _) => {
+                    FunDef::Defined(_exps, _) => {
                         todo!()
                     }
                 }

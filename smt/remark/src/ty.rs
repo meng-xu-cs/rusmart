@@ -79,10 +79,10 @@ pub fn derive_for_type(attr: Syntax, item: Syntax) -> Result<Syntax> {
                 }
             }
         }
-        t => bail_on!(t, "expect type"),
+        t => bail_on!(t, "expect a type definition (i.e., struct or enum)"),
     };
 
-    // exact type name and generics
+    // extract type name and generics
     let (ident, generics) = match &target {
         Item::Struct(item_struct) => (&item_struct.ident, &item_struct.generics),
         Item::Enum(item_enum) => (&item_enum.ident, &item_enum.generics),

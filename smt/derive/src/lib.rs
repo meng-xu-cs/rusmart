@@ -15,8 +15,11 @@ use crate::backend::exec::invoke_backend;
 #[cfg(test)]
 use proc_macro2::TokenStream;
 
+#[allow(dead_code)] // TODO: remove the dead_code attribute
 mod analysis;
+#[allow(dead_code)] // TODO: remove the dead_code attribute
 mod backend;
+#[allow(dead_code)] // TODO: remove the dead_code attribute
 mod ir;
 mod parser;
 
