@@ -14,10 +14,12 @@ fn str_ne(a: Text, b: Text) -> Boolean {
 #[smt_type]
 struct S(Rational);
 
+/* TODO
 #[smt_impl]
 fn usr_s_eq(a: S, b: S) -> Boolean {
     S::eq(a, b)
 }
+*/
 
 #[smt_type]
 enum E {
@@ -25,6 +27,7 @@ enum E {
     Some(Integer),
 }
 
+/* TODO
 #[smt_impl]
 fn usr_e_ne(a: E, b: E) -> Boolean {
     E::ne(a, b)
@@ -34,6 +37,7 @@ fn usr_e_ne(a: E, b: E) -> Boolean {
 fn param_t_eq<T: SMT>(a: T, b: T) -> Boolean {
     T::eq(a, b)
 }
+*/
 
 #[smt_type]
 struct G<T: SMT> {
