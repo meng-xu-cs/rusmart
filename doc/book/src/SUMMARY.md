@@ -4,9 +4,11 @@
 
 # Rusmart Language Features
 
-- [Syntax](syntax.md)
-- [Type system](typing.md)
-- [Annotations](annotations.md)
-- [`stdlib`](stdlib.md)
+- [Syntax](user/syntax.md)
+- [Type system](user/typing.md)
+- [Annotations](user/annotations.md)
+- [`stdlib`](user/stdlib.md)
 
 # Rusmart Transpiler Internals
+
+- [Pipeline](dev/pipeline.md)

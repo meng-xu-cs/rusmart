@@ -38,7 +38,7 @@ deps:
 
 docs:
 	@cd doc/book && \
-		mdbook build && mdbook serve
+		mdbook clean && mdbook build && mdbook serve
 
 rego:
 	@cd lang/rego && \

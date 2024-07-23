@@ -5,15 +5,15 @@ to bridge the semantic gap between Rust and SMT.
 
 Internally, annotations are implemented
 as [procedural macros](https://doc.rust-lang.org/reference/procedural-macros.html)
-in the {{#include ../dict/crate-remark.md}} crate.
+in the {{#include ../../dict/crate-remark.md}} crate.
 However,
 due to the complexity of Rusmart [syntax](syntax.md) and [typing](typing.md) rules,
-the {{#include ../dict/crate-remark.md}} crate performs minimal checks only and
-more intensive checking are performed in the {{#include ../dict/crate-derive.md}} crate.
+the {{#include ../../dict/crate-remark.md}} crate performs minimal checks only and
+more intensive checking are performed in the {{#include ../../dict/crate-derive.md}} crate.
 
 In this document,
-we only discuss the checks enforced by {{#include ../dict/crate-remark.md}}.
-A violation of these checks will lead to compile-time error.
+we only discuss the checks enforced by {{#include ../../dict/crate-remark.md}}.
+A violation of these checks will lead to a compile-time error.
 
 ## `#[smt_type]`
 
