@@ -1,29 +1,30 @@
 use std::fs;
 
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::{Parser, Subcommand};
 
 use rusmart_cli::cli::DepArgs;
 use rusmart_utils::config::{initialize, WKS};
 
-#[derive(StructOpt)]
-#[structopt(
+#[derive(Parser)]
+#[clap(
     name = "semantic-smt-cli",
     about = "A command line interface for the Rusmart project",
     rename_all = "kebab-case"
 )]
 struct Args {
     /// Subcommand
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     command: Command,
 }
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 enum Command {
     /// Wipe-clean the entire workspace
     Reset,
+
     /// Dependencies
-    #[structopt(name = "deps")]
+    #[command(subcommand)]
     Deps(DepArgs),
 }
 
@@ -32,7 +33,7 @@ pub fn main() -> Result<()> {
     initialize();
 
     // parse arguments
-    let args = Args::from_args();
+    let args = Args::parse();
     let Args { command } = args;
 
     // run the command

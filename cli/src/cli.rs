@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::Subcommand;
 
 use crate::dep::{DepState, Dependency};
 use crate::dep_cvc5::DepCVC5;
 use crate::dep_z3::DepZ3;
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 pub enum DepAction {
     /// Config the dependency
     Config,
@@ -15,7 +15,7 @@ pub enum DepAction {
     /// Build the dependency
     Build {
         /// Force the build to proceed
-        #[structopt(short, long)]
+        #[arg(short, long)]
         force: bool,
     },
 }
@@ -31,12 +31,14 @@ impl DepAction {
     }
 }
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum DepArgs {
     /// Solver Z3
+    #[command(subcommand)]
     Z3(DepAction),
     /// Solver CVC5
+    #[command(subcommand)]
     CVC5(DepAction),
 }
 
