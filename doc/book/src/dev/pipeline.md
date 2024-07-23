@@ -21,13 +21,13 @@ occurs in the {{#include ../../dict/crate-derive.md}} crate
 which will, in theory, re-check every property
 that is checked in the {{#include ../../dict/crate-remark.md}} crate.
 with the additional knowledge that
-*`P'` passes the Rust compiler* (both in syntax and in typing).
+`P'` **passes the Rust compiler** (both in syntax and in typing).
 Effectively, this means that Rusmart syntax and type checking
 is based on Rust (i.e., is a subset of Rust).
 
 ## AST Enrichment
 
-All logic about AST enrichment is encapsulated
+The logic about AST enrichment is encapsulated
 in the {{#include ../../dict/crate-remark.md}} crate.
 Briefly, a Rusmart program is enriched with the following AST fragments:
 
@@ -94,3 +94,46 @@ impl MyTypeA {
     fn my_method(self, y: MyTypeB) -> MyTypeC { my_func(self, y) }
 }
 ```
+
+## SMT Derivation
+
+The logic about SMT derivation is encapsulated
+in the {{#include ../../dict/crate-derive.md}} crate,
+which can be further decomposed into three steps:
+
+### Step 1: AST parsing and syntax checking
+
+Source code location: `src/parser`
+
+While the exact AST parsing process is better read from the code,
+here is a brief outline of the parsing chain
+(by chasing the typestate of the parsing context as in `ctxt.rs`):
+
+- Collect all Rusmart code for the program `P`
+    - `&Path -> Context`
+- Collect generics in type definitions
+    - `Context -> ContextWithGenerics`
+- Build a type registry for `P` by parsing all type definitions
+    - `ContextWithGenerics -> ContextWithType`
+- Collect all function signatures
+    - `ContextWithType -> ContextWithSig`
+- Build a function registry for `P` by parsing all function definitions
+    - `ContextWithSig -> ContextWithFunc`
+- Finalize the context
+    - `ContextWithFunc -> ASTContext`
+
+**TODO**: not fully tested
+
+### Step 2: Type checking and IR validation
+
+Source code location: `src/ir`
+
+**TODO**: not documented
+
+**TODO**: not tested
+
+### Step 3: IR analysis and SMT generation
+
+Source code location: `src/analysis` and `src/backend`
+
+**TODO**: not yet implemented
