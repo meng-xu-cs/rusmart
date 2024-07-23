@@ -24,3 +24,73 @@ with the additional knowledge that
 *`P'` passes the Rust compiler* (both in syntax and in typing).
 Effectively, this means that Rusmart syntax and type checking
 is based on Rust (i.e., is a subset of Rust).
+
+## AST Enrichment
+
+All logic about AST enrichment is encapsulated
+in the {{#include ../../dict/crate-remark.md}} crate.
+Briefly, a Rusmart program is enriched with the following AST fragments:
+
+### On types
+
+- All `struct` types annotated with `#[smt_type]` will be instrumented with
+  `#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]`
+
+- All `enum` types annotated with `#[smt_type]` will be instrumented with
+  `#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]` and
+  the `Default` trait will be implemented for the type
+  (the first enum variant will be constructed using default values).
+
+- The `SMT` trait from [`stdlib`](../user/stdlib.md) will be implemented
+  for all types annotated with `#[smt_type]`
+
+To illustrate the AST enrichment on types:
+
+```rust
+#[smt_type]
+enum MyEnum {
+    V0 { a: MyTypeA, b: MyTypeB },
+    V1,
+    V2(MyTypeC)
+}
+
+// enriched AST
+#[smt_type]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+enum MyEnum {
+    V0 { a: MyTypeA, b: MyTypeB },
+    V1,
+    V2(MyTypeC)
+}
+
+impl Default for MyEnum {
+    fn default() -> Self {
+        Self::V0 { a: MyTypeA::default(), b: MyTypeB::default() }
+    }
+}
+
+impl SMT for MyEnum {}
+```
+
+### On functions
+
+- If a function `f` is annotated with either `#[smt_impl]` or `#[smt_spec]` and
+  the `method = <method_name>` attribute is specified, the receiver-style
+  method is derived for this function with an `impl` block on the type of
+  the first argument of `f`. In other words, in the derived method, `self`
+  is the first argument of `f`.
+
+To illustrate the AST enrichment on functions:
+
+```rust
+#[smt_impl(method = my_method)]
+fn my_func(x: MyTypeA, y: MyTypeB) -> MyTypeC { .. }
+
+// enriched AST
+#[smt_impl(method = my_method)]
+fn my_func(x: MyTypeA, y: MyTypeB) -> MyTypeC { .. }
+
+impl MyTypeA {
+    fn my_method(self, y: MyTypeB) -> MyTypeC { my_func(self, y) }
+}
+```
