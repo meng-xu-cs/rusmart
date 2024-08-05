@@ -7,15 +7,15 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
-command-group = "5.0.1"
-itertools = "0.13.0"
-lazy_static = "1.5.0"
-log = "0.4.22"
-petgraph = "0.6.5"
-proc-macro2 = "1.0.86"
-quote = "1.0.36"
-syn = { version = "2.0.72", features = ["full", "extra-traits"] }
-walkdir = "2.5.0"
-rusmart-cli = { path = "../../cli" }
-rusmart-utils = { path = "../../utils" }
+anyhow = { workspace = true }
+command-group = { workspace = true }
+itertools = { workspace = true }
+lazy_static = { workspace = true }
+log = { workspace = true }
+petgraph = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+walkdir = { workspace = true }
+rusmart-cli = { workspace = true }
+rusmart-utils = { workspace = true }

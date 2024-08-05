@@ -7,12 +7,12 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dev-dependencies]
-anyhow = "1.0.86"
-datatest-stable = "0.2.9"
-rusmart-utils = { path = "../../utils" }
-rusmart-smt-stdlib = { path = "../stdlib" }
-rusmart-smt-remark = { path = "../remark" }
-rusmart-smt-derive = { path = "../derive" }
+anyhow = { workspace = true }
+datatest-stable = { workspace = true }
+rusmart-utils = { workspace = true }
+rusmart-smt-stdlib = { workspace = true }
+rusmart-smt-remark = { workspace = true }
+rusmart-smt-derive = { workspace = true }
 
 [lints.rust]
 non_camel_case_types = "allow"

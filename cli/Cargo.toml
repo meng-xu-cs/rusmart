@@ -7,8 +7,8 @@ license = "GPL-3.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
-clap = { version = "4.5.9", features = ["derive"] }
-log = "0.4.22"
-tempfile = "3.10.1"
-rusmart-utils = { path = "../utils" }
+anyhow = { workspace = true }
+clap = { workspace = true }
+log = { workspace = true }
+tempfile = { workspace = true }
+rusmart-utils = { workspace = true }
