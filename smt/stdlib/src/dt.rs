@@ -1,11 +1,31 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 
 use internment::Intern;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::cast::ToPrimitive;
+use paste::paste;
+
+/// Default implementation of the SNT trait
+macro_rules! smt_impl {
+    ($l:ty) => {
+        impl SMT for $l {
+            fn _cmp(self, rhs: Self) -> Ordering {
+                self.inner.cmp(&rhs.inner)
+            }
+        }
+    };
+    ($l:ident, $t0:ident $(, $tn:ident)*) => {
+        impl<$t0: SMT $(, $tn: SMT)*> SMT for $l<$t0 $(, $tn)*> {
+            fn _cmp(self, rhs: Self) -> Ordering {
+                self.inner.cmp(&rhs.inner)
+            }
+        }
+    };
+}
 
 /// Pre-defined order (including equality and comparison) operators
 macro_rules! order_operator {
@@ -39,34 +59,65 @@ macro_rules! arith_operator {
 }
 
 /// Marks that this type is an SMT-enabled type
-pub trait SMT: 'static + Copy + Ord + Hash + Default + Sync + Send {
+pub trait SMT: 'static + Copy + Default + Hash + Send + Sync {
+    /// SMT values of the same type are totally ordered
+    fn _cmp(self, rhs: Self) -> Ordering;
+
     /// SMT values of the same type are subject to equality testing
     fn eq(self, rhs: Self) -> Boolean {
-        (self == rhs).into()
+        (Self::_cmp(self, rhs) == Ordering::Equal).into()
     }
-
     /// SMT values of the same type are subject to inequality testing
     fn ne(self, rhs: Self) -> Boolean {
-        (self != rhs).into()
+        (Self::_cmp(self, rhs) != Ordering::Equal).into()
+    }
+}
+
+/// Wrap for an SMT type for Rust-semantics enrichment
+#[derive(Debug, Clone, Copy, Default)]
+struct SMTWrap<T: SMT>(T);
+
+impl<T: SMT> PartialEq for SMTWrap<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(other.0).inner
+    }
+}
+impl<T: SMT> Eq for SMTWrap<T> {}
+
+impl<T: SMT> PartialOrd for SMTWrap<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl<T: SMT> Ord for SMTWrap<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        T::_cmp(self.0, other.0)
+    }
+}
+
+impl<T: SMT> Hash for SMTWrap<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
     }
 }
 
 /// SMT boolean
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Boolean {
     inner: bool,
 }
-
-impl From<bool> for Boolean {
-    fn from(c: bool) -> Self {
-        Self { inner: c }
-    }
-}
+smt_impl!(Boolean);
 
 impl Deref for Boolean {
     type Target = bool;
     fn deref(&self) -> &bool {
         &self.inner
+    }
+}
+
+impl From<bool> for Boolean {
+    fn from(c: bool) -> Self {
+        Self { inner: c }
     }
 }
 
@@ -101,13 +152,12 @@ impl Boolean {
     }
 }
 
-impl SMT for Boolean {}
-
 /// Arbitrary precision integer
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Integer {
     inner: Intern<BigInt>,
 }
+smt_impl!(Integer);
 
 /// Convert to integer from literals
 macro_rules! integer_from_literal {
@@ -133,15 +183,15 @@ integer_from_literal!(i8, i16, i32, i64, i128, isize);
 integer_from_literal!(u8, u16, u32, u64, u128, usize);
 
 arith_operator!(Integer, add, sub, mul, div, rem);
-order_operator!(Integer, eq, ne, lt, le, ge, gt);
-
-impl SMT for Integer {}
+order_operator!(Integer, lt, le, ge, gt);
 
 /// Arbitrary precision rational number
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Rational {
     inner: Intern<BigRational>,
 }
+smt_impl!(Rational);
+
 /// Convert to integer from literals
 macro_rules! rational_from_literal {
     ($l:ty $(,$e:ty)* $(,)?) => {
@@ -166,15 +216,14 @@ rational_from_literal!(i8, i16, i32, i64, i128, isize);
 rational_from_literal!(u8, u16, u32, u64, u128, usize);
 
 arith_operator!(Rational, add, sub, mul, div);
-order_operator!(Rational, eq, ne, lt, le, ge, gt);
-
-impl SMT for Rational {}
+order_operator!(Rational, lt, le, ge, gt);
 
 /// SMT string
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Text {
     inner: Intern<String>,
 }
+smt_impl!(Text);
 
 impl From<&'static str> for Text {
     fn from(c: &'static str) -> Self {
@@ -184,37 +233,35 @@ impl From<&'static str> for Text {
     }
 }
 
-order_operator!(Text, eq, ne, lt, le);
-
-impl SMT for Text {}
+order_operator!(Text, lt, le);
 
 /// SMT cloak (for breaking cyclic dependency in ADT)
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Cloak<T: SMT> {
-    inner: Intern<Box<T>>,
+    inner: Intern<SMTWrap<T>>,
 }
+smt_impl!(Cloak, T);
 
 impl<T: SMT> Cloak<T> {
     /// shield an object behind a cloak
     pub fn shield(t: T) -> Self {
         Self {
-            inner: Intern::new(Box::new(t)),
+            inner: Intern::new(SMTWrap(t)),
         }
     }
 
     /// reveal an object behind a cloak
     pub fn reveal(self) -> T {
-        *(*self.inner).as_ref()
+        self.inner.0
     }
 }
 
-impl<T: SMT> SMT for Cloak<T> {}
-
 /// SMT sequence
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Seq<T: SMT> {
-    inner: Intern<Vec<T>>,
+    inner: Intern<Vec<SMTWrap<T>>>,
 }
+smt_impl!(Seq, T);
 
 impl<T: SMT> Seq<T> {
     /// create an empty sequence
@@ -236,7 +283,7 @@ impl<T: SMT> Seq<T> {
                 self.inner
                     .iter()
                     .copied()
-                    .chain(std::iter::once(e))
+                    .chain(std::iter::once(SMTWrap(e)))
                     .collect(),
             ),
         }
@@ -244,15 +291,15 @@ impl<T: SMT> Seq<T> {
 
     /// operation: `v[i]` with partial semantics (valid only when `i` is in bound)
     pub fn at_unchecked(self, i: Integer) -> T {
-        *self
-            .inner
+        self.inner
             .get(i.inner.to_usize().expect("index out of usize range"))
             .expect("index out of bound")
+            .0
     }
 
     /// operation: `v.includes(e)`
     pub fn includes(self, e: T) -> Boolean {
-        self.inner.contains(&e).into()
+        self.inner.iter().any(|i| *T::eq(i.0, e)).into()
     }
 
     /// iterator
@@ -261,13 +308,12 @@ impl<T: SMT> Seq<T> {
     }
 }
 
-impl<T: SMT> SMT for Seq<T> {}
-
 /// SMT set
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Set<T: SMT> {
-    inner: Intern<BTreeSet<T>>,
+    inner: Intern<BTreeSet<SMTWrap<T>>>,
 }
+smt_impl!(Set, T);
 
 impl<T: SMT> Set<T> {
     /// create an empty set
@@ -289,7 +335,7 @@ impl<T: SMT> Set<T> {
                 self.inner
                     .iter()
                     .copied()
-                    .chain(std::iter::once(e))
+                    .chain(std::iter::once(SMTWrap(e)))
                     .collect(),
             ),
         }
@@ -298,28 +344,33 @@ impl<T: SMT> Set<T> {
     /// operation: `s.remove(e)`
     pub fn remove(self, e: T) -> Self {
         Self {
-            inner: Intern::new(self.inner.iter().filter(|i| *i != &e).copied().collect()),
+            inner: Intern::new(
+                self.inner
+                    .iter()
+                    .filter(|i| *T::ne(i.0, e))
+                    .copied()
+                    .collect(),
+            ),
         }
     }
 
     /// operation: `v.contains(e)`
     pub fn contains(self, e: T) -> Boolean {
-        self.inner.contains(&e).into()
+        self.inner.iter().any(|i| *T::eq(i.0, e)).into()
     }
 
     /// iterator
     pub fn iterator(self) -> Vec<T> {
-        self.inner.iter().copied().collect()
+        self.inner.iter().map(|i| i.0).collect()
     }
 }
 
-impl<T: SMT> SMT for Set<T> {}
-
 /// SMT array
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Map<K: SMT, V: SMT> {
-    inner: Intern<BTreeMap<K, V>>,
+    inner: Intern<BTreeMap<SMTWrap<K>, SMTWrap<V>>>,
 }
+smt_impl!(Map, K, V);
 
 impl<K: SMT, V: SMT> Map<K, V> {
     /// create an empty map
@@ -341,7 +392,7 @@ impl<K: SMT, V: SMT> Map<K, V> {
                 self.inner
                     .iter()
                     .map(|(k, v)| (*k, *v))
-                    .chain(std::iter::once((k, v)))
+                    .chain(std::iter::once((SMTWrap(k), SMTWrap(v))))
                     .collect(),
             ),
         }
@@ -349,7 +400,7 @@ impl<K: SMT, V: SMT> Map<K, V> {
 
     /// operation: `m.get(k)` with partial semantics (valid only when `k` exists)
     pub fn get_unchecked(self, k: K) -> V {
-        *self.inner.get(&k).expect("key does not exist")
+        self.inner.get(&SMTWrap(k)).expect("key does not exist").0
     }
 
     /// operation: `m.del(k, v)`, will delete the (`k`, `v`) pair only when `k` exists
@@ -358,7 +409,7 @@ impl<K: SMT, V: SMT> Map<K, V> {
             inner: Intern::new(
                 self.inner
                     .iter()
-                    .filter_map(|(i, v)| if i == &k { None } else { Some((*i, *v)) })
+                    .filter_map(|(i, v)| if *K::eq(i.0, k) { None } else { Some((*i, *v)) })
                     .collect(),
             ),
         }
@@ -366,22 +417,21 @@ impl<K: SMT, V: SMT> Map<K, V> {
 
     /// operation: `v.contains_key(e)`
     pub fn contains_key(self, k: K) -> Boolean {
-        self.inner.contains_key(&k).into()
+        self.inner.contains_key(&SMTWrap(k)).into()
     }
 
     /// iterator
     pub fn iterator(self) -> Vec<K> {
-        self.inner.keys().copied().collect()
+        self.inner.keys().map(|i| i.0).collect()
     }
 }
 
-impl<K: SMT, V: SMT> SMT for Map<K, V> {}
-
 /// Dynamically assigned error
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Copy, Default, Hash)]
 pub struct Error {
     inner: Intern<BTreeSet<usize>>,
 }
+smt_impl!(Error);
 
 impl Error {
     /// Create a fresh error
@@ -399,12 +449,27 @@ impl Error {
     }
 }
 
-impl SMT for Error {}
-
 /// Trait implementation
 macro_rules! smt_tuple_impls {
-    ( $( $name:ident )+ ) => {
-        impl<$($name: SMT),+> SMT for ($($name,)+) {}
+    ( $n0:ident $($nx:ident)+ ) => {
+        impl<$n0: SMT $(, $nx: SMT)+> SMT for ($n0 $(, $nx)+) {
+            #[allow(non_snake_case)]
+            fn _cmp(self, rhs: Self) -> Ordering {
+                let (paste!{[<l_ $n0>]} $(, paste!{[<l_ $nx>]})+) = self;
+                let (paste!{[<r_ $n0>]} $(, paste!{[<r_ $nx>]})+) = rhs;
+                match $n0::_cmp(paste!{[<l_ $n0>]}, paste!{[<r_ $n0>]}) {
+                    Ordering::Less => return Ordering::Less,
+                    Ordering::Greater => return Ordering::Greater,
+                    Ordering::Equal => {},
+                };
+                $(match $nx::_cmp(paste!{[<l_ $nx>]}, paste!{[<r_ $nx>]}) {
+                    Ordering::Less => return Ordering::Less,
+                    Ordering::Greater => return Ordering::Greater,
+                    Ordering::Equal => {},
+                };)+
+                Ordering::Equal
+            }
+        }
     };
 }
 
