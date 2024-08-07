@@ -3,7 +3,7 @@ use proc_macro::TokenStream as Syntax;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse_quote, Field, FieldMutability, Fields, Item, ItemEnum, ItemStruct, Result, Variant,
+    parse_quote, Field, FieldMutability, Fields, Index, Item, ItemEnum, ItemStruct, Result, Variant,
 };
 
 use crate::err::{bail_if_exists, bail_if_missing, bail_on};
@@ -50,8 +50,9 @@ fn derive_for_struct(item: &mut ItemStruct) -> Result<TokenStream> {
                 bail_if_exists!(ident);
 
                 // derive the `SMT::_cmp` expressions
+                let index = Index::from(i);
                 let cmp_expr = quote! {
-                    match self.#i._cmp(rhs.#i) {
+                    match self.#index._cmp(rhs.#index) {
                         std::cmp::Ordering::Less => return std::cmp::Ordering::Less,
                         std::cmp::Ordering::Equal => (),
                         std::cmp::Ordering::Greater => return std::cmp::Ordering::Greater,
