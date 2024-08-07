@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
+use std::sync::atomic;
+use std::sync::atomic::AtomicUsize;
 
 use internment::Intern;
 use num_bigint::BigInt;
@@ -433,11 +435,15 @@ pub struct Error {
 }
 smt_impl!(Error);
 
+static _ERROR_COUNTER_: AtomicUsize = AtomicUsize::new(0);
+
 impl Error {
     /// Create a fresh error
     pub fn fresh() -> Self {
+        let mut set = BTreeSet::new();
+        set.insert(_ERROR_COUNTER_.fetch_add(1, atomic::Ordering::SeqCst));
         Self {
-            inner: Intern::new(BTreeSet::new()),
+            inner: Intern::new(set),
         }
     }
 

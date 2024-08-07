@@ -98,7 +98,7 @@ pub fn le(lhs: Expr, rhs: Expr) -> Expr {
 //
 
 #[smt_type]
-pub struct Variable;
+pub struct Variable(Integer);
 
 #[smt_type]
 pub struct State {
