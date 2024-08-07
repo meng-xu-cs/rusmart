@@ -98,7 +98,7 @@ pub fn le(lhs: Expr, rhs: Expr) -> Expr {
 //
 
 #[smt_type]
-pub struct Variable(Integer);
+pub struct Variable(Integer); // TODO: this should be modeled as a finite-domain sort
 
 #[smt_type]
 pub struct State {
