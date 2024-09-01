@@ -3,12 +3,12 @@ use rusmart_smt_stdlib::dt::{Boolean, Integer, Rational, Text, SMT};
 
 #[smt_impl]
 fn int_eq(a: Integer, b: Integer) -> Boolean {
-    Integer::eq(a, b)
+    a.eq(b)
 }
 
 #[smt_impl]
 fn str_ne(a: Text, b: Text) -> Boolean {
-    Text::ne(a, b)
+    a.ne(b)
 }
 
 #[smt_type]

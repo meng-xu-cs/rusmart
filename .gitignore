@@ -11,5 +11,5 @@
 # Z3 trace files
 .z3-trace
 
-# coverage file
-/tarpaulin-report.html
+# todo list
+todo.txt

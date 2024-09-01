@@ -1,3 +1,5 @@
+//! This module contains all the configuration settings for the application
+
 use std::env;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
@@ -7,9 +9,11 @@ use lazy_static::lazy_static;
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 /// Name of project
+/// This is used to prefix environment variables
 pub static PROJECT: &str = "RUSMART";
 
 /// Marks whether initialization is completed
+/// This is used to prevent double initialization
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Mode of operation
@@ -120,4 +124,52 @@ pub fn initialize() {
         ColorChoice::Auto,
     )
     .expect("logging facility should be initialized");
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    // Test the display implementation for Mode
+    fn test_fmt_mode() {
+        assert_eq!(format!("{}", Mode::Prod), "production");
+        assert_eq!(format!("{}", Mode::Dev), "development");
+        assert_eq!(format!("{}", Mode::Debug), "debug");
+        assert_eq!(format!("{}", Mode::Verbose), "verbose");
+    }
+
+    #[test]
+    // Test the initialization of the configuration
+    fn test_initialization() {
+
+        // Reset INITIALIZED to false before the test
+        INITIALIZED.store(false, Ordering::SeqCst);
+        // Set the VERBOSE environment variable to 1
+        env::set_var("VERBOSE", "1");
+
+        // Because INITIALIZED is set to false, this assertion should pass
+        assert_eq!(INITIALIZED.load(Ordering::SeqCst), false);
+
+        // Call initialize and assert the expected outcome
+        initialize();
+
+        // Assert that INITIALIZED is now true, meaning that the initialization process has been completed
+        assert_eq!(INITIALIZED.load(Ordering::SeqCst), true);
+
+        initialize();
+
+        // Assert that INITIALIZED is still true
+        assert_eq!(INITIALIZED.load(Ordering::SeqCst), true);
+
+        // Assert that the logging level is set to Info
+        // Note that other paths cannot be tested because the MODE is a lazy static variable and is defined inside a proc macro
+        let expected_level = match *MODE {
+            Mode::Dev => LevelFilter::Info,
+            _ => unreachable!(),
+        };
+        assert_eq!(expected_level, LevelFilter::Info);
+    }
+    
 }

@@ -1,0 +1,43 @@
+These are the minor changes that I have made to the code:
+
+This file is not exhaustive and primarily contains the changes that are related to corner cases where changes might cause off-by-one errors or other issues.
+1 - in file dt.rs of rusmart-smt-stdlib crate:
+Previous code:
+macro_rules! integer_from_literal {
+    ($l:ty $(,$e:ty)* $(,)?) => {
+        impl From<$l> for Integer {
+            fn from(c: $l) -> Self {
+                Self {
+                    inner: Intern::new(BigInt::from(c)),
+                }
+            }
+        }
+        $(impl From<$e> for Integer {
+            fn from(c: $e) -> Self {
+                Self {
+                    inner: Intern::new(BigInt::from(c)),
+                }
+            }
+        })+
+    };
+}
+
+New code:
+macro_rules! integer_from_literal {
+    ($l:ty $(,$e:ty)* $(,)?) => {
+        impl From<$l> for Integer {
+            fn from(c: $l) -> Self {
+                Self {
+                    inner: Intern::new(BigInt::from(c)),
+                }
+            }
+        }
+        $(impl From<$e> for Integer {
+            fn from(c: $e) -> Self {
+                Self {
+                    inner: Intern::new(BigInt::from(c)),
+                }
+            }
+        })*
+    };
+}

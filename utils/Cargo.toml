@@ -1,10 +1,10 @@
 [package]
 name = "rusmart-utils"
-description = "Utilities shared amonst various crates in Rusmart"
+description = "Utility functions shared among Rusmart crates"
 version = "0.1.0"
+edition = "2021"
 authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
 license = "GPL-3.0"
-edition = "2021"
 
 [dependencies]
 lazy_static = { workspace = true }

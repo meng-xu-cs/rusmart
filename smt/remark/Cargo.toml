@@ -2,9 +2,9 @@
 name = "rusmart-smt-remark"
 description = "Annotations for remarking Rust syntax into SMT constructs"
 version = "0.1.0"
+edition = "2021"
 authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
 license = "GPL-3.0"
-edition = "2021"
 
 [lib]
 proc-macro = true
