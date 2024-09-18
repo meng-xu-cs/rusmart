@@ -1,5 +1,5 @@
 use rusmart_smt_remark::{smt_axiom, smt_impl, smt_spec, smt_type};
-use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Map, Rational, Seq, Set, Text, SMT};
+use rusmart_smt_stdlib::{Boolean, Error, Integer, Map, Rational, Seq, Set, Text, SMT};
 use rusmart_smt_stdlib::{choose, forall};
 
 /// A term *in its valid state* is defined by the following ADT

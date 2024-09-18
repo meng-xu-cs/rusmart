@@ -38,7 +38,7 @@ use paste::paste;
 //------------------------------------------MACROS-------------------------------------------------------//
 
 /// Arithmetic operators
-/// In the above example, the operators add, sub, mul, div, and rem are implemented for the Integer type.
+/// In the below example, the operators add, sub, mul, div, and rem are implemented for the Integer type.
 /// Note 1: The type needs to be a struct with an `inner` field that is wrapped inside an `Intern`.
 /// Note 2: The designated operators are required to be defined for the type inside the Intern.
 /// 
@@ -61,7 +61,7 @@ macro_rules! arith_operator {
 }
 
 /// Default implementation of the SMT trait for a type.
-/// This has two patterns to be matched:
+/// This has three patterns to be matched:
 /// 1. non-generic types (Integer, Error, Rational, Text, Boolean), fall in the first pattern.
 /// 2. generic types (Cloak, Seq, Set, Map), fall in the second pattern.
 /// 3. the third pattern is the smt implementation for tuples of size 2 to 12.
@@ -293,9 +293,9 @@ pub trait SMT: 'static + Copy + Default + Hash + Send + Sync {
 
 /// This trait allows the methods of the SMT trait to be used between Integer and Rational types.
 /// The trait is only implemented for the Integer and Rational types.
-pub trait Nums: SMT {
-    fn into_rational(self) -> Rational;
-}
+// pub trait Nums: SMT {
+//     fn into_rational(self) -> Rational;
+// }
 
 //----------------------------------------SIMPLE-TYPES----------------------------------------------------//
 /// ** 1) SMT boolean: A wrapper around the Rust boolean type
@@ -353,7 +353,7 @@ impl Boolean {
 
     pub fn implies(self, rhs: Self) -> Self {
         Self {
-            inner: !self.inner | rhs.inner,
+            inner: !self.inner || rhs.inner,
         }
     }
 }
@@ -366,8 +366,8 @@ impl Boolean {
 /// For example, we can write a.add(b) or Integer::add(a,b) to add two Integer values a and b.
 /// The order_operator! macro is used to implement the order operators for the Integer type.
 /// For example, we can write a.lt(b) or Integer::lt(a,b) to check if a is less than b.
-/// The Nums trait is implemented for the Integer type to allow for the conversion of Integer values to Rational values.
-/// The implementation for Integer has been added for the comparison between Rationals and Integers.
+// The Nums trait is implemented for the Integer type to allow for the conversion of Integer values to Rational values.
+// The implementation for Integer has been added for the comparison between Rationals and Integers.
 #[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
 pub struct Integer {
     inner: Intern<BigInt>,
@@ -381,26 +381,26 @@ arith_operator!(Integer, add, sub, mul, div, rem);
 // The ne and eq operators are implemented by default in the SMT
 order_operator!(Integer, lt, le, ge, gt);
 
-impl Nums for Integer {
-    fn into_rational(self) -> Rational {
-        let num = self.inner.as_ref().clone().to_i64().unwrap();
-        Rational::from(num)
-    }
-}
+// impl Nums for Integer {
+//     fn into_rational(self) -> Rational {
+//         let num = self.inner.as_ref().clone().to_i64().unwrap();
+//         Rational::from(num)
+//     }
+// }
 
-impl Integer {
-    fn _cmp<T: Nums>(self, rhs: T) -> Ordering {
-        SMT::_cmp(self.into_rational(), rhs.into_rational())
-    }
+// impl Integer {
+//     fn _cmp<T: Nums>(self, rhs: T) -> Ordering {
+//         SMT::_cmp(self.into_rational(), rhs.into_rational())
+//     }
 
-    fn eq<T: Nums + SMT>(self, rhs: T) -> Boolean {
-        SMT::eq(self.into_rational(), rhs.into_rational())
-    }
+//     fn eq<T: Nums + SMT>(self, rhs: T) -> Boolean {
+//         SMT::eq(self.into_rational(), rhs.into_rational())
+//     }
 
-    fn ne<T: Nums + SMT>(self, rhs: T) -> Boolean {
-        SMT::ne(self.into_rational(), rhs.into_rational())
-    }
-}
+//     fn ne<T: Nums + SMT>(self, rhs: T) -> Boolean {
+//         SMT::ne(self.into_rational(), rhs.into_rational())
+//     }
+// }
 
 /// ** 3) Arbitrary precision rational number (SMT rational)
 #[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
@@ -416,7 +416,7 @@ arith_operator!(Rational, add, sub, mul, div);
 // The ne and eq operators are implemented by default in the SMT
 order_operator!(Rational, lt, le, ge, gt);
 
-/// These allow us to build rational numbers from f32/f64
+// These allow us to build rational numbers from f32/f64
 impl From<f32> for Rational {
     fn from(value: f32) -> Self {
         Self {
@@ -436,23 +436,23 @@ impl From<f64> for Rational {
     }
 }
 
-impl Nums for Rational {
-    fn into_rational(self) -> Rational {
-        self
-    }
-}
+// impl Nums for Rational {
+//     fn into_rational(self) -> Rational {
+//         self
+//     }
+// }
 
-impl Rational {
-    fn _cmp<T: SMT + Nums>(self, rhs: T) -> Ordering {
-        SMT::_cmp(self.into_rational(), rhs.into_rational())
-    }
-    fn eq<T: Nums + SMT>(self, rhs: T) -> Boolean {
-        SMT::eq(self.into_rational(), rhs.into_rational())
-    }
-    fn ne<T: Nums + SMT>(self, rhs: T) -> Boolean {
-        SMT::ne(self.into_rational(), rhs.into_rational())
-    }
-}
+// impl Rational {
+//     fn _cmp<T: SMT + Nums>(self, rhs: T) -> Ordering {
+//         SMT::_cmp(self.into_rational(), rhs.into_rational())
+//     }
+//     fn eq<T: Nums + SMT>(self, rhs: T) -> Boolean {
+//         SMT::eq(self.into_rational(), rhs.into_rational())
+//     }
+//     fn ne<T: Nums + SMT>(self, rhs: T) -> Boolean {
+//         SMT::ne(self.into_rational(), rhs.into_rational())
+//     }
+// }
 
 /// ** 4) SMT string
 /// The String inside the interns are compared in a lexicographical order when calling the cmp method.
@@ -514,7 +514,7 @@ impl Error {
 
 /// Wrap for an SMT type for Rust-semantics enrichment
 /// The SMTWrap is a tuple struct that wraps an SMT type.
-/// In SMTWrap, instead of using #[derive(Eq)] we implement the trait manually to avoid imposing the T: Eq constraint.
+// In SMTWrap, instead of using #[derive(Eq)] we implement the trait manually to avoid imposing the T: Eq constraint.
 #[derive(Debug, Clone, Copy, Default, Hash)]
 struct SMTWrap<T: SMT>(T);
 
@@ -525,18 +525,18 @@ impl<T: SMT> PartialEq for SMTWrap<T> {
 }
 
 // implementation for SMTWrap<Rational> for equality between Rationals and integers inside wrappers.
-impl PartialEq<SMTWrap<Integer>> for SMTWrap<Rational> {
-    fn eq(&self, other: &SMTWrap<Integer>) -> bool {
-        self.0.into_rational().eq(other.0.into_rational()).inner
-    }
-}
+// impl PartialEq<SMTWrap<Integer>> for SMTWrap<Rational> {
+//     fn eq(&self, other: &SMTWrap<Integer>) -> bool {
+//         self.0.into_rational().eq(other.0.into_rational()).inner
+//     }
+// }
 
 // implementation for SMTWrap<Integer> for equality between Rationals and integers inside wrappers.
-impl PartialEq<SMTWrap<Rational>> for SMTWrap<Integer> {
-    fn eq(&self, other: &SMTWrap<Rational>) -> bool {
-        self.0.into_rational().eq(other.0.into_rational()).inner
-    }
-}
+// impl PartialEq<SMTWrap<Rational>> for SMTWrap<Integer> {
+//     fn eq(&self, other: &SMTWrap<Rational>) -> bool {
+//         self.0.into_rational().eq(other.0.into_rational()).inner
+//     }
+// }
 
 impl<T: SMT> Eq for SMTWrap<T> {}
 
@@ -548,7 +548,7 @@ impl<T: SMT> PartialOrd for SMTWrap<T> {
 
 impl<T: SMT> Ord for SMTWrap<T> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0._cmp(other.0) //TODO Comparing integers and rationals
+        self.0._cmp(other.0)
     }
 }
 
@@ -698,6 +698,7 @@ impl<T: SMT> Set<T> {
     }
 
     /// iterator
+    /// It gives the elements of the set in a vector
     pub fn iterator(self) -> Vec<T> {
         self.inner.iter().map(|i| i.0).collect()
     }
@@ -776,6 +777,7 @@ impl<K: SMT, V: SMT> Map<K, V> {
     }
 
     /// iterator
+    /// It gives the keys of the map in a vector
     pub fn iterator(self) -> Vec<K> {
         self.inner.keys().map(|i| i.0).collect()
     }
@@ -1191,56 +1193,56 @@ mod test {
     }
 
     /// testing the into_rational method on integers
-    #[test]
-    fn test_into_rational_integer() {
-        let var1 = Integer::from(1);
-        let var2 = var1.into_rational();
+    // #[test]
+    // fn test_into_rational_integer() {
+    //     let var1 = Integer::from(1);
+    //     let var2 = var1.into_rational();
 
-        // If this passes, var2 is of type Rational
-        let _: Rational = var2;
-        assert_eq!(var1.eq(var2), true.into()); // 1 == 1
-    }
+    //     // If this passes, var2 is of type Rational
+    //     let _: Rational = var2;
+    //     assert_eq!(var1.eq(var2), true.into()); // 1 == 1
+    // }
 
     /// testing the cmp method for comparison between rationals and integers
-    #[test]
-    fn test_cmp_integer_rational() {
-        let var1 = Integer::from(1);
-        let var2 = Rational::from(1.2);
-        let var3 = Rational::from(1);
-        let var4 = Rational::from(0.8);
+    // #[test]
+    // fn test_cmp_integer_rational() {
+    //     let var1 = Integer::from(1);
+    //     let var2 = Rational::from(1.2);
+    //     let var3 = Rational::from(1);
+    //     let var4 = Rational::from(0.8);
 
-        assert_eq!(var1._cmp(var1), Ordering::Equal); // 1 == 1
-        assert_eq!(var1._cmp(var2), Ordering::Less); // 1 < 1.2
-        assert_eq!(var3._cmp(var1), Ordering::Equal); // 1 == 1
-        assert_eq!(var1._cmp(var4), Ordering::Greater); // 1 > 0.8
-    }
+    //     assert_eq!(var1._cmp(var1), Ordering::Equal); // 1 == 1
+    //     assert_eq!(var1._cmp(var2), Ordering::Less); // 1 < 1.2
+    //     assert_eq!(var3._cmp(var1), Ordering::Equal); // 1 == 1
+    //     assert_eq!(var1._cmp(var4), Ordering::Greater); // 1 > 0.8
+    // }
     /// testing the eq method for integers and rational
-    #[test]
-    fn test_eq_integer() {
-        let var1 = Integer::from(1);
-        let var2 = Rational::from(1.2);
-        let var3 = Rational::from(1);
-        let var4 = Rational::from(0.8);
+    // #[test]
+    // fn test_eq_integer() {
+    //     let var1 = Integer::from(1);
+    //     let var2 = Rational::from(1.2);
+    //     let var3 = Rational::from(1);
+    //     let var4 = Rational::from(0.8);
 
-        assert_eq!(var1.eq(var1), true.into()); // 1 == 1
-        assert_eq!(var1.eq(var2), false.into()); // 1 != 1.2
-        assert_eq!(var3.eq(var1), true.into()); // 1 == 1
-        assert_eq!(var1.eq(var4), false.into()); // 1 != 0.8
-    }
+    //     assert_eq!(var1.eq(var1), true.into()); // 1 == 1
+    //     assert_eq!(var1.eq(var2), false.into()); // 1 != 1.2
+    //     assert_eq!(var3.eq(var1), true.into()); // 1 == 1
+    //     assert_eq!(var1.eq(var4), false.into()); // 1 != 0.8
+    // }
 
     /// testing the ne method for integers and rational
-    #[test]
-    fn test_ne_integer() {
-        let var1 = Integer::from(1);
-        let var2 = Rational::from(1.2);
-        let var3 = Rational::from(1);
-        let var4 = Rational::from(0.8);
+    // #[test]
+    // fn test_ne_integer() {
+    //     let var1 = Integer::from(1);
+    //     let var2 = Rational::from(1.2);
+    //     let var3 = Rational::from(1);
+    //     let var4 = Rational::from(0.8);
 
-        assert_eq!(var1.ne(var1), false.into()); // 1 == 1
-        assert_eq!(var1.ne(var2), true.into()); // 1 != 1.2
-        assert_eq!(var3.ne(var1), false.into()); // 1 == 1
-        assert_eq!(var4.ne(var1), true.into()); // 1 != 0.8
-    }
+    //     assert_eq!(var1.ne(var1), false.into()); // 1 == 1
+    //     assert_eq!(var1.ne(var2), true.into()); // 1 != 1.2
+    //     assert_eq!(var3.ne(var1), false.into()); // 1 == 1
+    //     assert_eq!(var4.ne(var1), true.into()); // 1 != 0.8
+    // }
 
     /// testing the from method of Rational
     #[test]
@@ -1262,15 +1264,15 @@ mod test {
         );
     }
     /// testing the into_rational method of rational
-    #[test]
-    fn test_into_rational_rational() {
-        let var1 = Rational::from(1.4);
-        let var2 = var1.into_rational();
+    // #[test]
+    // fn test_into_rational_rational() {
+    //     let var1 = Rational::from(1.4);
+    //     let var2 = var1.into_rational();
 
-        // If this passes, var2 is of type Rational
-        let _: Rational = var2;
-        assert!(true);
-    }
+    //     // If this passes, var2 is of type Rational
+    //     let _: Rational = var2;
+    //     assert!(true);
+    // }
 
     /// testing the ne/eq/_cmp methods of rational
     #[test]
@@ -1339,10 +1341,7 @@ mod test {
     fn test_eq_smtwrap() {
         let var1 = SMTWrap(Integer::from(1));
         let var2 = SMTWrap(Integer::from(15));
-        let var3 = SMTWrap(Rational::from(1));
 
-        assert!(var1.eq(&var3));
-        assert!(var3.eq(&var1));
         assert!(!var1.eq(&var2));
         assert!(var1.ne(&var2));
     }

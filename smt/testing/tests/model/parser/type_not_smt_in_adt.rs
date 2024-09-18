@@ -1,5 +1,5 @@
 use rusmart_smt_remark::smt_type;
-use rusmart_smt_stdlib::dt::SMT;
+use rusmart_smt_stdlib::SMT;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 struct NotSMT {}

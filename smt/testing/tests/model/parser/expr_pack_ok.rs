@@ -1,5 +1,5 @@
 use rusmart_smt_remark::smt_impl;
-use rusmart_smt_stdlib::dt::{Boolean, Integer, SMT};
+use rusmart_smt_stdlib::{Boolean, Integer, SMT};
 
 #[smt_impl]
 fn f1() -> (Boolean, Integer) {

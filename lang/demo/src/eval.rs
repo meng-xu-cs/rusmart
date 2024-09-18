@@ -1,5 +1,5 @@
 use rusmart_smt_remark::{smt_axiom, smt_impl, smt_spec, smt_type};
-use rusmart_smt_stdlib::dt::{Boolean, Cloak, Error, Integer, Map, SMT};
+use rusmart_smt_stdlib::{Boolean, Cloak, Error, Integer, Map, SMT};
 
 //
 // Expression evaluation

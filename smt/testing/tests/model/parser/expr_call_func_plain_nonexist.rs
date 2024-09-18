@@ -1,5 +1,5 @@
 use rusmart_smt_remark::smt_impl;
-use rusmart_smt_stdlib::dt::Boolean;
+use rusmart_smt_stdlib::Boolean;
 
 fn foo() -> Boolean {
     Boolean::from(false)

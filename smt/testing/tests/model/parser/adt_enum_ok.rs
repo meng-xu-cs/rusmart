@@ -1,5 +1,5 @@
 use rusmart_smt_remark::smt_type;
-use rusmart_smt_stdlib::dt::{Boolean, Error, Integer, Rational, Text, SMT};
+use rusmart_smt_stdlib::{Boolean, Error, Integer, Rational, Text, SMT};
 
 #[smt_type]
 enum E1 {

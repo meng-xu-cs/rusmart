@@ -1,5 +1,5 @@
 use rusmart_smt_remark::{smt_impl, smt_type};
-use rusmart_smt_stdlib::dt::{Map, Seq, Set, SMT};
+use rusmart_smt_stdlib::{Map, Seq, Set, SMT};
 
 #[smt_type]
 struct S<T1: SMT, T2: SMT> {

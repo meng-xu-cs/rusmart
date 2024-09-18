@@ -19,14 +19,19 @@ lint:
 
 cloc:
 	@cloc \
-		Makefile \
-		Cargo.toml \
-		rust-toolchain \
 		utils \
 		smt \
 		cli \
-		lang
-
+		lang \
+		Cargo.toml \
+		cov.sh \
+		coverage.sh \
+		Makefile \
+		rust-toolchain \
+		doc/book/dict \
+		doc/book/src \
+		doc/book/book.toml \
+		
 reset:
 	@cd cli && cargo run reset
 

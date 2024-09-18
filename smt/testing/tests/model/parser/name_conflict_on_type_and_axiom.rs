@@ -1,6 +1,6 @@
 mod a {
     use rusmart_smt_remark::smt_type;
-    use rusmart_smt_stdlib::dt::{Boolean, SMT};
+    use rusmart_smt_stdlib::{Boolean, SMT};
 
     #[smt_type]
     struct foo {
@@ -10,7 +10,7 @@ mod a {
 
 mod b {
     use rusmart_smt_remark::smt_axiom;
-    use rusmart_smt_stdlib::dt::Boolean;
+    use rusmart_smt_stdlib::Boolean;
 
     #[smt_axiom]
     fn foo() -> Boolean {

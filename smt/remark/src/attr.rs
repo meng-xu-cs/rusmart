@@ -10,7 +10,7 @@ pub enum MetaValue {
     One(Ident),
     Set(#[allow(dead_code)] BTreeSet<Ident>), // TODO: use the MetaValue::Set variant
 }
-
+ 
 /// Parse a key-value mapping from a token stream
 pub fn parse_dict(stream: &TokenStream) -> Result<BTreeMap<String, MetaValue>> {
     let mut store = BTreeMap::new();

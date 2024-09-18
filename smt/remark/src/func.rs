@@ -87,7 +87,7 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
             if self_ty_consumed_params.contains(ident) {
                 bail_on!(ident, "cannot derive a method for a type argument");
             }
-
+ 
             // done with the parsing
             (ident, arguments)
         }

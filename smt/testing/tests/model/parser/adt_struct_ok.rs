@@ -1,5 +1,5 @@
 use rusmart_smt_remark::smt_type;
-use rusmart_smt_stdlib::dt::{Boolean, Cloak, Map, Seq, Set, SMT};
+use rusmart_smt_stdlib::{Boolean, Cloak, Map, Seq, Set, SMT};
 
 #[smt_type]
 struct S1 {

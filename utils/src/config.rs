@@ -4,6 +4,7 @@ use std::env;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::fs;
 
 use lazy_static::lazy_static;
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
@@ -72,7 +73,7 @@ lazy_static! {
     pub static ref WKS: Workspace = {
         let dockerized = matches!(env::var("DOCKER"), Ok(val) if val == "1");
 
-        // grab root path
+        // grab workspace root path
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         assert!(base.pop());
 
@@ -126,6 +127,27 @@ pub fn initialize() {
     .expect("logging facility should be initialized");
 }
 
+/// Helper function to find the root of the workspace.
+/// The env!("CARGO_MANIFEST_DIR") is the directory where the current crate's Cargo.toml file is located.
+/// The function goes up the directory tree until it finds a Cargo.toml file that contains a `[workspace]` section.
+/// If no workspace root is found, the function returns None.
+pub fn find_workspace_root() -> Option<PathBuf> {
+    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    // Loop until we reach the root directory
+    while dir.pop() {
+        let cargo_toml = dir.join("Cargo.toml");
+        if let Ok(content) = fs::read_to_string(&cargo_toml) {
+            // Check if this Cargo.toml contains a `[workspace]` section
+            if content.contains("[workspace]") {
+                return Some(dir);
+            }
+        }
+    }
+
+    // If no workspace root is found, return None
+    None
+}
 
 #[cfg(test)]
 mod tests {
@@ -143,7 +165,6 @@ mod tests {
     #[test]
     // Test the initialization of the configuration
     fn test_initialization() {
-
         // Reset INITIALIZED to false before the test
         INITIALIZED.store(false, Ordering::SeqCst);
         // Set the VERBOSE environment variable to 1
@@ -171,5 +192,13 @@ mod tests {
         };
         assert_eq!(expected_level, LevelFilter::Info);
     }
-    
+
+    #[test]
+    /// test the find root of work space function
+    fn test_find_workspace_root() {
+        let wk_path = find_workspace_root();
+
+        assert!(wk_path.is_some());
+        assert_eq!(wk_path.unwrap(), WKS.base);
+    }
 }

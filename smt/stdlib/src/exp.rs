@@ -28,16 +28,21 @@ pub use itertools::iproduct;
 #[macro_export]
 macro_rules! forall {
     (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $constraint:expr) => {
-        (|$v0 : $t0 $(, $vn : $tn)*| -> $crate::dt::Boolean {
+        (|$v0 : $t0 $(, $vn : $tn)*| -> $crate::Boolean {
             $constraint
         })(<$t0>::default() $(, <$tn>::default())*)
     };
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
-        $crate::dt::Boolean::from(
-            $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*).all(
-                |($v0, $($vn, )*)| *$constraint
+        (|| -> $crate::Boolean {
+            // let iterators = $crate::iproduct!($c0.iterator() $(, $cn.iterator())*);
+            // // consume the iterators
+            // dbg!(iterators.collect::<Vec<_>>()); to debug
+            $crate::Boolean::from(
+                $crate::iproduct!($c0.iterator() $(, $cn.iterator())*).all(
+                    |($v0, $($vn, )*)| *$constraint
+                )
             )
-        )
+        })()
     };
 }
 
@@ -47,12 +52,12 @@ macro_rules! forall {
 #[macro_export]
 macro_rules! exists {
     (|$v0:ident : $t0:ty $(, $vn:ident : $tn:ty)* $(,)?| $constraint:expr) => {
-        (|$v0 : $t0 $(, $vn : $tn)*| -> $crate::dt::Boolean {
+        (|$v0 : $t0 $(, $vn : $tn)*| -> $crate::Boolean {
             $constraint
         })(<$t0>::default() $(, <$tn>::default())*)
     };
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
-        $crate::dt::Boolean::from(
+        $crate::Boolean::from(
             $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*).any(
                 |($v0, $($vn, )*)| *$constraint
             )
@@ -77,7 +82,7 @@ macro_rules! choose {
     };
     ($v0:ident in $c0:expr $(, $vn:ident in $cn:expr)* => $constraint:expr) => {
         (|| {
-            for ($v0, $($vn, )*) in $crate::exp::iproduct!($c0.iterator() $(, $cn.iterator())*) {
+            for ($v0, $($vn, )*) in $crate::iproduct!($c0.iterator() $(, $cn.iterator())*) {
                 if *$constraint {
                     return ($v0 $(, $vn)*);
                 }

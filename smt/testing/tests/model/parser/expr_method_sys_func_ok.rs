@@ -1,5 +1,5 @@
 use rusmart_smt_remark::{smt_impl, smt_type};
-use rusmart_smt_stdlib::dt::{Boolean, Integer, Rational, Text, SMT};
+use rusmart_smt_stdlib::{Boolean, Integer, Rational, Text, SMT};
 
 #[smt_impl]
 fn int_eq(a: Integer, b: Integer) -> Boolean {

@@ -1,5 +1,5 @@
 use rusmart_smt_remark::{smt_impl, smt_spec};
-use rusmart_smt_stdlib::dt::{Boolean, Integer, Rational, SMT};
+use rusmart_smt_stdlib::{Boolean, Integer, Rational, SMT};
 
 #[smt_impl(specs = spec_foo)]
 fn impl_foo(a: Integer, b: Integer) -> Boolean {

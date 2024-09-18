@@ -1,6 +1,6 @@
 [package]
 name = "rusmart-cli"
-description = "Command-line interface for Rusmart"
+description = "A command line interface for the Rusmart project"
 version = "0.1.0"
 edition = "2021"
 authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
@@ -12,3 +12,6 @@ clap = { workspace = true }
 log = { workspace = true }
 tempfile = { workspace = true }
 rusmart-utils = { workspace = true }
+
+[features]
+tarpaulin_include = []

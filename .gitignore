@@ -4,6 +4,7 @@
 
 # IDE
 /.idea/
+*.sln
 
 # MacOS
 .DS_Store

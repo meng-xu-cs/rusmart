@@ -4,21 +4,23 @@ This document provides an overview of the development components, including the 
 
 ### Makefile
 
-The `Makefile` provides a set of predefined commands that help manage the project, including code formatting, dependency management, and documentation generation. Below is a description of each command available in the Makefile:
+The `Makefile` provides a set of predefined commands that help manage the project, including code formatting, dependency management, and documentation generation. In a Makefile, the `@` symbol before a command suppresses the default behavior of make to `echo` the command to the terminal before executing it. By using `@`, the command is executed silently (without printing the command itself), and only the output of the command is shown. The backslashes at the end of each line allow the command to span multiple lines for readability. The `&&` operator is used to run multiple commands sequentially. Below is a description of each command available in the Makefile:
 
 - **help**: Displays a list of available commands and functionalities. Run this command with `make help` to see the options and descriptions.
 
 - **lint**: Formats the code according to Rust's style guidelines using `cargo fmt`, and runs Clippy using `cargo clippy`, a linting tool, to catch common mistakes. Run this command with `make lint` to automatically format and lint the code.
 
-- **cloc**: Counts the total number of lines of code in the specified directories. This command uses the `cloc` tool and can be run with `make cloc`.
+- **cloc**: Counts the total number of lines of code in the specified directories. This command uses the `cloc` tool and can be run with `make cloc`. To install the `cloc` tool on mac, run `brew install cloc`. After installation, you can verify that cloc is successfully installed by running: `cloc --version`.
 
 - **reset**: Resets the project by running `cargo run reset` in the `cli` directory. This directory contains the command line interface of the rusmart tool. Use `make reset` to run this command.
 
 - **deps**: Forces rebuilding the project dependencies (`Z3 and CVC5`). This command runs the `cargo run deps z3 build --force` and `cargo run deps cvc5 build --force` in the `cli` directory and can be invoked with `make deps`.
 
-- **docs**: Builds and serves the project documentation using `mdbook`. This command ensures that the documentation is accessible locally. Run it with `make docs`.
+- **docs**: Cleans, builds, and serves the project documentation using `mdbook`. The documentation will be accessible locally after running `make docs`. Before running this command, ensure that `mdbook` is installed. To install `mdbook`, run `cargo install mdbook`.
 
 - **rego**: Runs the `Rego` language semantics, located in the `lang/rego` directory. This command can be executed with `make rego`.
+
+- **.PHONY**: The `.PHONY: help lint cloc reset deps docs rego` line tells `make` that the listed targets are not files and should always be executed. This ensures that the commands are run even if a file with the same name exists. In other words, Phony targets are not tied to actual files. If a target like `clean` or `help` was not marked as .PHONY and you had a file named `clean` or `help`, make could mistakenly consider it up-to-date and skip executing it. By declaring them .PHONY, make knows that these targets don't correspond to actual files and should be executed every time.
 
 Each of these commands helps automate repetitive tasks.
 
