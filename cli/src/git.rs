@@ -73,7 +73,10 @@ impl GitRepo {
         cmd.arg("rev-list")
             .arg("-n")
             .arg("1")
-            .arg(version.unwrap_or("HEAD"))
+            .arg(version.unwrap_or_else(|| {
+                eprintln!("No version specified, using HEAD");
+                "HEAD"
+            }))
             .current_dir(&path);
 
         // Execute the command and capture the output
@@ -192,7 +195,7 @@ mod tests {
         let path = PathBuf::from("invalid_path");
         let repo = GitRepo::new(path.clone(), None);
         assert!(repo.is_err());
-        assert!(repo.err().unwrap().to_string().contains(&format!(
+        assert!(repo.err().expect("").to_string().contains(&format!(
             "The issue might be because the path {:?} does not exist.",
             path
         )));
@@ -207,7 +210,7 @@ mod tests {
         assert!(repo.is_err());
         assert!(repo
             .err()
-            .unwrap()
+            .expect("could not get error")
             .to_string()
             .contains("commit probing failed"));
     }
@@ -217,7 +220,7 @@ mod tests {
     #[test]
     fn test_git_repo_commit() {
         let path = WKS.base.clone();
-        let repo = GitRepo::new(path, None).unwrap();
+        let repo = GitRepo::new(path, None).expect("could not create repo");
         assert!(!repo.commit().is_empty());
     }
 
@@ -227,33 +230,33 @@ mod tests {
     fn test_git_repo_checkout() {
         // get the path to the workspace
         let path = WKS.base.clone();
-        let mut repo = GitRepo::new(path, None).unwrap();
+        let mut repo = GitRepo::new(path, None).expect("could not create repo");
 
         let result = repo.checkout(Path::new("temp_checkout"));
         assert!(result.is_ok());
 
         // Cleanup
-        fs::remove_dir_all("temp_checkout").unwrap();
+        fs::remove_dir_all("temp_checkout").expect("could not remove directory");
     }
 
     /// Test case for attempting to checkout to an existing directory, which should fail.
     #[test]
     fn test_checkout_existing_directory() {
         let path = WKS.base.clone();
-        let mut repo = GitRepo::new(path.clone(), None).unwrap();
+        let mut repo = GitRepo::new(path.clone(), None).expect("could not create repo");
 
         // Create a dummy directory
         let temp_dir = PathBuf::from("temp_existing_dir");
-        fs::create_dir(&temp_dir).unwrap();
+        fs::create_dir(&temp_dir).expect("could not create directory");
 
         let result = repo.checkout(&temp_dir);
         assert!(result.is_err());
         assert_eq!(
-            result.err().unwrap().to_string(),
+            result.err().expect("could not get error").to_string(),
             "checkout path already exists: temp_existing_dir"
         );
 
         // Cleanup
-        fs::remove_dir_all(temp_dir).unwrap();
+        fs::remove_dir_all(temp_dir).expect("could not remove directory");
     }
 }

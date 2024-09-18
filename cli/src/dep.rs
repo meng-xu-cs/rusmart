@@ -351,7 +351,7 @@ mod tests {
             .args(["submodule", "update", "--init", "--recursive"])
             .current_dir(path.clone());
 
-        let output = command.output().unwrap();
+        let output = command.output().expect("could not update submodules...");
         if !output.status.success() {
             panic!("could not update submodules defined at .gitmodules file...");
         }
@@ -368,7 +368,7 @@ mod tests {
     /// inside of src the github repository is cloned and checked out.
     fn test_artifact_init() {
         let (z3_path, _) = setup();
-        let mut repo = GitRepo::new(z3_path, None).unwrap();
+        let mut repo = GitRepo::new(z3_path, None).expect("could not create git repo");
 
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base = base.join("tmp");
@@ -377,29 +377,29 @@ mod tests {
         assert!(artifact.is_ok());
 
         // clean up
-        fs::remove_dir_all(&base).unwrap();
+        fs::remove_dir_all(&base).expect("could not remove tmp directory");
     }
 
     #[test]
     /// This should fail given that the directory temp exists before initializing the artifact.
     fn test_artifact_init_fail() {
         let (z3_path, _) = setup();
-        let mut repo = GitRepo::new(z3_path, None).unwrap();
+        let mut repo = GitRepo::new(z3_path, None).expect("could not create git repo");
 
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base = base.join("tmp");
-        fs::create_dir_all(&base).unwrap();
+        fs::create_dir_all(&base).expect("could not create tmp directory");
 
         let artifact = Artifact::init(&mut repo, base.clone());
 
         assert!(artifact.is_err());
         assert_eq!(
-            artifact.err().unwrap().to_string(),
+            artifact.err().expect("could not get error value").to_string(),
             "artifact path already exists"
         );
 
         // clean up
-        fs::remove_dir_all(&base).unwrap();
+        fs::remove_dir_all(&base).expect("could not remove tmp directory");
     }
 
     #[test]
@@ -410,7 +410,7 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path = path.join(tmp);
 
-        let artifact = Artifact::seek(&path).unwrap();
+        let artifact = Artifact::seek(&path).expect("could not seek artifact");
         assert_eq!(artifact, None);
     }
 
@@ -440,7 +440,7 @@ mod tests {
     /// This tests the seek function of the artifact struct when the path exists, is a directory, and contains both src and dst directories.
     fn test_artifact_seek_ok() {
         let (z3_path, _) = setup();
-        let mut repo = GitRepo::new(z3_path, None).unwrap();
+        let mut repo = GitRepo::new(z3_path, None).expect("could not create git repo");
 
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base = base.join("tmp");
@@ -453,17 +453,17 @@ mod tests {
         };
 
         // clean up
-        fs::remove_dir_all(&base).unwrap();
+        fs::remove_dir_all(&base).expect("could not remove tmp directory");
     }
 
     /// Helper function to create a package
     fn make_package() -> (PathBuf, Package<DepZ3>) {
         let (z3_path, _) = setup();
-        let mut repo = GitRepo::new(z3_path, None).unwrap();
+        let mut repo = GitRepo::new(z3_path, None).expect("could not create git repo");
 
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base = base.join("tmp");
-        let artifact = Artifact::init(&mut repo, base.clone()).unwrap();
+        let artifact = Artifact::init(&mut repo, base.clone()).expect("could not initialize artifact");
 
         (
             base,
@@ -479,7 +479,7 @@ mod tests {
     /// This test should be successful given that the package is destroyed and the base directory is removed.
     fn test_package_destroy() {
         let (_, package) = make_package();
-        let scratch = package.destroy().unwrap();
+        let scratch = package.destroy().expect("could not destroy package");
 
         assert!(!scratch.artifact.exists());
     }
@@ -494,16 +494,16 @@ mod tests {
         assert_eq!(path, base.join("dst"));
 
         // clean up
-        fs::remove_dir_all(&base).unwrap();
+        fs::remove_dir_all(&base).expect("could not remove tmp directory");
     }
 
     #[test]
     /// Testing the new function of the DepState enum for the Z3 dependency
     fn test_new_depstate() {
         let (z3_path, _) = setup();
-        let git_repo = GitRepo::new(z3_path, None).unwrap();
+        let git_repo = GitRepo::new(z3_path, None).expect("could not create git repo");
 
-        let dep_state = DepState::<DepZ3>::new().unwrap();
+        let dep_state = DepState::<DepZ3>::new().expect("could not create new dep state");
 
         let path_wk_studio_native_deps_z3_commit = WKS
             .base
@@ -539,7 +539,7 @@ mod tests {
     #[test]
     /// testing the list configurations function of the DepState enum for the Z3 dependency
     fn test_list_configurations_depstate() {
-        let depstate = DepState::<DepZ3>::new().unwrap();
+        let depstate = DepState::<DepZ3>::new().expect("could not create new dep state");
         let res = depstate.list_configurations();
 
         assert!(res.is_ok());

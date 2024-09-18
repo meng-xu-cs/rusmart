@@ -2,9 +2,9 @@
 
 use std::env;
 use std::fmt::{Display, Formatter};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::fs;
 
 use lazy_static::lazy_static;
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
@@ -49,7 +49,10 @@ lazy_static! {
         let verbosity = match setting {
             Ok(val) => val.parse::<usize>().ok(),
             Err(_) => None,
-        }.unwrap_or(1);
+        }.unwrap_or_else(|| {
+            eprintln!("Expected some value but got None, using default value 1");
+            1
+        });
 
         match verbosity {
             0 => Mode::Prod,
@@ -199,6 +202,6 @@ mod tests {
         let wk_path = find_workspace_root();
 
         assert!(wk_path.is_some());
-        assert_eq!(wk_path.unwrap(), WKS.base);
+        assert_eq!(wk_path.expect("should have a value"), WKS.base);
     }
 }

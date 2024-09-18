@@ -383,7 +383,7 @@ order_operator!(Integer, lt, le, ge, gt);
 
 // impl Nums for Integer {
 //     fn into_rational(self) -> Rational {
-//         let num = self.inner.as_ref().clone().to_i64().unwrap();
+//         let num = self.inner.as_ref().clone().to_i64().expect("Failed to convert BigInt to i64");
 //         Rational::from(num)
 //     }
 // }
@@ -1009,8 +1009,8 @@ mod test {
         let var1 = Integer::from(1i8);
         let var2 = Integer::from(10u8);
 
-        assert!(var1.inner.to_u8().unwrap() == 1);
-        assert!(var2.inner.to_u8().unwrap() == 10);
+        assert!(var1.inner.to_u8().expect("Failed to convert BigInt to u8") == 1);
+        assert!(var2.inner.to_u8().expect("Failed to convert BigInt to u8") == 10);
     }
 
     #[test]
@@ -1253,13 +1253,13 @@ mod test {
         assert_eq!(
             var1,
             Rational {
-                inner: Intern::new(BigRational::from_float(1.5).unwrap())
+                inner: Intern::new(BigRational::from_float(1.5).expect("Failed to convert float to BigRational"))
             }
         );
         assert_eq!(
             var2,
             Rational {
-                inner: Intern::new(BigRational::from_float(1.6).unwrap())
+                inner: Intern::new(BigRational::from_float(1.6).expect("Failed to convert float to BigRational"))
             }
         );
     }
@@ -1320,16 +1320,16 @@ mod test {
         assert_eq!(var2.inner.len(), 1);
 
         // the first one is created with a value of zero and each new one is incremented by one.
-        assert_eq!(*var1.inner.iter().next().unwrap(), 0);
-        assert_eq!(*var2.inner.iter().next().unwrap(), 1);
+        assert_eq!(*var1.inner.iter().next().expect("Error is empty"), 0);
+        assert_eq!(*var2.inner.iter().next().expect("Error is empty"), 1);
 
         // in merging, the elements are included in one set, thus {0,1} is inside var3.
         let var3 = var1.merge(var2);
         assert_eq!(var3.inner.len(), 2);
 
         // the first element is 0 and the second element is 1.
-        assert_eq!(*var3.inner.iter().next().unwrap(), 0);
-        assert_eq!(*var3.inner.iter().nth(1).unwrap(), 1);
+        assert_eq!(*var3.inner.iter().next().expect("Error is empty"), 0);
+        assert_eq!(*var3.inner.iter().nth(1).expect("Error does not have 2 elements"), 1);
 
         // in merging var3 {0,1} and var1 {0} because the inner value is a set the values are not duplicated.
         let var4 = var3.merge(var1);
@@ -1352,7 +1352,7 @@ mod test {
         let var1 = SMTWrap(cloak!(Integer::from(1)));
         let var2 = SMTWrap(cloak!(Integer::from(10)));
 
-        assert_eq!(var2.partial_cmp(&var1).unwrap(), Ordering::Greater);
+        assert_eq!(var2.partial_cmp(&var1).expect("Failed to compare"), Ordering::Greater);
     }
 
     #[test]
