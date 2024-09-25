@@ -174,7 +174,7 @@ We execute the costumized command by loosely running the following: `cargo run <
 
 ---
 
-### Testing
+#### Testing
 
 We have written unit tests for the _rusmart-cli_ package. The coverage of the tests is _55.67%_. The reasons for the low coverage are as follows:
 	- Some of the code is not practically reachable and is not tested.

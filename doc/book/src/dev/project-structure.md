@@ -22,4 +22,4 @@ The project directory structure is as follows:
 
 - [**lang/rego**](crates/lang/rego.md)
 
-Note that the `doc` and `deps` are not crates but directories that contain documentation and dependencies, respectively. The `utils`, `cli`, `smt/stdlib`, `smt/remark`, `smt/derive`, `smt/testing`, `lang/demo`, and `lang/rego` directories contain the actual crates that make up the project. Each crate has its own `Cargo.toml` file that specifies the crate's metadata and dependencies. The `src` directory within each crate contains the source code for that crate.
+Note that the `doc` and `deps` are not packages but directories that contain documentation and dependencies, respectively. The `utils`, `cli`, `smt/stdlib`, `smt/remark`, `smt/derive`, `smt/testing`, `lang/demo`, and `lang/rego` directories contain the actual packages, each containing a `Cargo.toml` file that specifies the crate's metadata and dependencies. The `src` directory within each package contains the source code.

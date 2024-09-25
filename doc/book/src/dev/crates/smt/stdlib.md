@@ -121,3 +121,7 @@ The combination of these expression macros allows us to express complex logic fo
 set! { 1, 2, 3, 4, 5 }
 choose! (x in set => forall! (y in set => x.lt(y).or(x.eq(y))))
 ```
+
+#### Testing
+
+We have written unit tests for the _rusmart-smt-stdlib_ package to ensure that the data types and expressions are correctly implemented. The unit tests cover 100% of the code in the _rusmart-smt-stdlib_ crate.

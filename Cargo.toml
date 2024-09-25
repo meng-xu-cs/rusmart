@@ -29,10 +29,12 @@ paste = "1.0.15"
 petgraph = "0.6.5"
 proc-macro2 = "1.0.86"
 quote = "1.0.36"
+syn = { version = "2.0.72", features = ["full", "extra-traits"] }
 tempfile = "3.11.0"
 simplelog = "0.12.2"
-syn = { version = "2.0.72", features = ["full", "extra-traits"] }
 walkdir = "2.5.0"
+trybuild = "1.0"
+
 
 rusmart-utils = { path = "utils" }
 rusmart-cli = { path = "cli" }
