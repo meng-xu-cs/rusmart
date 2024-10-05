@@ -868,4 +868,9 @@ mod tests {
         #[smt_type]
         struct SimpleBool(Boolean);
     });
+
+    unit_test!(with_generics, {
+        #[smt_type]
+        struct SimpleVec<T:SMT>(Seq<T>);
+    });
 }
