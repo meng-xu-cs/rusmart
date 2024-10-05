@@ -475,14 +475,14 @@ order_operator!(Text, lt, le, ge, gt);
 
 /// ** 5) Dynamically assigned error
 /// This type is used to represent an error state in the SMT system.
-/// The error state is created by calling the Error::new() function.
+/// The error state is created by calling the Error::fresh() function.
 /// Every time the new() method is called, a new error state is created with a unique inner value.
 /// The inner values are incremented by one each time a new error state is created.
 /// The merge method is used to merge two error states where duplicates are not allowed.
 ///
-/// let a = Error::new(); // a is of type Error with an inner value of 0
-/// let a = Error::new(); // a is of type Error with an inner value of 1
-/// let b = Error::new(); // b is of type Error with an inner value of 2
+/// let a = Error::fresh(); // a is of type Error with an inner value of 0
+/// let a = Error::fresh(); // a is of type Error with an inner value of 1
+/// let b = Error::fresh(); // b is of type Error with an inner value of 2
 /// let c = a.merge(b); // c is of type Error with an inner value of 1, 2
 #[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
 pub struct Error {
@@ -494,7 +494,7 @@ static _ERROR_COUNTER_: AtomicUsize = AtomicUsize::new(0);
 
 impl Error {
     /// Create a new error
-    pub fn new() -> Self {
+    pub fn fresh() -> Self {
         let mut set = BTreeSet::new();
         set.insert(_ERROR_COUNTER_.fetch_add(1, atomic::Ordering::SeqCst));
         Self {
@@ -583,7 +583,7 @@ pub struct Seq<T: SMT> {
 smt_impl!(Seq, T);
 
 impl<T: SMT> Seq<T> {
-    /// create an new empty sequence
+    /// create an new sequence
     /// operation: `Seq::new()`
     pub fn new() -> Self {
         Self {
@@ -637,6 +637,12 @@ impl<T: SMT> Seq<T> {
     /// iterator
     pub fn iterator(self) -> Vec<Integer> {
         (0..self.inner.len()).map(Integer::from).collect()
+    }
+
+    /// checks if the sequence is empty
+    /// operation: `v.is_empty()`
+    pub fn is_empty(self) -> Boolean {
+        self.inner.is_empty().into()
     }
 }
 
@@ -701,6 +707,12 @@ impl<T: SMT> Set<T> {
     /// It gives the elements of the set in a vector
     pub fn iterator(self) -> Vec<T> {
         self.inner.iter().map(|i| i.0).collect()
+    }
+
+    /// checks if the set is empty
+    /// operation: `s.is_empty()`
+    pub fn is_empty(self) -> Boolean {
+        self.inner.is_empty().into()
     }
 }
 
@@ -780,6 +792,12 @@ impl<K: SMT, V: SMT> Map<K, V> {
     /// It gives the keys of the map in a vector
     pub fn iterator(self) -> Vec<K> {
         self.inner.keys().map(|i| i.0).collect()
+    }
+
+    /// checks if the map is empty
+    /// operation: `m.is_empty()`
+    pub fn is_empty(self) -> Boolean {
+        self.inner.is_empty().into()
     }
 }
 
@@ -881,9 +899,9 @@ mod test {
     /// This tests the smt_impl macro for the Error type
     /// testing the cmp method of the SMT trait on the Error type
     fn test_smt_impl_macro_error() {
-        let var1 = Error::new(); // 0
-        let var2 = Error::new(); // 1
-        let var3 = Error::new(); // 2
+        let var1 = Error::fresh(); // 0
+        let var2 = Error::fresh(); // 1
+        let var3 = Error::fresh(); // 2
 
         let res1 = var1._cmp(var2); // 0 < 1
         let res2 = var2._cmp(var3); // 1 < 2
@@ -1312,8 +1330,8 @@ mod test {
     #[test]
     /// testing the new method of Error
     fn test_error() {
-        let var1 = Error::new();
-        let var2 = Error::new();
+        let var1 = Error::fresh();
+        let var2 = Error::fresh();
 
         // each newly created error only has one element.
         assert_eq!(var1.inner.len(), 1);
@@ -1655,6 +1673,7 @@ mod test {
         let var1 = Seq::<Integer>::default();
         let var2 = Seq { inner: Intern::new(Vec::new()) };
         assert_eq!(var1, var2);
+        assert!(*var1.is_empty());
     }
 
     #[test]
@@ -1663,6 +1682,7 @@ mod test {
         let var1 = Set::<Integer>::default();
         let var2 = Set { inner: Intern::new(BTreeSet::new()) };
         assert_eq!(var1, var2);
+        assert!(*var1.is_empty());
     }
 
     #[test]
@@ -1671,5 +1691,6 @@ mod test {
         let var1 = Map::<Integer, Integer>::default();
         let var2 = Map { inner: Intern::new(BTreeMap::<SMTWrap<Integer>, SMTWrap<Integer>>::new()) };
         assert_eq!(var1, var2);
+        assert!(*var1.is_empty());
     }  
 }

@@ -30,9 +30,9 @@ fn lt_value(lhs: Value, rhs: Value) -> Expr {
         (Value::Integer(_), Value::Null) => Expr::Value(Value::Null),
 
         // boolean leads to a type error
-        (Value::Boolean(_), Value::Boolean(_)) => Expr::Error(Error::new()),
-        (Value::Boolean(_), Value::Integer(_)) => Expr::Error(Error::new()),
-        (Value::Integer(_), Value::Boolean(_)) => Expr::Error(Error::new()),
+        (Value::Boolean(_), Value::Boolean(_)) => Expr::Error(Error::fresh()),
+        (Value::Boolean(_), Value::Integer(_)) => Expr::Error(Error::fresh()),
+        (Value::Integer(_), Value::Boolean(_)) => Expr::Error(Error::fresh()),
 
         // integer
         (Value::Integer(l), Value::Integer(r)) => Expr::Value(Value::Boolean(l.lt(r))),
@@ -43,11 +43,11 @@ fn lt_value(lhs: Value, rhs: Value) -> Expr {
 pub fn lt(lhs: Expr, rhs: Expr) -> Expr {
     match (lhs, rhs) {
         // undef will cause an error
-        (Expr::Undef, Expr::Undef) => Expr::Error(Error::new()),
-        (Expr::Undef, Expr::Value(_)) => Expr::Error(Error::new()),
-        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::new().merge(e)),
-        (Expr::Value(_), Expr::Undef) => Expr::Error(Error::new()),
-        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::new().merge(e)),
+        (Expr::Undef, Expr::Undef) => Expr::Error(Error::fresh()),
+        (Expr::Undef, Expr::Value(_)) => Expr::Error(Error::fresh()),
+        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::fresh().merge(e)),
+        (Expr::Value(_), Expr::Undef) => Expr::Error(Error::fresh()),
+        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::fresh().merge(e)),
 
         // error will be propagated
         (Expr::Error(l), Expr::Error(r)) => Expr::Error(l.merge(r)),
@@ -70,7 +70,7 @@ fn le_value(lhs: Value, rhs: Value) -> Expr {
         (Value::Integer(l), Value::Integer(r)) => Expr::Value(Value::Boolean(l.lt(r))),
 
         // all others lead to type error
-        (_, _) => Expr::Error(Error::new()),
+        (_, _) => Expr::Error(Error::fresh()),
     }
 }
 
@@ -79,14 +79,14 @@ pub fn le(lhs: Expr, rhs: Expr) -> Expr {
     match (lhs, rhs) {
         // error will be propagated
         (Expr::Error(l), Expr::Error(r)) => Expr::Error(l.merge(r)),
-        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::new().merge(e)),
-        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::new().merge(e)),
+        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::fresh().merge(e)),
+        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::fresh().merge(e)),
         (Expr::Error(e), _) => Expr::Error(e),
         (_, Expr::Error(e)) => Expr::Error(e),
 
         // undef will cause an error
-        (Expr::Undef, _) => Expr::Error(Error::new()),
-        (_, Expr::Undef) => Expr::Error(Error::new()),
+        (Expr::Undef, _) => Expr::Error(Error::fresh()),
+        (_, Expr::Undef) => Expr::Error(Error::fresh()),
 
         // value op is delegated
         (Expr::Value(l), Expr::Value(r)) => l.le(r),
@@ -117,14 +117,14 @@ pub fn assign_if(state: State, var: Variable, expr: Expr, cond: Expr) -> State {
     let assigned = match (expr, cond) {
         // error propagates
         (Expr::Error(e1), Expr::Error(e2)) => Expr::Error(e1.merge(e2)),
-        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::new().merge(e)),
-        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::new().merge(e)),
+        (Expr::Error(e), Expr::Undef) => Expr::Error(Error::fresh().merge(e)),
+        (Expr::Undef, Expr::Error(e)) => Expr::Error(Error::fresh().merge(e)),
         (Expr::Error(e), _) => Expr::Error(e),
         (_, Expr::Error(e)) => Expr::Error(e),
 
         // undef causes error
-        (Expr::Undef, _) => Expr::Error(Error::new()),
-        (_, Expr::Undef) => Expr::Error(Error::new()),
+        (Expr::Undef, _) => Expr::Error(Error::fresh()),
+        (_, Expr::Undef) => Expr::Error(Error::fresh()),
 
         // intended semantics when the condition is a boolean
         (_, Expr::Value(Value::Boolean(v))) => {
@@ -136,7 +136,7 @@ pub fn assign_if(state: State, var: Variable, expr: Expr, cond: Expr) -> State {
         }
 
         // all other case should cause an error
-        (_, Expr::Value(_)) => Expr::Error(Error::new()),
+        (_, Expr::Value(_)) => Expr::Error(Error::fresh()),
     };
     assign(state, var, assigned)
 }

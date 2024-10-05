@@ -18,6 +18,7 @@ use crate::parser::ty::TypeTag;
 
 /// Reserved trait
 #[allow(clippy::upper_case_acronyms)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SysTrait {
     SMT,
 }
