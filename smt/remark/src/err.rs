@@ -37,10 +37,10 @@ macro_rules! fail_on {
 }
 // A declarative macro cannot be exported using #[macro_export] in a proc-macro crate (currently).
 // Writing "pub use fail_on;" will not export a declarative macro and we need to use #[macro_export].
-// procedural macros can only be exported from proc-macro crates.
-// So fail_on! as a declarative macro cannot be used from outside the crate or in other modules in the crate.
+// procedural macros can only be exported from proc-macro crates (not declarative macros).
+// So fail_on! as a declarative macro cannot be used from outside the crate.
 // fail_on! can only be used inside the err.rs module.
-// However, to use it in other modules in the crate, we can write pub(crate) use fail_on;.
+// However, to make is accessible in other modules in the crate, we can write pub(crate) use fail_on;.
 pub(crate) use fail_on;
 
 /// Special case on fail: when an error happens

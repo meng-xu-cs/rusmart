@@ -92,7 +92,7 @@ fn parse_ident_from_pat(pat: &Pat) -> Result<&Ident> {
 macro_rules! name {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
-        #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
+        #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Debug)] // Debug trait is derived as well for unit testing
         pub struct $name {
             ident: String,
         }

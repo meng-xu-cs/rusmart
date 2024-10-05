@@ -13,5 +13,5 @@ log = { workspace = true }
 tempfile = { workspace = true }
 rusmart-utils = { workspace = true }
 
-[features]
-tarpaulin_include = []
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }

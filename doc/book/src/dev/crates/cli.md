@@ -176,6 +176,13 @@ We execute the costumized command by loosely running the following: `cargo run <
 
 #### Testing
 
-We have written unit tests for the _rusmart-cli_ package. The coverage of the tests is _55.67%_. The reasons for the low coverage are as follows:
+The _lints.rust_ section is only defined for the _Cargo.toml_ of a _package_ (not a workspace) and is as following:
+
+```toml
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
+```
+
+This flag allows using __#[cfg(not(tarpaulin_include))]__ in the code to exclude the code (function) from the coverage report, without generating a warning. As the _main_ function in the _main.rs_ file will not be tested, we have written __#[cfg(not(tarpaulin_include))]__ before the function. This excludes the _main_ function from the coverage report. Overall, we have written unit tests for the _rusmart-cli_ package with a coverage of _56.10%_. The reasons for the low coverage are as follows:
 	- Some of the code is not practically reachable and is not tested.
 	- The code containing _make_ and _build_ functions are computationally expensive and time-consuming to test. Therefore, we have not tested them.

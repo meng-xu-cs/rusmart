@@ -30,7 +30,7 @@ The _lib_ section indicates that the package is a library crate and contains a _
 
 The _full_ feature of the _syn_ crate is used to enable _Data structures for representing the syntax tree of all valid Rust source code, including items and expressions_. The _extra-traits_ feature is used to make the _Debug, Eq, PartialEq, Hash impls for all syntax tree types_ available. The syntax tree type is the result of parsing the Rust code.
 
-The _lints.rust_ section is only defined for the _Cargo.toml_ of a package. The _unexpected_cfgs_ lint is used to check for unexpected _cfg_ attributes in the code. This flag allows using __#[cfg(not(tarpaulin_include))]__ in the code to exclude the code (function) from the coverage report, without generating a warning. We have explicitly excluded the procedural macro functions from the coverage report, as unit tests are not applicable to them.
+The _lints.rust_ section is only defined for the _Cargo.toml_ of a _package_ (not a workspace). The _unexpected_cfgs_ lint is used to check for unexpected _cfg_ attributes in the code. This flag allows using __#[cfg(not(tarpaulin_include))]__ in the code to exclude the code (function) from the coverage report, without generating a warning. We have explicitly excluded the procedural macro functions from the coverage report, as unit tests are not applicable to them.
 
 ---
 

@@ -82,7 +82,7 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
     // variadic: Option<Variadic>, output: ReturnType
     // in the above example, constness is const, asyncness is async, unsafety is unsafe, abi is "C"
     // fn_token is fn, ident is example, generics is <T: Copy>, paren_token is (), inputs is a: i32, b: i32
-    // variadic is ..., output is Result<T, &'static str>
+    // variadic is ... (this can only be used in external code - from C for example - as Rust does not support variadics - that is why macros exist), output is Result<T, &'static str>
     let Signature {
         constness,
         asyncness,
@@ -177,6 +177,7 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
 
     // Derive the generics tokens for the impl block.
     // <U:SMT, T:SMT ...> will be created for all the generics used inside the first arg of func.
+    // this will be used for the impl signature
     let tokenized_impl_generics = self_ty_consumed_params.to_syntax_def();
 
     // Get the method type parameters by removing the self type parameters.
@@ -215,7 +216,7 @@ fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<To
     let tokenized_method_params = quote!(#(#method_params),*);
     // tokenized_func_args for fn add<T:SMT, U:SMT> (x : String, foo: f64) -> f64
     // is: self, foo (the first arg is skipped)
-    let tokenized_func_args = quote!(#(#func_args),*);
+    let tokenized_func_args = quote!(#(#func_args),*); // this is used for function invocation
 
     // Construct the expanded token stream (the generated code).
     let extended = quote! {
@@ -315,7 +316,7 @@ fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
 ///
 /// A `Syntax` token stream containing the original function and any derived code.
 /// 
-/// example attr : #[method = ADD, specs = { ... }]
+/// example attr : #[method = ADD, specs = [ ... ]]
 /// example item : fn add<T:SMT>(a: i32, b: T) -> i32 { a }
 /// does the implementation of the method ADD for the type i32 using the logic of the function add
 pub fn derive_for_impl(attr: Syntax, item: Syntax) -> Result<Syntax> {
@@ -343,8 +344,8 @@ pub fn derive_for_spec(attr: Syntax, item: Syntax) -> Result<Syntax> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use syn::parse_quote;
+
     #[test]
     // bail_if_exists!(constness); is invoked in the check_and_derive function
     fn test_check_and_derive_bail_constness() {
@@ -561,23 +562,28 @@ mod tests {
 
         let result = result.unwrap();
         assert!(result.is_some());
-
-        /*
-                fn ADD<T:SMT>(a: i32, b: T) -> i32 {
-                    a
-                }
-
-                impl #tokenized_impl_generics(empty) #self_ty_name(i32) #self_ty_args(empty) {
-                    #vis(empty) fn #method(add) #tokenized_method_generics(<T:SMT>) (#tokenized_method_params)(self, b: T) #output(-> i32) {
-                        #func_name(ADD) #tokenized_func_ty_args(#tokenized_func_args)
-                    }
-                }
-                ** So basically it implements the name of the method provided as the second argument of check_and_derive to the type of the first argument of the function in the first argument of check_and_derive. **
-                impl i32 {
-                    fn add<T:SMT>(self, b: T) -> i32 {
-                        ADD::<T>(self, b)
-                    }
-                }
-        */
     }
+
+    // test derive_for_impl
+    // procedural macro API is used outside of a procedural macro error
+    // procmacro::TokenStream can only be used inside a procedural macro that is functions with the #[proc_macro], #[proc_macro_derive], or #[proc_macro_attribute] attributes.
+    // #[test]
+    // fn test_derive_for_impl() {
+
+    //     let attr: syn::Attribute = parse_quote! { #[method = add_two, impls ] };
+    //     let item: syn::ItemFn = parse_quote! {
+    //         fn add_one<T: SMT>(a: i32, b: T) -> i32 {
+    //             a
+    //         }
+    //     };
+    
+    //     // Convert to Syntax by quoting back to TokenStream2, then into proc_macro::TokenStream.
+    //     // PROBLEM
+    //     let attr_syntax: Syntax = proc_macro2::TokenStream::from(quote! { #attr }).into();
+    //     let item_syntax: Syntax = proc_macro2::TokenStream::from(quote! { #item }).into();
+    
+    //     // Pass the Syntax values to `derive_for_impl`.
+    //     let result = derive_for_impl(attr_syntax, item_syntax);
+    //     assert!(result.is_ok());
+    // }
 }

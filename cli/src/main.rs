@@ -65,7 +65,7 @@ struct Args {
 /// # Errors
 /// If the workspace can't be reset or dependencies can't be managed, it returns an `anyhow::Error`.
 // not part of the code coverage
-#[cfg(not(feature = "tarpaulin_include"))]
+#[cfg(not(tarpaulin_include))]
 pub fn main() -> Result<()> {
     // Initialize workspace
     config::initialize();

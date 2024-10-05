@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
-use std::fs;
-use std::path::Path;
-
-use log::trace;
+use std::fs; // for filesystem operations
+use std::path::Path; // for path handling
+use log::trace; // For logging during debugging
+// Only include TokenStream during testing
 #[cfg(test)]
 use proc_macro2::TokenStream;
+// Import syn crate types for parsing Rust code
 use syn::{File, Ident, Item, ItemEnum, ItemFn, ItemMod, ItemStruct, Result, Stmt};
-use walkdir::WalkDir;
+use walkdir::WalkDir; // For walking through directories recursively
 
 use crate::parser::apply::{ApplyDatabase, Kind};
 use crate::parser::attr::{ImplMark, Mark, SpecMark};
@@ -19,7 +20,7 @@ use crate::parser::infer::{TIError, TypeRef, TypeUnifier};
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef, TypeTag};
 
-/// SMT-marked type
+/// SMT-marked type:Represents a type (enum or struct) marked with SMT attributes.
 pub enum MarkedType {
     Enum(ItemEnum),
     Struct(ItemStruct),
