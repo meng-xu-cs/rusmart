@@ -10,5 +10,5 @@ license = "GPL-3.0"
 anyhow = { workspace = true }
 rusmart-utils = { workspace = true }
 rusmart-smt-stdlib = { workspace = true }
-rusmart-smt-remark = { workspace = true }
+rusmart-smt-remark-derive = { workspace = true }
 rusmart-smt-derive = { workspace = true }

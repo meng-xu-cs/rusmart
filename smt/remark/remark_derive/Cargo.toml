@@ -1,13 +1,18 @@
 [package]
-name = "rusmart-smt-remark"
+name = "rusmart-smt-remark-derive"
 description = "Annotations for remarking Rust syntax into SMT constructs"
 version = "0.1.0"
 edition = "2021"
 authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
 license = "GPL-3.0"
 
+[lib]
+proc-macro = true
+
 [dependencies]
 proc-macro2 = { workspace = true }
-quote = { workspace = true }
 syn = { workspace = true }
-trybuild = { workspace = true }
+rusmart-smt-remark = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }

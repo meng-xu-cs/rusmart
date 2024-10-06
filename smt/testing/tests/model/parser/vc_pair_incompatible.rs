@@ -1,4 +1,4 @@
-use rusmart_smt_remark::{smt_impl, smt_spec};
+use rusmart_smt_remark_derive::{smt_impl, smt_spec};
 use rusmart_smt_stdlib::{Boolean, Integer, Rational, SMT};
 
 #[smt_impl(specs = spec_foo)]

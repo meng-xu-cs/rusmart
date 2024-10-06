@@ -1,5 +1,5 @@
 mod a {
-    use rusmart_smt_remark::smt_impl;
+    use rusmart_smt_remark_derive::smt_impl;
     use rusmart_smt_stdlib::Boolean;
 
     #[smt_impl]
@@ -9,7 +9,7 @@ mod a {
 }
 
 mod b {
-    use rusmart_smt_remark::smt_impl;
+    use rusmart_smt_remark_derive::smt_impl;
     use rusmart_smt_stdlib::Boolean;
 
     #[smt_impl]

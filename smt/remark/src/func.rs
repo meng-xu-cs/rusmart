@@ -10,7 +10,7 @@ use quote::quote;
 use syn::{FnArg, ItemFn, PatType, Path, PathSegment, Result, Signature, Type, TypePath};
 
 use crate::attr::{parse_dict, MetaValue};
-use crate::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::{bail_if_exists, bail_if_missing, bail_on};
 use crate::generics::TypeParamGroup;
 
 /// Checks the function signature and derives additional code if a method attribute is present.

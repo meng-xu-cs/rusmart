@@ -575,7 +575,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "rusmart-smt-derive",
- "rusmart-smt-remark",
+ "rusmart-smt-remark-derive",
  "rusmart-smt-stdlib",
  "rusmart-utils",
 ]
@@ -586,7 +586,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "rusmart-smt-derive",
- "rusmart-smt-remark",
+ "rusmart-smt-remark-derive",
  "rusmart-smt-stdlib",
  "rusmart-utils",
 ]
@@ -620,6 +620,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusmart-smt-remark-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "rusmart-smt-remark",
+ "syn",
+]
+
+[[package]]
 name = "rusmart-smt-stdlib"
 version = "0.1.0"
 dependencies = [
@@ -639,7 +648,7 @@ dependencies = [
  "anyhow",
  "datatest-stable",
  "rusmart-smt-derive",
- "rusmart-smt-remark",
+ "rusmart-smt-remark-derive",
  "rusmart-smt-stdlib",
  "rusmart-utils",
 ]

@@ -5,6 +5,11 @@ members = [
     "cli",
     "smt/stdlib",
     "smt/remark",
+    # if "smt/remark/remark_derive" was not listed as a member and was only listed as a dependency:
+    # 1) It will not share the workspace's Cargo.lock file.
+    # 2) It will not share the target directory.
+    # 3) It will be built in isolation from the workspace members.
+    "smt/remark/remark_derive",
     "smt/derive",
     "smt/testing",
     "lang/demo",
@@ -40,4 +45,5 @@ rusmart-utils = { path = "utils" }
 rusmart-cli = { path = "cli" }
 rusmart-smt-stdlib = { path = "smt/stdlib" }
 rusmart-smt-remark = { path = "smt/remark" }
+rusmart-smt-remark-derive = { path = "smt/remark/remark_derive" }
 rusmart-smt-derive = { path = "smt/derive" }

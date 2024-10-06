@@ -1,4 +1,4 @@
-use rusmart_smt_remark::smt_axiom;
+use rusmart_smt_remark_derive::smt_axiom;
 use rusmart_smt_stdlib::Integer;
 
 #[smt_axiom]

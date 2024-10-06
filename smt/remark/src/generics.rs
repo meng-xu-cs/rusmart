@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 // Import the `quote` macro to generate tokens
 use quote::quote;
 // Import various syntax-related types from the `syn` crate, used for parsing Rust code
-use crate::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::{bail_if_exists, bail_if_missing, bail_on};
 use syn::{
     AngleBracketedGenericArguments, GenericArgument, GenericParam, Generics, Path, PathArguments,
     PathSegment, Result, TraitBound, TraitBoundModifier, Type, TypeParam, TypeParamBound, TypePath,

@@ -158,6 +158,11 @@ members = [
     "cli",
     "smt/stdlib",
     "smt/remark",
+    # if "smt/remark/remark_derive" was not listed as a member and was only listed as a dependency:
+    # 1) It will not share the workspace's Cargo.lock file.
+    # 2) It will not share the target directory.
+    # 3) It will be built in isolation from the workspace members.
+    "smt/remark/remark_derive",
     "smt/derive",
     "smt/testing",
     "lang/demo",
@@ -182,19 +187,22 @@ paste = "1.0.15"
 petgraph = "0.6.5"
 proc-macro2 = "1.0.86"
 quote = "1.0.36"
+syn = { version = "2.0.72", features = ["full", "extra-traits"] }
 tempfile = "3.11.0"
 simplelog = "0.12.2"
-syn = { version = "2.0.72", features = ["full", "extra-traits"] }
 walkdir = "2.5.0"
+trybuild = "1.0"
+
 
 rusmart-utils = { path = "utils" }
 rusmart-cli = { path = "cli" }
 rusmart-smt-stdlib = { path = "smt/stdlib" }
 rusmart-smt-remark = { path = "smt/remark" }
+rusmart-smt-remark-derive = { path = "smt/remark/remark_derive" }
 rusmart-smt-derive = { path = "smt/derive" }
 ```
 
-This file indicates that the project is organized as a Rust workspace, comprising multiple packages (rusmart-utils, rusmart-cli, rusmart-smt-stdlib, rusmart-smt-remark, rusmart-smt-derive, rusmart-smt-testing, rusmart-lang-demo, rusmart-lang-rego) that are grouped and loosely ordered by their dependency relationships. In short, `loosely ordered` means that the packages downstream in the dependency graph are listed after the packages they depend on, though this is not restricted. Furthermore, the workspace relies on several external crates, which are managed collectively under [workspace.dependencies]. All the crates in the workspace share the same version of these dependencies. The dependecies in short provide the following functionality:
+This file indicates that the project is organized as a Rust workspace, comprising multiple packages (rusmart-utils, rusmart-cli, rusmart-smt-stdlib, rusmart-smt-remark, rusmart-smt-remark-derive, rusmart-smt-derive, rusmart-smt-testing, rusmart-lang-demo, rusmart-lang-rego) that are grouped and loosely ordered by their dependency relationships. In short, `loosely ordered` means that the packages downstream in the dependency graph are listed after the packages they depend on, though this is not restricted. Furthermore, the workspace relies on several external crates, which are managed collectively under [workspace.dependencies]. All the crates in the workspace share the same version of these dependencies. The dependecies in short provide the following functionality:
 
 - **proc-macro2**, **quote**, **syn**: Crates essential for procedural macro development. The `syn` crate parses Rust code from a string into a data structure that we can perform operations on. The `quote` crate turns syn data structures back into Rust code. These crates make it much simpler to parse any sort of Rust code we might want to handle.
 - **anyhow**: Provides flexible error handling.

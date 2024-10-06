@@ -1,4 +1,4 @@
-use rusmart_smt_remark::{smt_impl, smt_type};
+use rusmart_smt_remark_derive::{smt_impl, smt_type};
 use rusmart_smt_stdlib::{Boolean, SMT};
 
 #[smt_impl]

@@ -13,7 +13,7 @@
 //! The (key1 = value1, key2 = [value2, value3]) part is a key-value mapping that can be parsed using the `parse_dict` function.
 //!
 
-use crate::err::{bail_if_missing, bail_on};
+use crate::{bail_if_missing, bail_on};
 use proc_macro2::{Delimiter, Ident, TokenStream, TokenTree};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::Result;

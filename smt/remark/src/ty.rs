@@ -1,4 +1,4 @@
-use crate::err::{bail_if_exists, bail_if_missing, bail_on};
+use crate::{bail_if_exists, bail_if_missing, bail_on}; // import the error macros from the crate
 use crate::generics::TypeParamGroup;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
