@@ -55,11 +55,15 @@ _ __generics__ : This module provides utilities for parsing and managing generic
 
 #### Testing
 
-We have written unit tests for the _rusmart-smt-remark_ package. The coverage of the tests is _89.93%_. The reasons for the missing coverage are:
-    - The functions that have proc-macro TokenStream as an argument are not covered by the unit tests as we cannot test because procedural macro API is used outside of a procedural macro error. 
-The coverage for modules is as follows:
+We have written unit tests for the _rusmart-smt-remark_ package. The coverage of the tests is _98.80%_. The coverage for modules is as follows:
     - The coverage for the _attr_ module is _100%_.
-    - The coverage for the _generics_ module is _99.10%_.
-    - The coverage for the _ty__ module is _93.12%_.
-    - The coverage for the _func_ module is _64.56%_. This is because the functions that have proc-macro TokenStream as an argument are present in this module.
-    - The _err_ and _lib_ do not have any functions to test.
+    - The coverage for the _generics_ module is _100%_.
+    - The coverage for the _ty__ module is _97.87%_.
+    - The coverage for the _func_ module is _98.72%_.
+    - The _err_ does not have any functions to test.
+    - The _lib_ module contains the procedural macros, and thus, procedural macro API cannot be used outside of a procedural macro. Therefore, the procedural macros functions are not covered by the unit tests.
+
+Note that compared to the original design, the functions that have proc-macro TokenStream as an argument have been changed to work with the proc-macro2 TokenStream. Therefore, internally, no procedural macro API is used outside of a procedural macro and all the functions are covered by the unit tests. The reasons for the missing coverage are:
+    - In the _func_ module, the path `bail_if_exists!(iter.next());` in the `check_and_derive` function is not covered by the unit tests. This is because this part is unreachable as the condition is checked in the line invoking the `collect_type_arguments` function.
+    - In the _ty_ module, the four paths `bail_on!(field, "unexpected field mutability declaration"); //unreachable code as the mutability is always FieldMutability::None (for now)` are not covered by the unit tests. This is because the mutability is always _FieldMutability::None_.
+    - In the previous design, the functions that had proc-macro TokenStream as an argument were not covered by the unit tests as we could not test because of the _"procedural macro API is used outside of a procedural macro"_ error. This has been fixed in the current design.

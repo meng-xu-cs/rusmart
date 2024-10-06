@@ -19,6 +19,8 @@ use crate::err::{fail_if_error, fail_on};
 #[proc_macro_attribute]
 #[cfg(not(tarpaulin_include))]
 pub fn smt_type(attr: Syntax, item: Syntax) -> Syntax {
+    let attr: TokenStream = TokenStream::from(attr);
+    let item: TokenStream = TokenStream::from(item);
     fail_if_error!(ty::derive_for_type(attr, item)) // no attributes allowed for smt_type
 }
 
@@ -27,6 +29,8 @@ pub fn smt_type(attr: Syntax, item: Syntax) -> Syntax {
 #[proc_macro_attribute]
 #[cfg(not(tarpaulin_include))]
 pub fn smt_impl(attr: Syntax, item: Syntax) -> Syntax {
+    let attr: TokenStream = TokenStream::from(attr);
+    let item: TokenStream = TokenStream::from(item);
     fail_if_error!(func::derive_for_impl(attr, item))
 }
 
@@ -35,6 +39,8 @@ pub fn smt_impl(attr: Syntax, item: Syntax) -> Syntax {
 #[proc_macro_attribute]
 #[cfg(not(tarpaulin_include))]
 pub fn smt_spec(attr: Syntax, item: Syntax) -> Syntax {
+    let attr: TokenStream = TokenStream::from(attr);
+    let item: TokenStream = TokenStream::from(item);
     fail_if_error!(func::derive_for_spec(attr, item))
 }
 

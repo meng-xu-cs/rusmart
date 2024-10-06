@@ -61,10 +61,10 @@ pub fn parse_dict(stream: &TokenStream) -> Result<BTreeMap<String, MetaValue>> {
     let mut iter = stream.clone().into_iter(); // Creates an iterator over the token stream
     // this will be a None value if the stream is empty
     let mut cursor = iter.next(); // Current token
+
     while cursor.is_some() {
         // Extract key
-        let token = bail_if_missing!(cursor.as_ref(), stream, "key"); // this will never lead to a compile error because cursor is checked to be Some at the beginning of the loop
-
+        let token = bail_if_missing!(cursor.as_ref(), stream, "key"); // this will never lead to a compile error because cursor is checked to be Some at the beginning of the loop.
         // Extract the key as an identifier
         // A key must be an identifier for example in #[my_attr(key = value)]
         // #[my_attr(1 = value)] leads to an error

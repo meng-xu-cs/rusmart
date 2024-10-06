@@ -45,14 +45,14 @@ pub(crate) use fail_on;
 
 /// Special case on fail: when an error happens
 /// It has two patterns: 
-/// - `fail_if_error!(Ok(proc_macro::TokenStream::from(value)))` to return the value wrapped as token stream if it is Ok
+/// - `fail_if_error!(Ok(proc_macro2::TokenStream::from(value)))` to return the value wrapped as token stream if it is Ok
 /// - `fail_if_error!(Err(error))` to return the error as a compiler error
 /// In the second case the `error` is of type syn::Error and the into_compile_error method converts a syn::Error to proc_macro2::TokenStream.
 /// The proc_macro::TokenStream::from is used to convert the proc_macro2::TokenStream to proc_macro::TokenStream.
 macro_rules! fail_if_error {
     ($item:expr) => {
         match $item {
-            Ok(__v) => __v,
+            Ok(__v) => return proc_macro::TokenStream::from(__v),
             Err(__e) => return proc_macro::TokenStream::from(__e.into_compile_error()),
         }
     };

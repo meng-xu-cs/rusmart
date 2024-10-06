@@ -352,6 +352,7 @@ fn collect_type_arguments_recursive(
 mod tests {
     use super::*;
     use syn::{parse_quote, Generics, Type};
+    use syn::punctuated::Punctuated;
 
     #[test]
     fn test_parse_generics_params_empty_bail() {
@@ -888,14 +889,25 @@ mod tests {
     }
 
     // PathArguments::Parenthesized(args) => bail_on!(args, "invalid type arguments"),
-    // #[test]
-    // fn test_collect_type_arguments_parenthesized() {
-    //     let group = TypeParamGroup {
-    //         params: vec![parse_quote!(T), parse_quote!(U)],
-    //     };
-    //     let ty: Type = parse_quote!(String(T));
-    //     let result = group.collect_type_arguments(&ty);
-    //     assert!(result.is_err());
-    //     assert_eq!(result.err().unwrap().to_string(), "invalid type arguments");
-    // }
+    #[test]
+    fn test_collect_type_arguments_parenthesized() {
+        let group = TypeParamGroup {
+            params: vec![parse_quote!(T), parse_quote!(U)],
+        };
+        // let ty: Type = parse_quote!(myString(T)); //? this does not get parsed as a type 
+        let ty: Type = Type::Path(TypePath {
+            qself: None,
+            path: Path {
+                leading_colon: None,
+                // punctuated path segments myString(T)
+                segments: Punctuated::from_iter(vec![PathSegment {
+                    ident: parse_quote!(myString),
+                    arguments: PathArguments::Parenthesized(parse_quote!((T))),
+                }]),
+            }
+        });
+        let result = group.collect_type_arguments(&ty);
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "invalid type arguments");
+    }
 }

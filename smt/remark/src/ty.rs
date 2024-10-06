@@ -1,6 +1,5 @@
 use crate::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::generics::TypeParamGroup;
-use proc_macro::TokenStream as Syntax;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
@@ -207,7 +206,7 @@ fn derive_for_enum(item: &mut ItemEnum) -> Result<TokenStream> {
     //     Variant3 { a: String, b: f64 },
     // };
     // attrs = #[derive(Debug)] // Attributes applied to the enum
-    // vis = Visibility::Inherited // Visibility of the enum
+    // vis = Visibility::Inherited // Visibility of the enum. This is defined at the enum level and applies to all variants.
     // enum_token = enum // The enum keyword
     // ident = MyEnum // The name of the enum
     // generics = <T> // Generics of the enum
@@ -474,20 +473,20 @@ fn derive_for_enum(item: &mut ItemEnum) -> Result<TokenStream> {
 ///
 /// # Returns
 ///
-/// * `Result<Syntax>` - The combined original item and generated code as a token stream, or an error.
+/// * `Result<TokenStream>` - The combined original item and generated code as a token stream, or an error.
 ///
 /// # Errors
 ///
 /// Returns an error if the input is not a struct or enum, or if unexpected attributes are provided.
-pub fn derive_for_type(attr: Syntax, item: Syntax) -> Result<Syntax> {
+pub fn derive_for_type(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     // Check that no attributes are provided.
-    let attr = TokenStream::from(attr);
     if !attr.is_empty() {
         bail_on!(attr, "unexpected attributes provided");
     }
 
     // Parse the input item.
-    let mut original = syn::parse::<Item>(item)?;
+    // let mut original = syn::parse::<Item>(Syntax::from(item))?; cannot test becase: procedural macro API is used outside of a procedural macro
+    let mut original = syn::parse2::<Item>(item)?;
     let extended = match &mut original {
         Item::Struct(item_struct) => derive_for_struct(item_struct)?,
         Item::Enum(item_enum) => derive_for_enum(item_enum)?,
@@ -499,7 +498,7 @@ pub fn derive_for_type(attr: Syntax, item: Syntax) -> Result<Syntax> {
         #original
         #extended
     };
-    Ok(Syntax::from(combined))
+    Ok(combined)
 }
 
 // ------------------------------------------------------------------------------------------------//
@@ -766,66 +765,86 @@ mod tests {
         assert!(generated_code.contains("SMT for TestEnum"));
     }
 
-    // #[test]
+    #[test]
     // if !attr.is_empty() {
     //     bail_on!(attr, "unexpected attributes provided");
     // }
     // cannot test becase: procedural macro API is used outside of a procedural macro
-    // fn test_derive_for_type_attr() {
-    //     let attr:TokenStream = parse_quote! { #[derive(Debug)] };
-    //     let item: TokenStream = parse_quote! { struct MyStruct; };
-    //     let res = derive_for_type(attr.into(), item.into());
-    //     assert!(res.is_err());
-    //     assert_eq!(res.err().unwrap().to_string(), "unexpected attributes provided");
-    // }
+    fn test_derive_for_type_attr() {
+        let attr: TokenStream = parse_quote! { #[derive(Debug)] };
+        let item: TokenStream = parse_quote! { struct MyStruct; };
+        // converting from TokenStream to Syntax can be done by using the `into` method
+        let res = derive_for_type(attr, item);
+        assert!(res.is_err());
+        assert_eq!(
+            res.err().unwrap().to_string(),
+            "unexpected attributes provided"
+        );
+    }
 
-    // #[test]
-    // t => bail_on!(t, "expect a type definition (i.e., struct or enum)"), // smt_type only supports struct and enum
+    #[test]
+    // let mut original = syn::parse2::<Item>(item)?;
+    // procedural macro API is used outside of a procedural macro
+    fn test_derive_for_type_parse() {
+        let attr: TokenStream = parse_quote! {};
+        // item is not of type Item
+        let item: TokenStream = parse_quote! { i32 };
+        let res = derive_for_type(attr, item);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    // t => bail_on!(t, "expect a type definition (i.e., struct or enum)") // smt_type only supports struct and enum
     // cannot test becase: procedural macro API is used outside of a procedural macro
-    // fn test_derive_for_type() {
-    //     let attr: TokenStream = parse_quote! {};
-    //     let item: TokenStream = parse_quote! { i32 };
-    //     let res = derive_for_type(attr.into(), item.into());
-    //     assert!(res.is_err());
-    //     assert_eq!(res.err().unwrap().to_string(), "expect a type definition (i.e., struct or enum)");
-    // }
+    fn test_derive_for_type_struct_or_enum() {
+        let attr: TokenStream = parse_quote! {};
+        let item: TokenStream = parse_quote! {
+            fn test() {
+                println!("Hello, world!");
+            }
+        };
+        let res = derive_for_type(attr, item);
+        assert!(res.is_err());
+        assert_eq!(
+            res.err().unwrap().to_string(),
+            "expect a type definition (i.e., struct or enum)"
+        );
+    }
 
-    // #[test]
+    #[test]
     // Item::Enum(item_enum) => derive_for_enum(item_enum)?,
     // cannot test becase: procedural macro API is used outside of a procedural macro
-    // fn test_derive_for_type_enum() {
-    //     let attr: TokenStream = parse_quote! {};
-    //     let item: TokenStream = parse_quote! {
-    //         enum MyEnum {
-    //             Variant1,
-    //             Variant2(i32, u64),
-    //             Variant3 { a: String, b: f64 },
-    //         }
-    //     };
-    //     let res = derive_for_type(attr.into(), item.into());
-    //     assert!(res.is_ok());
-    //     let tokens = res.unwrap();
-    //     let generated_code = tokens.to_string();
-    //     assert!(generated_code.contains("impl"));
-    //     assert!(generated_code.contains("SMT for MyEnum"));
-    // }
+    fn test_derive_for_type_enum() {
+        let attr: TokenStream = parse_quote! {};
+        let item: TokenStream = parse_quote! {
+            enum MyEnum {
+                Variant1,
+                Variant2(i32, u64),
+                Variant3 { a: String, b: f64 },
+            }
+        };
+        let res = derive_for_type(attr, item);
+        assert!(res.is_ok());
+        let tokens = res.unwrap();
+        let generated_code = tokens.to_string();
+        assert!(generated_code.contains("impl SMT for MyEnum"));
+    }
 
-    // #[test]
+    #[test]
     // Item::Struct(item_struct) => derive_for_struct(item_struct)?,
     // cannot test becase: procedural macro API is used outside of a procedural macro
-    // fn test_derive_for_type_struct() {
-    //     let attr: TokenStream = parse_quote! {};
-    //     let item: TokenStream = parse_quote! {
-    //         struct MyStruct {
-    //             a: i32,
-    //             b: u64,
-    //         }
-    //     };
-    //     let res = derive_for_type(attr.into(), item.into());
-    //     assert!(res.is_ok());
-    //     let tokens = res.unwrap();
-    //     let generated_code = tokens.to_string();
-    //     assert!(generated_code.contains("impl"));
-    //     assert!(generated_code.contains("SMT for MyStruct"));
-    // }
+    fn test_derive_for_type_struct() {
+        let attr: TokenStream = parse_quote! {};
+        let item: TokenStream = parse_quote! {
+            struct MyStruct<T:SMT> {
+                a: T,
+                b: u64,
+            }
+        };
+        let res = derive_for_type(attr.into(), item.into());
+        assert!(res.is_ok());
+        let tokens = res.unwrap();
+        let generated_code = tokens.to_string();
+        assert!(generated_code.contains("impl < T : SMT > SMT for MyStruct < T >"));
+    }
 }

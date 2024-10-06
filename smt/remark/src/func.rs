@@ -5,7 +5,6 @@
 //! - `derive_for_impl` is used inside the `smt_impl` procedural macro to derive code for implementation annotations. If the return type of derive_for_impl is an error, the macro will generate a compile-time error. If the return type of derive_for_impl is Ok, the macro will unwrap the result and return the generated code.
 //! - `derive_for_spec` is used inside the `smt_spec` procedural macro to derive code for specification annotations. If the return type of derive_for_spec is an error, the macro will generate a compile-time error. If the return type of derive_for_spec is Ok, the macro will unwrap the result and return the generated code.
 //!
-use proc_macro::TokenStream as Syntax;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::{FnArg, ItemFn, PatType, Path, PathSegment, Result, Signature, Type, TypePath};
@@ -19,11 +18,11 @@ use crate::generics::TypeParamGroup;
 /// This function inspects the target function's signature to ensure it meets certain criteria,
 /// such as not being `const`, `async`, `unsafe`, or having an ABI or variadic parameters.
 /// Additionally, all of the generics used in the function signature must ONLY implement the `SMT` trait.
-/// If a method attribute is provided, the function must have at least one parameter as input.
+/// If a method `input` is provided (it is some), the function `argument` must have at least one input parameter.
 /// The first parameter must not be a receiver (e.g., `self`) and must be a typed pattern.
 /// The type of the first parameter cannot be T, U, etc., as these are type arguments.
 /// The type of the first parameter can contain nested type arguments.
-/// 
+///
 /// It then optionally generates an implementation of a method for the type specified by the first
 /// parameter, if a `method` attribute is provided.
 ///
@@ -57,7 +56,7 @@ use crate::generics::TypeParamGroup;
 ///                 ADD::<T>(self, b)
 ///             }
 ///         }
-/// */* 
+/// */*
 fn check_and_derive(target: &ItemFn, method: Option<&Ident>) -> Result<Option<TokenStream>> {
     // Unpack the function components.
     // #[inline]
@@ -248,16 +247,17 @@ enum FnKind {
 ///
 /// # Returns
 ///
-/// A `Syntax` token stream containing the original function and any derived code.
-// Cannot test because procedural macro API is used outside of a procedural macro error.
-fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
+/// A token stream containing the original function and any derived code.
+// Could not previously test because procedural macro API is used outside of a procedural macro error.
+// The function signature is changed to accept TokenStream instead of Syntax.
+// attr is key1 = value1, key2 = value2 so in #[my_attr(...)] only the ... part is passed to the attr
+fn derive_for_func(attr: TokenStream, item: TokenStream, kind: FnKind) -> Result<TokenStream> {
     // Parse the attributes into a dictionary.
-    let attr = TokenStream::from(attr); // from proc_macro::TokenStream to proc_macro2::TokenStream
+    // let attr = TokenStream::from(attr); from proc_macro::TokenStream to proc_macro2::TokenStream
     let mut dict = parse_dict(&attr)?;
 
     // Ensure that the underlying item is a function.
-    let target = syn::parse::<ItemFn>(item.clone())?;
-
+    let target = syn::parse2::<ItemFn>(item.clone())?;
     // Derive the method if requested.
     let derived = match dict.remove("method") {
         // If no method attribute, check and derive without method.
@@ -279,8 +279,8 @@ fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
 
     // Check for other attributes based on the kind.
     match kind {
-        FnKind::Impl => dict.remove("specs"), // smt_spec can have specs attribute
-        FnKind::Spec => dict.remove("impls"), // smt_impl can have impls attribute
+        FnKind::Impl => dict.remove("specs"), // smt_impl can have specs attribute
+        FnKind::Spec => dict.remove("impls"), // smt_spec can have impls attribute
     };
     // If there are any remaining attributes, return an error.
     // so only method and specs are allowed for smt_spec and method and impls are allowed for smt_impl
@@ -294,9 +294,9 @@ fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
         None => item,
         // If derivation occurred, append the generated code to the original item.
         Some(extended) => {
-            let mut output = TokenStream::from(item);
+            let mut output = item;
             output.extend(extended);
-            Syntax::from(output)
+            output
         }
     };
     Ok(output)
@@ -306,7 +306,7 @@ fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
 ///
 /// This function is intended to be used as a procedural macro handler for functions annotated
 /// with smt_impl.
-/// 
+///
 /// # Arguments
 ///
 /// * `attr` - The attribute token stream provided to the macro.
@@ -314,12 +314,12 @@ fn derive_for_func(attr: Syntax, item: Syntax, kind: FnKind) -> Result<Syntax> {
 ///
 /// # Returns
 ///
-/// A `Syntax` token stream containing the original function and any derived code.
-/// 
+/// A token stream containing the original function and any derived code.
+///
 /// example attr : #[method = ADD, specs = [ ... ]]
 /// example item : fn add<T:SMT>(a: i32, b: T) -> i32 { a }
 /// does the implementation of the method ADD for the type i32 using the logic of the function add
-pub fn derive_for_impl(attr: Syntax, item: Syntax) -> Result<Syntax> {
+pub fn derive_for_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     derive_for_func(attr, item, FnKind::Impl)
 }
 
@@ -335,8 +335,8 @@ pub fn derive_for_impl(attr: Syntax, item: Syntax) -> Result<Syntax> {
 ///
 /// # Returns
 ///
-/// A `Syntax` token stream containing the original function and any derived code.
-pub fn derive_for_spec(attr: Syntax, item: Syntax) -> Result<Syntax> {
+/// A token stream containing the original function and any derived code.
+pub fn derive_for_spec(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     derive_for_func(attr, item, FnKind::Spec)
 }
 
@@ -564,26 +564,182 @@ mod tests {
         assert!(result.is_some());
     }
 
-    // test derive_for_impl
-    // procedural macro API is used outside of a procedural macro error
-    // procmacro::TokenStream can only be used inside a procedural macro that is functions with the #[proc_macro], #[proc_macro_derive], or #[proc_macro_attribute] attributes.
-    // #[test]
-    // fn test_derive_for_impl() {
+    // test derive_for_func
+    // let mut dict = parse_dict(&attr)?; is invoked in the derive_for_func function
+    #[test]
+    fn test_derive_for_func_parse_dict() {
+        let attr = parse_quote! { 1 = value };
+        let item = quote! {
+            fn add(a: i32, b: i32) -> i32 {
+                a + b
+            }
+        };
+        let kind = FnKind::Impl;
+        let result = derive_for_func(attr, item, kind);
 
-    //     let attr: syn::Attribute = parse_quote! { #[method = add_two, impls ] };
-    //     let item: syn::ItemFn = parse_quote! {
-    //         fn add_one<T: SMT>(a: i32, b: T) -> i32 {
-    //             a
-    //         }
-    //     };
-    
-    //     // Convert to Syntax by quoting back to TokenStream2, then into proc_macro::TokenStream.
-    //     // PROBLEM
-    //     let attr_syntax: Syntax = proc_macro2::TokenStream::from(quote! { #attr }).into();
-    //     let item_syntax: Syntax = proc_macro2::TokenStream::from(quote! { #item }).into();
-    
-    //     // Pass the Syntax values to `derive_for_impl`.
-    //     let result = derive_for_impl(attr_syntax, item_syntax);
-    //     assert!(result.is_ok());
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "key not an identifier");
+    }
+
+    // test derive_for_func
+    // let target = syn::parse2::<ItemFn>(item.clone())?;
+    #[test]
+    fn test_derive_for_func_parse_item_fn() {
+        let attr = parse_quote! { key = value };
+        let item = parse_quote! {
+            struct MyStruct{
+                ident: i32
+            }
+        };
+        let kind = FnKind::Impl;
+        let result = derive_for_func(attr, item, kind);
+
+        assert!(result.is_err());
+    }
+
+    // test derive_for_func
+    // None => check_and_derive(&target, None)?, this pattern is covered in the test case
+    #[test]
+    fn test_derive_for_func_no_method() {
+        let attr = parse_quote! { k = v };
+        let item = parse_quote! {
+            const fn add(a: i32, b: i32) -> i32 {
+                a + b
+            }
+        }; // function should not be const
+        let kind = FnKind::Impl;
+        let result = derive_for_func(attr, item, kind);
+
+        assert!(result.is_err());
+    }
+
+    // test derive_for_func
+    // Some(MetaValue::Set(ident)) => bail_on!(attr, "invalid method attribute: {{ {} }}", ident.into_iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",")), this pattern is covered in the test case
+    #[test]
+    fn test_derive_for_func_set_method() {
+        let attr = parse_quote! { method = [ add, sub ] };
+        let item = parse_quote! {
+            fn add(a: i32, b: i32) -> i32 {
+                a + b
+            }
+        };
+        let kind = FnKind::Impl;
+        let result = derive_for_func(attr, item, kind);
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "invalid method attribute: { add,sub }"
+        );
+    }
+
+    // test derive_for_func
+    // bail_on!(attr, "unknown attributes"); is invoked in the derive_for_func function
+    #[test]
+    fn test_derive_for_func_unknown_attributes() {
+        let attr = parse_quote! { k = v };
+        let item = parse_quote! {
+            fn add(a: i32, b: i32) -> i32 {
+                a + b
+            }
+        };
+        let kind = FnKind::Impl;
+        let result = derive_for_func(attr, item, kind);
+
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "unknown attributes");
+    }
+
+    // test derive_for_func
+    // None => item, this pattern is covered in the test case
+    // either the method key is not provided or the function signature does not have any inputs
+    #[test]
+    fn test_derive_for_func_no_derivation() {
+        let attr = parse_quote! {};
+        let item = parse_quote! {
+            fn add(a: i32, b: i32) -> i32 {
+                a + b
+            }
+        };
+        let kind = FnKind::Impl;
+        let result = derive_for_func(attr, item, kind);
+
+        assert!(result.is_ok());
+    }
+
+    // test derive_for_func
+    // Some(extended) => { let mut output = item; output.extend(extended); output }, this pattern is covered in the test case
+    // the result will be:
+    // fn ADD<T:SMT>(a: i32, b: T) -> i32 {
+    //     a
     // }
+    // impl #tokenized_impl_generics(empty) #self_ty_name(i32) #self_ty_args(empty) {
+    //     #vis(empty) fn #method(add) #tokenized_method_generics(<T:SMT>) /(#tokenized_method_params)(self, b: T) #output(-> i32) {
+    //         #func_name(ADD) #tokenized_func_ty_args(#tokenized_func_args)
+    //     }
+    // }
+    // impl i32 {
+    //     fn add<T:SMT>(self, b: T) -> i32 {
+    //         ADD::<T>(self, b)
+    //     }
+    // }
+    #[test]
+    fn test_derive_for_func_derivation() {
+        let attr = parse_quote! { method = add };
+        let item = parse_quote! {
+            fn ADD<T:SMT>(a: i32, b: T) -> i32 {
+                a
+            }
+        };
+        let kind = FnKind::Spec;
+        let result = derive_for_func(attr, item, kind);
+
+        assert!(result.is_ok());
+    }
+
+    // test derive_for_impl
+    // derive_for_func(attr, item, FnKind::Impl); is invoked in the derive_for_impl function
+    #[test]
+    fn test_derive_for_impl() {
+        let attr = parse_quote! { method = add, specs = yes };
+        let item = parse_quote! {
+            fn ADD<T:SMT>(a: i32, b: T) -> i32 {
+                a
+            }
+        };
+        let result = derive_for_impl(attr, item);
+
+        assert!(result.is_ok());
+    }
+
+    // test derive_for_spec
+    // derive_for_func(attr, item, FnKind::Spec); is invoked in the derive_for_spec function
+    #[test]
+    fn test_derive_for_spec() {
+        let attr = parse_quote! { method = add, impls = yes };
+        let item = parse_quote! {
+            fn ADD<T:SMT>(a: i32, b: T) -> i32 {
+                a
+            }
+        };
+        let result = derive_for_spec(attr, item);
+
+        assert!(result.is_ok());
+    }
+
+    // test derive_for_spec
+    // derive_for_func(attr, item, FnKind::Spec); is invoked in the derive_for_spec function
+    #[test]
+    fn test_derive_for_spec_err() {
+        let attr = parse_quote! { method = add, specs = yes };
+        let item = parse_quote! {
+            fn ADD<T:SMT>(a: i32, b: T) -> i32 {
+                a
+            }
+        };
+        let result = derive_for_spec(attr, item);
+
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "unknown attributes");
+    }
 }
