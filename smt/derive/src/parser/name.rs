@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter}; // Imported for implementing the Display trait
 use syn::{Ident, Pat, PatIdent, Path, PathArguments, PathSegment, Result}; // Import syn crate types for parsing Rust code
 
-// Import custom modules and macros from your crate.
 use crate::parser::dsl::SysMacroName;
 use crate::parser::err::{bail_if_exists, bail_if_missing, bail_on};
 use crate::parser::func::CastFuncName;

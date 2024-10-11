@@ -944,7 +944,7 @@ impl<'r, 'ctx: 'r> ExprParserCursor<'r, 'ctx> {
                             Some(t) => t.clone(),
                         };
 
-                        // unity the type and then build the opcode
+                        // unify the type and then build the opcode
                         ti_unify!(unifier, &ty, &self.exp_ty, target);
                         Op::Var(name)
                     }

@@ -99,7 +99,7 @@ pub fn parse_dict(stream: &TokenStream) -> Result<BTreeMap<String, MetaValue>> {
             TokenTree::Group(group) if matches!(group.delimiter(), Delimiter::Bracket) => {
                 let mut set = BTreeSet::new(); // Stores the set of identifiers
 
-                let sub = group.stream(); // Stream inside the brackets
+                let sub = group.stream(); // creates a TokenStream
                 let mut sub_iter = sub.into_iter(); // Iterator over the sub-stream
                                                     // sub_cursor will be a None value if we have #[my_attr(key = [])]
                 let mut sub_cursor = sub_iter.next(); // Current token in sub-stream

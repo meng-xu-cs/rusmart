@@ -279,8 +279,8 @@ fn derive_for_func(attr: TokenStream, item: TokenStream, kind: FnKind) -> Result
 
     // Check for other attributes based on the kind.
     match kind {
-        FnKind::Impl => dict.remove("specs"), // smt_impl can have specs attribute
-        FnKind::Spec => dict.remove("impls"), // smt_spec can have impls attribute
+        FnKind::Impl => dict.remove("specs"), //? smt_impl can have specs attribute
+        FnKind::Spec => dict.remove("impls"), //? smt_spec can have impls attribute
     };
     // If there are any remaining attributes, return an error.
     // so only method and specs are allowed for smt_spec and method and impls are allowed for smt_impl
