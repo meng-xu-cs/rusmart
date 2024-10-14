@@ -5,7 +5,7 @@
 //! - `ImplMark` struct which represents the marking for an annotated impl function.
 //! - `SpecMark` struct which represents the marking for an annotated spec function.
 //! - `parse_attrs` is the main method to parse the attributes and extract the marks. This method is used in the `ctxt` module.
-//! 
+//!
 use crate::parser::err::{bail_if_missing, bail_on};
 use crate::parser::name::UsrFuncName;
 use proc_macro2::{Delimiter, Ident, TokenStream, TokenTree};
@@ -141,9 +141,8 @@ impl Mark {
                 TokenTree::Group(group) if matches!(group.delimiter(), Delimiter::Bracket) => {
                     let mut set = BTreeSet::new(); // Stores the set of identifiers in the value
 
-                    let sub = group.stream(); // creates a TokenStream
-                    let mut sub_iter = sub.into_iter(); // Iterator over the sub-stream
-                                                        // sub_cursor will be a None value if we have #[my_attr(key = [])]
+                    let mut sub_iter = group.stream().into_iter(); // Iterator over the sub-stream
+                                                                   // sub_cursor will be a None value if we have #[my_attr(key = [])]
                     let mut sub_cursor = sub_iter.next(); // Current token in sub-stream
                     while sub_cursor.is_some() {
                         // Extract the item. This will never lead to a compile error because sub_cursor is checked to be Some at the beginning of the loop. So it will only unwrap a Some value.
@@ -210,7 +209,7 @@ impl Mark {
             return Ok(None);
         }
 
-        let mark = match meta {
+        let mark = match meta { // rust does not allow multiple attributes in a single attribute like #[my_attr1, my_attr2]. Instead, it should be #[my_attr1] #[my_attr2]...
             // Path like `test` in #[test]
             // If it is a path, we parse it for Annotations.
             // Basically the parse_path checks if the path is an identifier (not a path with leading colons, only one segment, and no arguments).
@@ -337,7 +336,7 @@ impl Mark {
                 None => continue,
                 Some(parsed) => {
                     if mark.is_some() {
-                        bail_on!(attr, "multiple marks specified");
+                        bail_on!(attr, "multiple marks specified"); // if in one of the attributes there exists smt_type, smt_impl, smt_spec, or smt_axiom, no other attributes containing any of these should exist.
                     }
                     mark = Some(parsed);
                 }

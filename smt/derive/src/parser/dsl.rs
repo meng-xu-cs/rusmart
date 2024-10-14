@@ -28,7 +28,7 @@ use crate::parser::expr::CtxtForExpr;
 use crate::parser::name::{ReservedIdent, VarName};
 use crate::parser::ty::TypeTag;
 
-/// Represents reserved macro names.
+/// Represents reserved macro names for expressions in stdlib.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SysMacroName {
     /// The `exists` quantifier.
@@ -64,9 +64,8 @@ impl ReservedIdent for SysMacroName {
 struct IterVar {
     /// The identifier of the variable.
     ident: Ident,
-    #[allow(dead_code)] //? should be removed
     /// The `in` token.
-    in_token: Token![in],
+    _in_token: Token![in],
     /// The collection expression the variable iterates over.
     collection: Expr,
 }
@@ -78,7 +77,7 @@ impl Parse for IterVar {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Self {
             ident: input.parse()?,
-            in_token: input.parse()?,
+            _in_token: input.parse()?,
             collection: input.parse()?,
         })
     }
@@ -90,9 +89,8 @@ impl Parse for IterVar {
 struct IterQuant {
     /// The list of variable declarations delimited by commas.
     vars: Punctuated<IterVar, Token![,]>,
-    #[allow(dead_code)] //? should be removed
     /// The `=>` token separating the variables and the body.
-    imply_token: Token![=>],
+    _imply_token: Token![=>],
     /// The body expression of the quantifier.
     body: Expr,
 }
@@ -105,7 +103,7 @@ impl Parse for IterQuant {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Self {
             vars: Punctuated::parse_separated_nonempty(input)?, // input.parse()? is used to parse a single token from the input stream not multiple tokens.
-            imply_token: input.parse()?,
+            _imply_token: input.parse()?,
             body: input.parse()?,
         })
     }
@@ -192,11 +190,6 @@ impl Quantifier {
 
                 // Parse the tokens as a closure expression
                 let closure = parse2::<ExprClosure>(stream)?;
-                // example of a parsed closure to ExprClosure with all the fields:
-                // let x  = parse_quote! {
-                //     |x: i32| x > 0
-                // };
-                // let closure = parse2::<ExprClosure>(x).unwrap();
 
                 let ExprClosure {
                     attrs: _,
@@ -270,7 +263,7 @@ impl Quantifier {
                 let syntax = parse2::<IterQuant>(stream)?;
                 let IterQuant {
                     vars,
-                    imply_token: _,
+                    _imply_token: _,
                     body,
                 } = syntax;
 
@@ -279,7 +272,7 @@ impl Quantifier {
                 for var in vars {
                     let IterVar {
                         ident,
-                        in_token: _,
+                        _in_token: _,
                         collection,
                     } = var;
 
@@ -344,20 +337,20 @@ mod tests {
 
         let IterQuant {
             vars,
-            imply_token:_,
+            _imply_token:_,
             body,
         } = par;
 
         // now destructure vars to get IterVar
         let IterVar {
             ident: x_ident,
-            in_token: _,
+            _in_token: _,
             collection: x_collection,
         } = &vars[0];
 
         let IterVar {
             ident: y_ident,
-            in_token: _,
+            _in_token: _,
             collection: y_collection,
         } = &vars[1];
 

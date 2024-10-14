@@ -4,7 +4,7 @@ use std::cmp::Ordering; // Imported for comparing type variables.
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter}; // Imported for implementing the Display trait.
 
-use itertools::Itertools; // imported to use the format method on iterators (std::slice::Iter types). This method does not exist on iterators by default, but itertools provides it. The format method takes an iterator and returns a string with the elements of the iterator separated by a separator string. The separator string is optional and defaults to ", ".
+use itertools::Itertools; // imported to use the format method on iterators (std::slice::Iter types). This method does not exist on iterators by default, but itertools provides it. The format method takes an iterator and returns a string with the elements of the iterator separated by a separator string.
 
 use crate::parser::name::{TypeParamName, UsrTypeName}; // generic type parameter name and user-defined type name.
 use crate::parser::ty::TypeTag; // TypeTag provides the variants: Boolean, Integer, Rational, Text, Cloak, Seq, Set, Map, Error, User, Pack, Parameter.
@@ -263,8 +263,7 @@ impl TypeEquivGroup {
     /// If a concrete type is assigned (`sort` is `Some`), returns that type.
     /// Otherwise, returns a `TypeRef::Var` using the minimum type variable index.
     pub fn repr(&self) -> TypeRef {
-        match self.sort.as_ref() {
-            // Converts from `&Option<T>` to `Option<&T>`.
+        match self.sort.as_ref() {// Converts from `&Option<T>` to `Option<&T>` to not take ownership of TypeRef.
             None => self.var(),
             Some(t) => t.clone(),
         }
@@ -308,7 +307,9 @@ impl Typing {
         // Register the param and the group
         self.groups.push(group);
         let existing = self.params.insert(var_id, group_index);
-        assert!(existing.is_none(), "Type variable already exists");
+        if existing.is_some() {
+            panic!("Type variable already exists");
+        }
 
         // Return the new type variable.
         TypeVar(var_id)

@@ -122,6 +122,7 @@ fn validate_user_ident(ident: &Ident) -> Result<String> {
 ///
 /// Returns an error if the path is invalid, has leading colons, multiple segments,
 /// or contains unexpected arguments.
+/// parse_ident_from_path is the same as get_ident in the syn crate. https://docs.rs/syn/1.0.77/syn/struct.Path.html#method.get_ident. get_ident just returns an Option<&Ident> while parse_ident_from_path returns a Result<&Ident>.
 fn parse_ident_from_path(path: &Path) -> Result<&Ident> {
     let Path {
         leading_colon,
@@ -239,7 +240,7 @@ macro_rules! name {
             ///
             /// # Errors
             ///
-            /// Returns an error if the identifier is reserved or invalid.
+            /// Returns an error if the identifier is reserved or an underscore.
             fn try_from(value: &Ident) -> Result<Self> {
                 validate_user_ident(value).map(|ident| Self { ident })
             }
@@ -249,7 +250,7 @@ macro_rules! name {
             type Error = syn::Error;
 
             /// Attempts to create an instance from a `syn::Path`.
-            /// Extracts the identifier and validates it.
+            /// Validates the path, then extracts the identifier, and validates it.
             ///
             /// # Arguments
             ///
@@ -261,7 +262,9 @@ macro_rules! name {
             ///
             /// # Errors
             ///
-            /// Returns an error if the path does not contain a valid identifier.
+            /// Returns an error if the path has leading colons, multiple segments, or unexpected arguments.
+            /// Otherwise, an identifier is extracted and validated.
+            /// If the identifier is reserved or an underscore, an error is returned.
             fn try_from(value: &Path) -> Result<Self> {
                 parse_ident_from_path(value)?.try_into()
             }
@@ -271,7 +274,7 @@ macro_rules! name {
             type Error = syn::Error;
 
             /// Attempts to create an instance from a `syn::Pat`.
-            /// Extracts the identifier and validates it.
+            /// Validates the Pat, then extracts the identifier and validates it.
             ///
             /// # Arguments
             ///
@@ -283,7 +286,9 @@ macro_rules! name {
             ///
             /// # Errors
             ///
-            /// Returns an error if the pattern does not contain a valid identifier.
+            /// Returns an error if the pattern is not an identifier or includes references, mutability, or sub-patterns.
+            /// Otherwise, an identifier is extracted and validated.
+            /// If the identifier is reserved or an underscore, an error is returned.
             fn try_from(value: &Pat) -> Result<Self> {
                 parse_ident_from_pat(value)?.try_into()
             }
@@ -330,6 +335,7 @@ macro_rules! name {
 // or let b = TypeParamName::from(&a);
 name! {
     /// Identifier for a type parameter.
+    /// An type parameter is converted to a smt sort name in the ir (intermediate representation).
     TypeParamName
         > crate::ir::name::SmtSortName
 }
@@ -337,6 +343,7 @@ name! {
 // Define UsrTypeName using the name! macro.
 name! {
     /// Identifier for a user-defined type (i.e., non-reserved).
+    /// A user-defined type name is converted to a user sort name in the ir (intermediate representation).
     UsrTypeName
         > crate::ir::name::UsrSortName
 }
@@ -344,6 +351,7 @@ name! {
 // Define UsrFuncName using the name! macro.
 name! {
     /// Identifier for a user-defined function (i.e., non-reserved).
+    /// A user-defined function name is converted to a user function name in the ir (intermediate representation).
     UsrFuncName
         > crate::ir::name::UsrFunName
 }
@@ -351,6 +359,7 @@ name! {
 // Define AxiomName using the name! macro.
 name! {
     /// Identifier for an axiom.
+    /// An axiom name is converted to a user axiom name in the ir (intermediate representation).
     AxiomName
         > crate::ir::name::UsrAxiomName
 }
@@ -358,6 +367,7 @@ name! {
 // Define VarName using the name! macro.
 name! {
     /// Identifier for a variable.
+    /// A variable name is converted to a symbol in the ir (intermediate representation).
     VarName
         > crate::ir::name::Symbol
 }
