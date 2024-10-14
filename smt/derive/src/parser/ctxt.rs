@@ -1,6 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Display, Formatter};
-use std::fs; // for filesystem operations
+use std::collections::{BTreeMap, BTreeSet}; // for storing items in a sorted order
+// for implementing the Display trait on Refinement and NamedItem enums
+use std::fmt::{Display, Formatter}; 
+// for filesystem operations; for reading a single file in process_file(&mut self, path: &Path) -> Result<()> method
+use std::fs; 
 use std::path::Path; // for path handling
 use log::trace; // For logging during debugging
 // Only include TokenStream during testing
@@ -20,7 +22,7 @@ use crate::parser::infer::{TIError, TypeRef, TypeUnifier};
 use crate::parser::name::{AxiomName, UsrFuncName, UsrTypeName};
 use crate::parser::ty::{TypeBody, TypeDef, TypeTag};
 
-/// SMT-marked type:Represents a type (enum or struct) marked with SMT attributes.
+/// SMT-marked type
 pub enum MarkedType {
     Enum(ItemEnum),
     Struct(ItemStruct),

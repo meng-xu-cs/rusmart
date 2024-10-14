@@ -5,6 +5,7 @@
 //! - `ImplMark` struct which represents the marking for an annotated impl function.
 //! - `SpecMark` struct which represents the marking for an annotated spec function.
 //! - `parse_attrs` is the main method to parse the attributes and extract the marks. This method is used in the `ctxt` module.
+//! 
 use crate::parser::err::{bail_if_missing, bail_on};
 use crate::parser::name::UsrFuncName;
 use proc_macro2::{Delimiter, Ident, TokenStream, TokenTree};
@@ -974,22 +975,6 @@ mod tests {
         let res = Mark::parse_attr(&attr);
         assert!(res.is_ok_and(|f| f.is_none()));
     }
-
-    // pub fn parse_attrs(attrs: &[Attribute]) -> Result<Option<Self>> {
-    //     let mut mark = None;
-    //     for attr in attrs {
-    //         match Self::parse_attr(attr)? {
-    //             None => continue,
-    //             Some(parsed) => {
-    //                 if mark.is_some() {
-    //                     bail_on!(attr, "multiple marks specified");
-    //                 }
-    //                 mark = Some(parsed);
-    //             }
-    //         }
-    //     }
-    //     Ok(mark)
-    // }
 
     #[test]
     // testing parse_attrs where multiple marks are specified
