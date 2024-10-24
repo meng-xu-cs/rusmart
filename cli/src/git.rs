@@ -22,7 +22,7 @@ use std::process::Command;
 // The Result type is a type that represents either success (Ok) or failure (Err).
 // It is a type alias of the std::result::Result type: pub type Result<T, E = Error> = std::result::Result<T, E>;
 // anyhow function is used to create an error from a string or an error type that can be converted into an anyhow::Error.
-// bail function is used to return an error from a function without explicitly mentioning return. bail!(....) = return Err(anyhow!(...))
+// bail function is used to return an error from a function without explicitly mentioning return. bail!(....) = return Err(anyhow!(...)) -- not in all cases.
 // The Context trait allows you to add extra context when an operation returns an error. This is done by calling the context or with_context methods on a Result.
 use anyhow::{anyhow, bail, Context, Result};
 

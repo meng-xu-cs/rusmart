@@ -206,7 +206,7 @@ macro_rules! name {
         $(#[$meta])*
         #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Debug)]
         pub struct $name {
-            ident: String,
+            pub ident: String,
         }
 
         /// AsRef is to be used when wishing to convert to a reference of another type

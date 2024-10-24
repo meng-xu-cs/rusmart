@@ -35,4 +35,4 @@ Moreover, depending on the `MODE`, which can be either the `Prod`, `Dev`, `Debug
 
 #### Testing
 
-Testing the utils crate is not necessary because it is a utility crate and does not implement the logic of our rusmart tool. However, we can write unit tests for the _config.rs_ file to ensure that the configuration settings are correct. Note that because most of the variables defined in the config.rs file are _lazy static_ variables, testing their values at compile time comes with certain challenges. Nevertheless, unit tests were written with 78.26% statement coverage by the _cargo tarpaulin_ tool.
+Testing the utils crate is not necessary because it is a utility crate and does not implement the logic of our rusmart tool. However, we can write unit tests for the _config.rs_ file to ensure that the configuration settings are correct. Note that because most of the variables defined in the config.rs file are _lazy static_ variables, testing their values at compile time comes with certain challenges. Nevertheless, unit tests were written with 69.23% statement coverage by the _cargo tarpaulin_ tool.

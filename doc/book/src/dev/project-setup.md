@@ -118,6 +118,8 @@ cargo clean
 
 cargo tarpaulin \
     --engine llvm \
+    --workspace \
+    --exclude-files "smt/testing/*.rs" \
     --out Lcov \
     --out html \
     --output-dir target/tarpaulin \
@@ -125,8 +127,7 @@ cargo tarpaulin \
 open target/tarpaulin/tarpaulin-report.html
 ```
 
-The first line is the shebang line, which tells the system which interpreter should be used to execute the script. The script uses [Tarpaulin](https://github.com/xd009642/tarpaulin), a popular code coverage tool for Rust projects. It runs cargo tarpaulin with the `--engine llvm` flag specifying that tarpaulin should use the `LLVM-based coverage` engine. The LLVM engine tends to be more accurate and can handle more complex code constructs than the default engine. The `--out html` flag specifies the output format of the coverage report. Finally, the script creates the `Lcov` and `html` files in the `target/tarpaulin` directory. The html file by default is named `tarpaulin-report.html`, which in the last line is opened. You can run the script by first installing Tarpaulin - if you haven't already - by running the following command: `cargo install cargo-tarpaulin`. Then, make the script executable by running `chmod +x cov.sh`, and finally run it by executing `./cov.sh`. While running the script, `.profraw` files are generated in the `target/tarpaulin/profraws` directory - which is automatically created. These files are created by the LLVM engine to store raw profiling data collected by the tarpaulin to calculate coverage statistics.
-
+The first line is the shebang line, which tells the system which interpreter should be used to execute the script. The script uses [Tarpaulin](https://github.com/xd009642/tarpaulin), a popular code coverage tool for Rust projects. It runs cargo tarpaulin with the `--engine llvm` flag specifying that tarpaulin should use the `LLVM-based coverage` engine. The LLVM engine tends to be more accurate and can handle more complex code constructs than the default engine. The `--exclude-files` flag is used to exclude the rust files under the _smt/testing_ directory from the coverage report. This is because the functions defined in these files are file-driven integration tests. The `--workspace` flag tells tarpaulin to generate coverage information for the entire workspace. The `--out Lcov` and `--out html` flags specify the output format of the coverage report. Finally, the script creates the `Lcov` and `html` files in the `target/tarpaulin` directory, which is defined by the `--output-dir` flag. The html file by default is named `tarpaulin-report.html`, which in the last line is opened. You can run the script by first installing Tarpaulin - if you haven't already - by running the following command: `cargo install cargo-tarpaulin`. Then, make the script executable by running `chmod +x cov.sh`, and finally run it by executing `./cov.sh`. While running the script, `.profraw` files are generated in the `target/tarpaulin/profraws` directory - which is automatically created. These files are created by the LLVM engine to store raw profiling data collected by the tarpaulin to calculate coverage statistics.
 
 As you can see each crate has a separate `cov.sh` file as well, which the content of each is the same and includes the following:
 

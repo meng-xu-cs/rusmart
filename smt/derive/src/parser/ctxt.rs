@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet}; // for storing items in a sorted order
+use std::collections::{BTreeMap, BTreeSet};
 // for implementing the Display trait on Refinement and NamedItem enums
 use std::fmt::{Display, Formatter}; 
 // for filesystem operations; for reading a single file in process_file(&mut self, path: &Path) -> Result<()> method
